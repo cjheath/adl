@@ -1,0 +1,63 @@
+Object {
+	Super : Object;
+	Parent : Object;
+	Aspect : Object;
+	Name : String;
+}
+
+Value : String;
+
+Variable : Object {
+	Syntax : Regexp;
+}
+
+Assignment : Object {
+	Variable;
+	Value;
+	Kind : Enum {
+		.Mutable;
+		.Final;
+		.Multiple
+	} = Mutable;
+}
+
+String : Variable {
+	MinLength : Integer;
+	MaxLength : Integer;
+	Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9a-f][0-9a-f]|\\u[0-9a-f][0-9a-f][0-9a-f][0-9a-f]|[^\\'])*'/;
+}
+
+Number : Variable {
+	Minimum : Number;
+	Maximum : Number;
+}
+
+Integer : Number {
+	Syntax = /-?[1-9][0-9]*/;
+}
+
+Real : Number {
+	Syntax = /-?(0|[1-9][0-9]*)(\.[0-9]*)?([Ee][-+]?[0-9]+)?/;
+}
+
+Decimal : Number {
+	Digits : Integer;
+	Precision : Integer;
+	Syntax = /-?(0|[1-9][0-9]*)(\.[0-9]*)?/
+}
+
+Date : Variable {
+	Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?/;
+}
+
+Enum : Variable;
+
+Boolean : Enum {
+	False = 0;
+	True = 1;
+}
+
+Int16 : Integer {
+	Minimum = -32768;
+	Maximum = 32767;
+}

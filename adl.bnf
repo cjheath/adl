@@ -1,0 +1,55 @@
+adl		= object*
+
+object		= ascend? path_name? (':' path_name?)? block? assignment?
+
+ascend		= '.'
+
+path_name	= name ('.' name)*
+
+name		= symbol | integer
+
+symbol		= [a-zA-Z_] [a-zA-Z0-9_]*
+
+integer		= [1-9] [0-9]*
+
+string		= '\'' string_char '\''
+
+string_char	= '\\[befntr]' | '\\[0-7]{3}' | '\\x[0-9a-f]{2}' | '\\u[0-9a-f]{4}' | '[^\\\']'
+
+block		= '{' object* '}'
+
+assignment	= final_assignment | assignment | reference_assignment
+
+final_assignment= '=' value
+
+assignment	= '~=' value
+
+reference_assignment	= '->' value | '=>' array
+
+value		= integer | string | regexp | path_name | array
+
+array		= '[' (value (',' value)? ']'
+
+regexp		= '/' regexp_sequence '/'
+
+regexp_sequence	= regexp_alternate ('|' regexp_alternate)*
+
+regexp_alternate = regexp_atom*
+
+regexp_atom	= ( regexp_char | regexp_group | '[' regexp_class+ ']') ( '*' | '+' | '?' )?
+
+regexp_char	= '\' [0-3] [0-7] [0-7]
+		| '\x' [0-9a-f] [0-9a-f]
+		| '\u' [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f]
+		| '\' [0befntr\\*+?()|/\[]
+		| [^*+?()|/\[]
+
+regexp_class_char = regexp_char | [+*?()/|]
+
+regexp_class	= !']' regexp_class_char '-' !']' regexp_class_char
+		| '-'
+		| !']' regexp_class_char
+
+regexp_group	= '(' regexp_group_capture? regexp_sequence ')'
+
+regexp_group_capture = '?' '<' [a-zA-Z0-9_]+ '>'
