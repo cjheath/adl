@@ -46,21 +46,58 @@ class ADL
   class Scanner
     Tokens = {
       white: %r{\s+},
-      symbol: %r{[_a-z][_a-z0-9]*},
+      symbol: %r{[_[:alpha:]][_[:alnum:]]*},
       integer: %r{-?([1-9][0-9]*|0)},
-      string: %r{'(\\[befntr']|\\[0-3][0-7][0-7]|\\0|\\x[0-9a-f][0-9a-f]|\\u[0-9a-f][0-9a-f][0-9a-f][0-9a-f]|[^\\'])*'},
+      string: %r{
+        '
+          (
+                                #
+            \\[0befntr\\']      # A control-character escape
+            | \\[0-3][0-7][0-7] # An octal constant
+            | \\x[0-9A-F][0-9A-F]       # A hexadecimal character
+            | \\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]   # A Unicode character
+            | [^\\']            # Anything else except \ and end of string
+          )*
+        '
+      }x,
       open: /{/,
       close: /}/,
       lbrack: /\[/,
       rbrack: /\]/,
       inherits: %r{:},
       semi: %r{;},
+      arrow: %r{->},
+      darrow: %r{=>},
       comma: %r{,},
       equals: %r{=},
       approx: %r{~=},
       descend: %r{\.},
-      # The following recursive regexp follows the CQL definition, but has a modified definition of <char>.
-      regexp: %r{/(?<sequence>(?<alternate>(?<atom>((?<char>(\\[0-3][0-7][0-7]|\\x[0-9a-f][0-9a-f]|\\u[0-9a-f][0-9a-f][0-9a-f][0-9a-f]|\\[0befntr\\*+?()|/\[]|[^*+?()|/\[]))|\(\g<sequence>*\)|\[((\g<char>|[+*?()/|])(-(\g<char>)|[+*?()/|])?)*\])[*+?]?)*)(\|\g<alternate>)*)/}
+      # The following recursive regexp mostly follows the CQL definition
+      regexp: %r{
+        /(?<sequence>
+          (?<alternate>
+            (?<atom>
+              (
+                (?<char>
+                  (
+                    \\[0-3][0-7][0-7]           # An octal character
+                    | \\x[0-9A-F][0-9A-F]       # A hexadecimal character
+                    | \\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F] # A Unicode character
+                    | \\[0befntr\\*+?()|/\[]    # A control character or escaped regexp char
+                    | [^*+?()|/\[]              # Anything else
+                  )
+                )
+                | \(
+                    (\?<[_[:alnum:]]*>)?
+                    \g<sequence>*
+                  \)
+                | \[((\g<char>|[+*?()/|])(-(\g<char>)|[+*?()/|])?)*\]
+              )[*+?]?
+            )*
+          )
+          (\|\g<alternate>)*
+        )/
+      }x
     }
 
     def initialize adl, io
