@@ -22,8 +22,8 @@ Assignment : Object {
 }
 
 String : Variable {
-	MinLength : Integer;
-	MaxLength : Integer;
+	Min Length : Integer;
+	Max Length : Integer;
 	Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9a-f][0-9a-f]|\\u[0-9a-f][0-9a-f][0-9a-f][0-9a-f]|[^\\'])*'/;
 }
 

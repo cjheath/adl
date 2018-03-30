@@ -1,32 +1,38 @@
 adl		= object*
 
-object		= ascend? path_name? (':' path_name?)? block? assignment?
+object		= ascend? path_name? definition
+
+definition	= type? (block? (assignment ';')? | ';') | reference
 
 ascend		= '.'
+
+type		=  ':' path_name? array_indicator?
 
 path_name	= name ('.' name)*
 
 name		= symbol | integer
 
-symbol		= [a-zA-Z_] [a-zA-Z0-9_]*
+symbol		= [_[:alpha]] [_[:alnum]]*
 
 integer		= [1-9] [0-9]*
 
-string		= '\'' string_char '\''
+reference	= ('->' | '=>') path_name (block | ';')
 
-string_char	= '\\[befntr]' | '\\[0-7]{3}' | '\\x[0-9a-f]{2}' | '\\u[0-9a-f]{4}' | '[^\\\']'
+array_indicator = '[]'
 
 block		= '{' object* '}'
 
-assignment	= final_assignment | assignment | reference_assignment
+assignment	= final_assignment | assignment
 
 final_assignment= '=' value
 
 assignment	= '~=' value
 
-reference_assignment	= '->' value | '=>' array
-
 value		= integer | string | regexp | path_name | array
+
+string		= '\'' string_char '\''
+
+string_char	= '\\[befntr]' | '\\[0-7]{3}' | '\\x[0-9A-F]{2}' | '\\u[0-9A-F]{4}' | '[^\\\']'
 
 array		= '[' (value (',' value)? ']'
 
@@ -39,8 +45,8 @@ regexp_alternate = regexp_atom*
 regexp_atom	= ( regexp_char | regexp_group | '[' regexp_class+ ']') ( '*' | '+' | '?' )?
 
 regexp_char	= '\' [0-3] [0-7] [0-7]
-		| '\x' [0-9a-f] [0-9a-f]
-		| '\u' [0-9a-f] [0-9a-f] [0-9a-f] [0-9a-f]
+		| '\x' [0-9A-F] [0-9A-F]
+		| '\u' [0-9A-F] [0-9A-F] [0-9A-F] [0-9A-F]
 		| '\' [0befntr\\*+?()|/\[]
 		| [^*+?()|/\[]
 
