@@ -82,6 +82,11 @@ We'll indicate more as we proceed.
 </tr>
 
 <tr>
+<!-- REVISIT: Consider renaming this Symbol, since it's global.
+Or possibly, disallow references to Name as a variable or assignment?
+But then, what about other built-ins, like Parent and Super?
+Can we use local Context notation to contain these variables to local lookup only?
+-->
 <th align="right" valign="top" width="10%">Name</th>
 <td valign="top">
 <p>
@@ -315,6 +320,11 @@ An Assignment is a special anonymous child object
 that associates a Value with that Variable for that Parent
 object. Assignment has its own syntax, and cannot be
 declared using the usual object definition syntax.
+</p>
+<p>
+If an assignment is inherited, a local assignment overrides it.
+If a variable has neither a local nor inherited assignment,
+the value of that variable is undefined for that object.
 </p>
 <td valign="top">
 Here's an anonymous Employee object, with assignments to
@@ -634,7 +644,7 @@ Employee: Person {
 </tr>
 
 <tr>
-<th align="right" valign="top">Context</th>
+<th align="right" valign="top">Contextual Extension</th>
 <td valign="top">
 <p>
 We've seen what happens when an object is re-opened
@@ -699,6 +709,27 @@ Integer {
 } = 3;
 German: {
     3.Ordinal. = "dritte";
+}
+</pre>
+
+<p>
+Here's another case. Two variables are defined to
+carry the names of two operations. In the German
+context, the two names are different.
+</p>
+<pre>
+OperationNames:
+{
+    Insert : String ~= "Insert";
+    Delete : String ~= "Delete";
+}
+
+German:
+{
+    OperationNames {
+        Insert. ~= "Einfügen";
+        Delete. ~= "Löschen";
+    }
 }
 </pre>
 
