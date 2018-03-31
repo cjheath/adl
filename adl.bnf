@@ -1,6 +1,6 @@
 adl		= object*
 
-object		= ascend? path_name? definition
+object		= ascend* path_name? definition
 
 definition	= type? (block? (assignment ';')? | ';') | reference
 
@@ -8,7 +8,9 @@ ascend		= '.'
 
 type		=  ':' path_name? array_indicator?
 
-path_name	= name ('.' name)*
+path_name	= name ('.' name)* local?
+
+local		= '.'
 
 name		= symbol | integer
 
