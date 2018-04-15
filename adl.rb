@@ -30,7 +30,7 @@ class ADL
     end
 
     def pathname
-      (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name ? Array(@name)*' ' : '#')
+      (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name ? Array(@name)*' ' : '<anonymous>')
     end
 
     def top?
@@ -134,10 +134,13 @@ class ADL
 
   # Called when the name and type have been parsed
   def start_object(object_name, supertype_name)
-    # REVISIT: Resolve the object_name prefix to find the parent and local name:
-    debugger unless object_name
-    parent = resolve_name(object_name[0..-2], 0)
-    local_name = object_name[-1]
+    # Resolve the object_name prefix to find the parent and local name:
+    if object_name
+      parent = resolve_name(object_name[0..-2], 0)
+    else
+      parent = @stack.last
+    end
+    local_name = object_name ? object_name[-1] : nil
     # Resolve the supertype_name to find the zuper:
     zuper = supertype_name ? resolve_name(supertype_name, 0) : @object
     o = parent.member?(local_name) ||
