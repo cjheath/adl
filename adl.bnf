@@ -1,63 +1,81 @@
-adl		= object*
+// White space includes space, tab, newline and a comment as '//' followed by any characters to end-of-line
 
-object		= ascend* path_name? definition
+adl             = object*
 
-definition	= type? (block? (assignment ';')? | ';') | reference
+object          = path_name? definition
 
-ascend		= '.'
+definition      = (reference | type? block? post_definition ';' | type? block | ';' | alias_from )
 
-type		=  ':' path_name? array_indicator?
+post_definition = array_indicator assignment? | assignment
 
-path_name	= name ('.' name)* local?
+type            =  ':' path_name?
 
-local		= '.'
+path_name       = ascend* (name (descend name)*)?
 
-name		= symbol | integer
+ascend          = '.'
+descend         = '.'
 
-symbol		= [_[:alpha]] [_[:alnum]]*
+name            = symbol | integer
 
-integer		= [1-9] [0-9]*
+symbol          = [_[:alpha:]] [_[:alnum:]]*
 
-reference	= ('->' | '=>') path_name (block | ';')
+integer         = [1-9] [0-9]*
+
+reference       = ('->' | '=>') path_name (';' | block? tentative_assignment ';' | block)
+
+block           = '{' object* '}'
+
+assignment      = final_assignment | tentative_assignment
+
+final_assignment = '=' value
+
+tentative_assignment = '~=' value
 
 array_indicator = '[]'
 
-block		= '{' object* '}'
+alias_from	= '!' path_name
 
-assignment	= final_assignment | assignment
+// The value syntax depends on the Variable in the assignment.
+value           = atomic_value | array
 
-final_assignment= '=' value
+// If the Variable is a reference, the value is a path_name.
+// If the Variable is a Regular Expression the value is a regexp.
+// Otherwise, the value is defined by the Syntax of the variable (regexp_match).
+// See builtin.adl for the syntax of values of builtin variables.
+atomic_value    = regexp | path_name | regexp_match
 
-assignment	= '~=' value
+array           = '[' (atomic_value (',' atomic_value)? ']'
 
-value		= integer | string | regexp | path_name | array
+// Above here, white-space is free. Below here, no implicit white-space is allowed.
 
-string		= '\'' string_char '\''
+// The syntax for a Regular Expression is not regular, so it must be built-in.
+regexp          = '/' regexp_sequence '/'
 
-string_char	= '\\[befntr]' | '\\[0-7]{3}' | '\\x[0-9A-F]{2}' | '\\u[0-9A-F]{4}' | '[^\\\']'
-
-array		= '[' (value (',' value)? ']'
-
-regexp		= '/' regexp_sequence '/'
-
-regexp_sequence	= regexp_alternate ('|' regexp_alternate)*
+regexp_sequence = regexp_alternate ('|' regexp_alternate)*
 
 regexp_alternate = regexp_atom*
 
-regexp_atom	= ( regexp_char | regexp_group | '[' regexp_class+ ']') ( '*' | '+' | '?' )?
+regexp_atom     = ( regexp_char | regexp_class | regexp_group) ( '*' | '+' | '?' )?
 
-regexp_char	= '\' [0-3] [0-7] [0-7]
-		| '\x' [0-9A-F] [0-9A-F]
-		| '\u' [0-9A-F] [0-9A-F] [0-9A-F] [0-9A-F]
-		| '\' [0befntr\\*+?()|/\[]
-		| [^*+?()|/\[]
+regexp_char     = '\\s'
+                | '\\' [0-3] [0-7] [0-7]
+                | '\\x' [0-9A-F] [0-9A-F]
+                | '\\u' [0-9A-F] [0-9A-F] [0-9A-F] [0-9A-F]
+                | '\\' [0befntr\\*+?()|/\[]
+                | [^*+?()|/\[ ]
 
-regexp_class_char = regexp_char | [+*?()/|]
+regexp_class    = '[' '^'? '-'? regexp_class_part+ ']'
 
-regexp_class	= !']' regexp_class_char '-' !']' regexp_class_char
-		| '-'
-		| !']' regexp_class_char
+regexp_class_part = !']' regexp_class_char '-' !']' regexp_class_char
+                | !']' regexp_class_char
+                | '[:' ('alpha'|'upper'|'lower'|'digit'|'alnum') ':]'
 
-regexp_group	= '(' regexp_group_capture? regexp_sequence ')'
+regexp_class_char = !'-' regexp_char | [+*?()/|]
 
-regexp_group_capture = '?' '<' [a-zA-Z0-9_]+ '>'
+regexp_group    = '(' regexp_group_type? regexp_sequence ')'
+
+regexp_group_type = regexp_group_capture | regexp_negative_lookahead
+
+regexp_negative_lookahead '?!'
+
+regexp_group_capture = '?<' [_[:alnum:]]+ '>'

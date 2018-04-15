@@ -1,72 +1,90 @@
-Object {
-	Super : Object;
-	Parent : Object;
-	Aspect : Object;
-	Name : String;
+// The _ object is the namespace for the ADL built-in objects.
+_: {
+	Object {
+		Parent -> Object;		// The container of this object
+		Name: String;			// The name of this object
+		Super -> Object;		// The supertype of this Object
+		Aspect -> Object;		// The aspect to which this object has restricted visibility
+		Is Sterile -> Boolean ~= False;	// No further subtypes may be added
+		Is Complete -> Boolean ~= False;// No further contents may be added
+		Syntax: Regular Expression;	// A literal value conforms to this regular grammar
+		Is Array -> Boolean ~= False;	// The assignment is an array of values
+	}
+
+	Regular Expression:;			// The built-in Syntax is not regular
+	Reference: = Object;			// The built-in Syntax accepts a path name
+	Assignment: {
+		Variable -> Object;		// The Variable whose Syntax the Value conforms to
+		Value: String[];		// The Value(s) must match the Syntax for the Variable
+		Is Final -> Boolean;		// May not be overridden (but refinement is allowed)
+	}
+
+	Enumeration:;				// This is a mnemonic convenience only
+	Boolean: Enumeration;			// A Reference to Boolean can only be refined
+	False: Boolean;				// To one of the subtypes
+	True: Boolean;
+	Boolean{Is Sterile = True;}		// and no other alternatives can be added
 }
 
-Value : String;
+// Re-open the built-ins namespace and add some new objects with Syntax
+_ {
+	String: {
+		Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
+	}
 
-Variable : Object {
-	Syntax : Regexp;
-}
+	Number:;
+	Integer: Number {
+		Syntax = /[-+]?[1-9][0-9]*/;
+	}
+	Decimal: Number {
+		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?/;
+	}
+	Real: Decimal {
+		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?([Ee][-+]?[0-9]+)?/;
+	}
 
-Assignment : Object {
-	Variable;
-	Value;
-	Kind : Enum {
-		Mutable;
-		Final;
+	Temporal:;
+	Date: Temporal {
+		Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?/;
+	}
+	Time: Temporal {
+		Syntax = /[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
+	}
+	Date Time: Temporal {
+		Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?T[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
 	}
 }
 
-String : Variable {
-	Min Length : Integer;
-	Max Length : Integer;
-	Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9a-f][0-9a-f]|\\u[0-9a-f][0-9a-f][0-9a-f][0-9a-f]|[^\\'])*'/;
-}
+// Re-open the built-ins namespace and add parameters to those objects.
+// Enforcement of the parameters to the following variables requires
+// built-in semantics. If you don't need to enforce the semantics,
+// you don't need to include these extensions.
+_ {
+	String {
+		Min Length: Integer;
+		Max Length: Integer;
+	}
 
-Number : Variable {
-	Minimum : Number;
-	Maximum : Number;
-}
+	Number {
+		Minimum: .;	// This is a reference to the parent (the Number subtype)
+		Maximum: .;
+	}
 
-Integer : Number {
-	Syntax = /[-+]?[1-9][0-9]*/;
-}
+	Decimal: Number {
+		Digits: Integer;
+		Precision: Integer;
+	}
 
-Real : Number {
-	Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?([Ee][-+]?[0-9]+)?/;
-}
+	Float {
+		Exponent: Integer ~= 11;
+		Mantissa: Integer ~= 53;
+	}
 
-Float : Real {
-	Exponent: Integer ~= 11;
-	Mantissa: Integer ~= 53;
-}
+	Time {
+		Resolution: Integer{Minimum = 0} ~= 6;
+	}
 
-Decimal : Number {
-	Digits : Integer;
-	Precision : Integer;
-	Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?/
-}
-
-Date : Variable {
-	Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?/;
-}
-
-Time : Variable {
-	Syntax = /[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
-	Resolution : Integer{Minimum = 0} ~= 6;
-}
-
-Date Time : Variable {
-	Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?T[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
-	Resolution : Integer{Minimum = 0} ~= 0;
-}
-
-Enum : Variable;
-
-Boolean : Enum {
-	False = 0;
-	True = 1;
+	Date Time {
+		Resolution: Integer{Minimum = 0} ~= 0;
+	}
 }
