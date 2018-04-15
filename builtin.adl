@@ -14,8 +14,8 @@ _: {
 	Regular Expression:;			// The built-in Syntax is not regular
 	Reference: = Object;			// The built-in Syntax accepts a path name
 	Assignment: {
-		Variable -> Object;		// The Variable whose Syntax the Value conforms to
-		Value: String[];		// The Value(s) must match the Syntax for the Variable
+		Variable -> Object;		// The Object whose Syntax the Value conforms to
+		Value: String[];		// The Value(s) must match the Syntax for the Object
 		Is Final -> Boolean;		// May not be overridden (but refinement is allowed)
 	}
 
