@@ -73,7 +73,10 @@ class ADL
     @enumeration = ADLObject.new(@builtin, 'Enumeration', @object, nil)
     @boolean = ADLObject.new(@builtin, 'Boolean', @enumeration, nil)
     @false = ADLObject.new(@builtin, 'False', @boolean, nil)
-    @true = ADLObject.new(@builtin, 'True', @true, nil)
+    @true = ADLObject.new(@builtin, 'True', @boolean, nil)
+
+    @alias = ADLObject.new(@builtin, 'Alias', @object, nil)
+    @alias_for = ADLObject.new(@alias, 'For', @reference, nil)
   end
 
   def parse io
