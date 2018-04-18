@@ -53,7 +53,7 @@ class ADL
         return
       end
 
-      self_assignment = members.detect{|m| Assignment === m && m.parent == self }
+      self_assignment = members.detect{|m| Assignment === m && m.variable == self }
       others = members-[self_assignment]
       zuper_name = @zuper ? (@zuper.parent.parent.parent == nil && @zuper.name == 'Object' ? ':' : ': '+@zuper.name) : nil
       print "#{level}#{@name}#{zuper_name && zuper_name}#{others.empty? && !syntax ? nil : (zuper_name ? ' ' : '')+"{\n"}"
@@ -70,6 +70,8 @@ class ADL
   end
 
   class Assignment < ADLObject
+    attr_reader :variable, :value, :is_final
+
     def initialize parent, variable, value, is_final
       super parent, nil, @assignment
       @variable, @value, @is_final = variable, value, is_final
