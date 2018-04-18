@@ -1,5 +1,5 @@
-// The _ object is the namespace for the ADL built-in objects.
-_: {
+// The ADL object is the namespace for the ADL built-in objects.
+ADL: {
 	Object {
 		Parent -> Object;		// The container of this object
 		Name: String;			// The name of this object
@@ -27,7 +27,7 @@ _: {
 }
 
 // Re-open the built-ins namespace and add some new objects with Syntax
-_ {
+ADL {
 	String: {
 		Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
 	}
@@ -59,7 +59,7 @@ _ {
 // Enforcement of the parameters to the following variables requires
 // built-in semantics. If you don't need to enforce the semantics,
 // you don't need to include these extensions.
-_ {
+ADL {
 	String {
 		Min Length: Integer;
 		Max Length: Integer;
