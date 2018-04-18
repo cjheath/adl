@@ -44,6 +44,18 @@ class ADL
         ) +
         (has_block ? '{}' : '')
     end
+
+    def emit level = ''
+      self_assignment = members.detect{|m| Assignment === m && m.parent == self }
+      others = members-[self_assignment]
+      print "#{level}#{@name}#{@zuper ? ": #{@zuper.name}" : ''}#{others.empty? ? '' : " {\n"}"
+      others.each do |m|
+        m.emit(level+"\t")
+      end
+      print "#{level}}" unless others.empty?
+      print "#{self_assignment && self_assignment.inline}" unless members.empty?
+      puts((others.empty? || self_assignment) ? ';' : '')
+    end
   end
 
   class Assignment < ADLObject
@@ -54,6 +66,31 @@ class ADL
 
     def inspect
       @parent.pathname+'.'+@variable.name+(@is_final ? '=' : '~=') + @value.inspect
+    end
+
+    def inline
+      %Q{#{@is_final ? ' =' : ' ~='} #{
+        if ADLObject === @value
+          @value.pathname
+        elsif Array === @value
+          "[\n" +
+          @value.map do |v|
+            level+"\t"+
+              if ADLObject === @value
+                @value.pathname
+              else
+                @value.inspect
+              end
+          end* ",\n" +
+          "#{level}]"
+        else
+          @value.inspect
+        end
+      }}
+    end
+
+    def emit level = ''
+      puts "#{level}#{@variable.name}#{inline};"
     end
   end
 
@@ -85,6 +122,10 @@ class ADL
     @scanner.parse
   end
 
+  def emit
+    @top.emit
+  end
+
   # print an indent for displaying the parse
   def indent
     print "\t"*(@stack.size-1)
@@ -92,8 +133,8 @@ class ADL
 
   # A place to dis/enable parse progress messages.
   def show stuff
-    indent
-    puts stuff
+#    indent
+#    puts stuff
   end
 
   # Report a parse failure
@@ -318,7 +359,7 @@ class ADL
         reference_to = path_name
         error('expected path name for Reference') unless reference_to
 
-        # An eponymous reference used reference_to for object_name
+        # An eponymous reference uses reference_to for object_name
         defining = @adl.start_object(object_name||reference_to, ['Reference'])
 
         # Create the reference:
@@ -450,4 +491,6 @@ class ADL
   end
 end
 
-ADL.new.parse(File.read(ARGV[0]))
+adl = ADL.new
+adl.parse(File.read(ARGV[0]))
+adl.emit
