@@ -11,7 +11,7 @@ ADL: {
 		Is Array -> Boolean ~= False;	// The assignment is an array of values
 	}
 
-	Reference: = Object;			// The built-in Syntax accepts a path name
+	Reference: { Reference = Object};	// The built-in Syntax accepts a path name
 	Regular Expression:;			// The built-in Syntax is not regular
 	Assignment: {
 		Variable -> Object;		// The Object whose Syntax the Value conforms to
