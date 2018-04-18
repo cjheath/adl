@@ -45,10 +45,18 @@ class ADL
         (has_block ? '{}' : '')
     end
 
-    def emit level = ''
+    def emit level = nil
+      unless level
+        members.each do |m|
+          m.emit('')
+        end
+        return
+      end
+
       self_assignment = members.detect{|m| Assignment === m && m.parent == self }
       others = members-[self_assignment]
-      print "#{level}#{@name}#{@zuper ? ": #{@zuper.name}" : ''}#{others.empty? ? '' : " {\n"}"
+      zuper_name = @zuper ? (@zuper.parent.parent.parent == nil && @zuper.name == 'Object' ? ':' : ': '+@zuper.name) : nil
+      print "#{level}#{@name}#{zuper_name && zuper_name}#{others.empty? ? nil : (zuper_name ? ' ' : '')+"{\n"}"
       others.each do |m|
         m.emit(level+"\t")
       end
