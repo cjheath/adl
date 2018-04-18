@@ -11,19 +11,24 @@ ADL: {
 		Is Array -> Boolean ~= False;	// The assignment is an array of values
 	}
 
-	Regular Expression:;			// The built-in Syntax is not regular
 	Reference: = Object;			// The built-in Syntax accepts a path name
+	Regular Expression:;			// The built-in Syntax is not regular
 	Assignment: {
 		Variable -> Object;		// The Object whose Syntax the Value conforms to
 		Value: String[];		// The Value(s) must match the Syntax for the Object
 		Is Final -> Boolean;		// May not be overridden (but refinement is allowed)
 	}
 
+	String:;
 	Enumeration:;				// This is a mnemonic convenience only
 	Boolean: Enumeration;			// A Reference to Boolean can only be refined
 	False: Boolean;				// To one of the subtypes
 	True: Boolean;
 	Boolean{Is Sterile = True;}		// and no other alternatives can be added
+	Alias: {
+		For -> Object;
+	}
+
 }
 
 // Re-open the built-ins namespace and add some new objects with Syntax
