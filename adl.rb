@@ -13,7 +13,16 @@ class ADL
     def initialize parent, name, zuper, aspect = nil
       @parent, @name, @zuper, @aspect = parent, name, zuper, aspect || parent
 
-      @parent.members << self if @parent
+      @parent.adopt(self) if @parent
+    end
+
+    def members
+      @members ||= []
+    end
+
+    def adopt child
+      raise "Cannot have two children called #{child.name}" if child.name && member?(child.name)
+      members << child
     end
 
     def assign variable, value, is_final
@@ -21,16 +30,12 @@ class ADL
       Assignment.new(self, variable, value, is_final)
     end
 
-    def members
-      @members ||= []
-    end
-
     def member? name
       members.detect{|m| m.name == name}
     end
 
     def pathname
-      (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name ? Array(@name)*' ' : '<anonymous>')
+      (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name || '<anonymous>')
     end
 
     def top?
@@ -38,11 +43,18 @@ class ADL
     end
 
     def inspect
-      pathname +
-        (@zuper_placeholder ? ' : '+@zuper_placeholder : 
-          (@zuper != @object ? ':'+@zuper.pathname : '')
-        ) +
-        (has_block ? '{}' : '')
+      "#{pathname}#{zuper_name}"
+    end
+
+    def zuper_name
+      case
+      when @zuper && @zuper.parent.parent.parent == nil && @zuper.name == 'Object'
+        ':'
+      when @zuper
+        ': '+@zuper.name
+      else
+        nil
+      end
     end
 
     def emit level = nil
@@ -55,17 +67,15 @@ class ADL
 
       self_assignment = members.detect{|m| Assignment === m && m.variable == self }
       others = members-[self_assignment]
-      zuper_name = @zuper ? (@zuper.parent.parent.parent == nil && @zuper.name == 'Object' ? ':' : ': '+@zuper.name) : nil
-      print "#{level}#{@name}#{zuper_name && zuper_name}#{others.empty? && !syntax ? nil : (zuper_name ? ' ' : '')+"{\n"}"
-      if @syntax
-        puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/"
-      end
+      has_attrs = !others.empty? || syntax
+      print "#{level}#{@name}#{zuper_name}#{has_attrs ? (zuper_name ? ' ' : '')+"{\n" : ''}"
+      puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/" if @syntax
       others.each do |m|
         m.emit(level+"\t")
       end
-      print "#{level}}" unless others.empty? && !syntax
+      print "#{level}}" if has_attrs
       print "#{self_assignment && self_assignment.inline}" unless members.empty?
-      puts((others.empty? || self_assignment) ? ';' : '')
+      puts((!has_attrs || self_assignment) ? ';' : '')
     end
   end
 
