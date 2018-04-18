@@ -254,11 +254,11 @@ class ADL
       opt_white
       while object
       end
-      error "Parse terminated at #{@token[0].inspect}" if @token[0]
+      error "Parse terminated at #{peek.inspect}" if peek
     end
 
     def object
-      return nil if peek('close') or !@token[0]
+      return nil if peek('close') or !peek
       return true if expect('semi')   # Empty definition
       object_name = path_name
       definition(object_name)
@@ -423,12 +423,12 @@ class ADL
 
     # Report a parse failure
     def error message
-      @adl.error "Parse failed at #{@token[0].inspect}: #{message}"
+      @adl.error "Parse failed at #{peek.inspect}: #{message}"
     end
 
-    # Consume the current token
+    # Consume the current token, returning the value
     def consume
-      # puts "consuming #{@token[0].inspect}" unless @token[0][0] == 'white'
+      # puts "consuming #{peek.inspect}" unless @token[0][0] == 'white'
       @token.shift[1]
     end
 
@@ -443,9 +443,9 @@ class ADL
       t
     end
 
-    # Return true if token is next
-    def peek token
-      @token[0] && @token[0][0] == token
+    # Without consuming it, return or match the next token
+    def peek token = nil
+      @token[0] && (token ? @token[0][0] == token : @token[0])
     end
   end
 end
