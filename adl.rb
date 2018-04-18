@@ -196,6 +196,7 @@ class ADL
       semi: %r{;},
       arrow: %r{->},
       darrow: %r{=>},
+      rename: %r{!},
       comma: %r{,},
       equals: %r{=},
       approx: %r{~=},
@@ -264,8 +265,8 @@ class ADL
     end
 
     def definition(object_name)
-      # print "In #{@adl.stack.last.inspect} looking at "; p @token[0]; debugger
-      unless defining = reference(object_name)
+      # print "In #{@adl.stack.last.inspect} looking at "; p peek; debugger
+      unless defining = reference(object_name) || alias_from(object_name)
         supertype_name = type
         defining = @adl.start_object(object_name, supertype_name)
         is_block = block
@@ -330,6 +331,13 @@ class ADL
         opt_white
         defining
       end
+    end
+
+    def alias_from object_name
+      return nil unless expect('rename')
+      defining = @adl.start_object(object_name, ['Alias'])
+      defining.assign(defining, @alias_for, false)
+      defining
     end
 
     def assignment parent, variable
