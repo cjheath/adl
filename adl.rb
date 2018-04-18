@@ -56,11 +56,14 @@ class ADL
       self_assignment = members.detect{|m| Assignment === m && m.parent == self }
       others = members-[self_assignment]
       zuper_name = @zuper ? (@zuper.parent.parent.parent == nil && @zuper.name == 'Object' ? ':' : ': '+@zuper.name) : nil
-      print "#{level}#{@name}#{zuper_name && zuper_name}#{others.empty? ? nil : (zuper_name ? ' ' : '')+"{\n"}"
+      print "#{level}#{@name}#{zuper_name && zuper_name}#{others.empty? && !syntax ? nil : (zuper_name ? ' ' : '')+"{\n"}"
+      if @syntax
+        puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/"
+      end
       others.each do |m|
         m.emit(level+"\t")
       end
-      print "#{level}}" unless others.empty?
+      print "#{level}}" unless others.empty? && !syntax
       print "#{self_assignment && self_assignment.inline}" unless members.empty?
       puts((others.empty? || self_assignment) ? ';' : '')
     end
