@@ -63,7 +63,7 @@ class ADL
 
   def make_built_in
     @top = ADLObject.new(nil, 'TOP', nil, nil)
-    @builtin = ADLObject.new(@top, '_', nil, nil)
+    @builtin = ADLObject.new(@top, 'ADL', nil, nil)
     @object = ADLObject.new(@builtin, 'Object', nil, nil)
     @reference = ADLObject.new(@builtin, 'Reference', @object, nil)
     @regexp = ADLObject.new(@builtin, 'Regular Expression', @object, nil)
