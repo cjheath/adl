@@ -33,7 +33,7 @@ tentative_assignment = '~=' value
 
 array_indicator = '[]'
 
-alias_from	= '!' path_name
+alias_from      = '!' path_name
 
 // The value syntax depends on the Variable in the assignment.
 value           = atomic_value | array
