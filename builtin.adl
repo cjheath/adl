@@ -1,5 +1,5 @@
 // The ADL object is the namespace for the ADL built-in objects.
-ADL: {
+ADL {
 	Object {
 		Parent -> Object;		// The container of this object
 		Name: String;			// The name of this object
@@ -11,7 +11,7 @@ ADL: {
 		Is Array -> Boolean ~= False;	// The assignment is an array of values
 	}
 
-	Reference: { Reference = Object};	// The built-in Syntax accepts a path name
+	Reference: {Reference = Object};	// The built-in Syntax accepts a path name
 	Regular Expression:;			// The built-in Syntax is not regular
 	Assignment: {
 		Variable -> Object;		// The Object whose Syntax the Value conforms to
@@ -19,7 +19,6 @@ ADL: {
 		Is Final -> Boolean;		// May not be overridden (but refinement is allowed)
 	}
 
-	String:;
 	Enumeration:;				// This is a mnemonic convenience only
 	Boolean: Enumeration;			// A Reference to Boolean can only be refined
 	False: Boolean;				// To one of the subtypes
@@ -29,23 +28,31 @@ ADL: {
 		For -> Object;
 	}
 
-}
-
-// Re-open the built-ins namespace and add some new objects with Syntax
-ADL {
-	String: {
-		Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
-	}
-
-	Number:;
+	Number: {
+		Minimum : .;
+		Maximum : .;
+	};
 	Integer: Number {
 		Syntax = /[-+]?[1-9][0-9]*/;
 	}
 	Decimal: Number {
 		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?/;
+		Digits: Integer;
+		Precision: Integer;
 	}
 	Real: Decimal {
 		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?([Ee][-+]?[0-9]+)?/;
+	}
+	Float: Real {
+		Exponent: Integer ~= 11;
+		Mantissa: Integer ~= 53;
+	}
+
+	String: {
+		// This is internally defined
+		// Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
+		Min Length: Integer;
+		Max Length: Integer;
 	}
 
 	Temporal:;
@@ -54,42 +61,10 @@ ADL {
 	}
 	Time: Temporal {
 		Syntax = /[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
+		Resolution: Integer{Minimum = 0} ~= 6;
 	}
 	Date Time: Temporal {
 		Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?T[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
-	}
-}
-
-// Re-open the built-ins namespace and add parameters to those objects.
-// Enforcement of the parameters to the following variables requires
-// built-in semantics. If you don't need to enforce the semantics,
-// you don't need to include these extensions.
-ADL {
-	String {
-		Min Length: Integer;
-		Max Length: Integer;
-	}
-
-	Number {
-		Minimum: .;	// This is a reference to the parent (the Number subtype)
-		Maximum: .;
-	}
-
-	Decimal: Number {
-		Digits: Integer;
-		Precision: Integer;
-	}
-
-	Float {
-		Exponent: Integer ~= 11;
-		Mantissa: Integer ~= 53;
-	}
-
-	Time {
-		Resolution: Integer{Minimum = 0} ~= 6;
-	}
-
-	Date Time {
 		Resolution: Integer{Minimum = 0} ~= 0;
 	}
 }
