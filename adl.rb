@@ -58,6 +58,11 @@ class ADL
       members.detect{|m| m.name == name}
     end
 
+    def inherited_member? name
+      members.detect{|m| m.name == name} or
+        (@zuper and @zuper.inherited_member?(name))
+    end
+
     def pathname
       (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name || '<anonymous>')
     end
@@ -208,7 +213,7 @@ class ADL
 
     # Ascend the parent chain until we fail or find our first name:
     # REVISIT: If we descend a supertype's child, this may become contextual!
-    until no_ascend or path_name.empty? or m = o.member?(path_name[0])
+    until no_ascend or path_name.empty? or m = o.inherited_member?(path_name[0])
       unless o.parent
         error("Failed to find #{path_name[0].inspect} from #{@stack.last.name} looking at #{@scanner.context.inspect}")
       end
