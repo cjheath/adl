@@ -426,12 +426,14 @@ class ADL
         reference_to = path_name
         error('expected path name for Reference') unless reference_to
 
+        # Find what this is a reference to
+        reference_object = @adl.resolve_name(reference_to, 0)
+
         # Create the reference
         # An eponymous reference uses reference_to for object_name
         defining = @adl.start_object(object_name||reference_to, ['Reference'])
 
-        # Find what this is a reference to, and add a final assignment (to itself) for its type:
-        reference_object = @adl.resolve_name(reference_to)
+        # Add a final assignment (to itself) for its type:
         defining.assign(defining, reference_object, true)
 
         is_block = block object_name
