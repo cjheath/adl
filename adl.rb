@@ -467,16 +467,21 @@ class ADL
       if operator = ((is_final = expect('equals')) || expect('approx'))
         opt_white
 
-        # REVISIT: Detect the required value type here, including arrays, and deal with it
-        val = value
+        val = value variable
 
         parent = @adl.stack.last
         parent.assign variable, val, is_final
       end
     end
 
-    def value
-      integer or string or (p = path_name and @adl.resolve_name(p)) or array or expect('regexp')
+    def value variable
+      # REVISIT: Detect the required value type from the variable, including arrays, and deal with it
+
+      integer or
+      string or
+      (p = path_name and @adl.resolve_name(p)) or   # REVISIT: The name resolution should be type-restricted
+      array(variable) or
+      expect('regexp')
     end
 
     def integer
@@ -487,10 +492,10 @@ class ADL
       s = expect('string') and eval(s)
     end
 
-    def array
+    def array variable
       return nil unless expect('lbrack')
       array_value = []
-      while val = value
+      while val = value(variable)
         array_value << val
         break unless expect('comma')
       end
