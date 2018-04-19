@@ -429,8 +429,12 @@ class ADL
         # Find what this is a reference to
         reference_object = @adl.resolve_name(reference_to, 0)
 
+        # An eponymous reference uses reference_to for object_name. It better not be local.
+        if !object_name && reference_object.parent == @adl.stack.last
+          error("Reference to #{reference_to*' '} in #{reference_object.parent.pathname} cannot have the same name")
+        end
+
         # Create the reference
-        # An eponymous reference uses reference_to for object_name
         defining = @adl.start_object(object_name||reference_to, ['Reference'])
 
         # Add a final assignment (to itself) for its type:
