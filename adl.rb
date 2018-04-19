@@ -61,7 +61,7 @@ class ADL
     end
 
     def member? name
-      members.detect{|m| m.name == name}
+      name && members.detect{|m| m.name == name}
     end
 
     def inherited_member? name
