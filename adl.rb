@@ -190,12 +190,6 @@ class ADL
     print "\t"*(@stack.size-1)
   end
 
-  # A place to dis/enable parse progress messages.
-  def show stuff
-#    indent
-#    puts stuff
-  end
-
   # Report a parse failure
   def error message
     puts message
@@ -253,26 +247,20 @@ class ADL
     o = parent.member?(local_name) ||
       ADLObject.new(parent, local_name, zuper)
 
-    show("#{o.inspect}")
     o.zuper_placeholder = supertype_name*' ' if supertype_name
     @stack.push o
     o
   end
 
   def end_object
-    unless @stack.last.has_block
-      # debugger  # Check things.
-    end
     @stack.pop
   end
 
   def start_block
     @stack.last.has_block = true
-    show(" {")
   end
 
   def end_block
-    show("}")
   end
 
   class Scanner
