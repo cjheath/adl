@@ -211,6 +211,7 @@ class ADL
     end
     return o if path_name.empty?
 
+    start_parent = o
     # Ascend the parent chain until we fail or find our first name:
     # REVISIT: If we descend a supertype's child, this may become contextual!
     until no_ascend or path_name.empty? or m = o.inherited_member?(path_name[0])
@@ -221,6 +222,7 @@ class ADL
     end
     o = m
     path_name.shift
+    error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
     return o if path_name.empty?
 
     # Now descend from the current position down the named children
