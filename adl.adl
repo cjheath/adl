@@ -1,4 +1,5 @@
 // The ADL object is the namespace for the ADL built-in objects.
+// There are a few really built-in ones, but we extend them here.
 ADL {
 	Object {
 		Parent -> Object;		// The container of this object
@@ -49,7 +50,7 @@ ADL {
 	}
 
 	String: {
-		// This is internally defined
+		// This is internally defined and cannot be re-assigned
 		// Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
 		Min Length: Integer;
 		Max Length: Integer;

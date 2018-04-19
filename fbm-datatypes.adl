@@ -1,0 +1,7 @@
+// Standard data types library.
+// This re-opens and extends the FBM model.
+Fact Based Model {
+	Text: Data Type;
+	Money: Data Type;
+	Integer: Data Type;
+}
