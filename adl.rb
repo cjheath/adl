@@ -26,7 +26,9 @@ class ADL
     end
 
     def ancestry
-      @ancestry ||= (@parent ? @parent.ancestry : []) + [self]
+      @ancestry ||= begin
+        ((@parent ? @parent.ancestry : []) + [self]).freeze
+      end
     end
 
     def supertypes
@@ -175,7 +177,7 @@ class ADL
 
   def parse io, top = nil
     @scanner = Scanner.new(self, io)
-    @stack = (top || @top).ancestry
+    @stack = (top || @top).ancestry+[]
     @scanner.parse
   end
 
