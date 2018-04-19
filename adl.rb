@@ -51,7 +51,11 @@ class ADL
       if a = assigned(variable) and a != value and variable != self   # Reference variable Super allows self-assignment
         raise "#{inspect} cannot have two assignments to #{variable.inspect}"
       end
-      Assignment.new(self, variable, value, is_final)
+      if variable.name == 'Syntax' && variable.parent.name == 'Object'  # Check namespace of Syntax properly here
+        @syntax = Regexp.new(value[1..-2])
+      else
+        Assignment.new(self, variable, value, is_final)
+      end
     end
 
     def member? name
@@ -98,7 +102,7 @@ class ADL
       others = members-[self_assignment]
       has_attrs = !others.empty? || syntax
       print "#{level}#{@name}#{zuper_name}#{has_attrs ? (zuper_name ? ' ' : '')+"{\n" : ''}"
-      puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/" if @syntax
+      puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/;" if @syntax
       others.each do |m|
         m.emit(level+"\t")
       end
