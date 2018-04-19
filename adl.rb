@@ -25,8 +25,28 @@ class ADL
       members << child
     end
 
+    def supertypes
+      @supertypes ||= [self]+(@zuper ? @zuper.supertypes : [])
+    end
+
+    def assigned variable
+      if variable.parent == supertypes[-1]
+        case variable.name
+        when 'Name'; return @name
+        when 'Parent'; return @parent
+        when 'Super'; return @zuper
+        when 'Aspect'; return @aspect
+        when 'Syntax'; return @syntax
+        end
+      end
+      existing = members.detect{|m| Assignment === m && m.variable == variable}
+      existing && existing.value
+    end
+
     def assign variable, value, is_final
-      # REVISIT: Special-case the built-in Object variables.
+      if a = assigned(variable) and a != value and variable != self   # Reference variable Super allows self-assignment
+        raise "#{inspect} cannot have two assignments to #{variable.inspect}"
+      end
       Assignment.new(self, variable, value, is_final)
     end
 
@@ -344,9 +364,8 @@ class ADL
           is_array = array_indicator
           @adl.end_object
           assignment(defining)
-        elsif object_name
-          # print "In #{@adl.stack.last.inspect} defining #{object_name} and looking at "; p peek
-          variable = @adl.resolve_name(object_name)
+        elsif object_name and peek('equals') || peek('approx')
+          variable = @adl.resolve_name(object_name, 0)
           assigned = assignment(variable)
         end
         if !is_block || is_array || assigned
