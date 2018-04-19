@@ -214,14 +214,16 @@ class ADL
     start_parent = o
     # Ascend the parent chain until we fail or find our first name:
     # REVISIT: If we descend a supertype's child, this may become contextual!
-    until no_ascend or path_name.empty? or m = o.inherited_member?(path_name[0])
-      unless o.parent
-        error("Failed to find #{path_name[0].inspect} from #{@stack.last.name} looking at #{@scanner.context.inspect}")
+    unless no_ascend
+      until path_name.empty? or m = o.inherited_member?(path_name[0])
+        unless o.parent
+          error("Failed to find #{path_name[0].inspect} from #{@stack.last.name} looking at #{@scanner.context.inspect}")
+        end
+        o = o.parent    # Ascend
       end
-      o = o.parent    # Ascend
+      o = m
+      path_name.shift
     end
-    o = m
-    path_name.shift
     error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
     return o if path_name.empty?
 
