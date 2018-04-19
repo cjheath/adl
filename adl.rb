@@ -25,6 +25,10 @@ class ADL
       members << child
     end
 
+    def ancestry
+      @ancestry ||= (@parent ? @parent.ancestry : []) + [self]
+    end
+
     def supertypes
       @supertypes ||= [self]+(@zuper ? @zuper.supertypes : [])
     end
@@ -162,7 +166,7 @@ class ADL
 
   def parse io, top = nil
     @scanner = Scanner.new(self, io)
-    @stack = (top || @top).supertypes
+    @stack = (top || @top).ancestry
     @scanner.parse
   end
 
@@ -569,5 +573,6 @@ adl = ADL.new
 top = nil
 ARGV.each do |file|
   top = adl.parse(File.read(file), top)
+  puts "Parsed #{file} yielding #{top.inspect}"
 end
 adl.emit
