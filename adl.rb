@@ -160,9 +160,9 @@ class ADL
     @alias_for = ADLObject.new(@alias, 'For', @reference, nil)
   end
 
-  def parse io
+  def parse io, top = nil
     @scanner = Scanner.new(self, io)
-    @stack = [@top]
+    @stack = (top || @top).supertypes
     @scanner.parse
   end
 
@@ -341,9 +341,11 @@ class ADL
     def parse
       # Any rule that consumes a token that may be followed by white space should skip it before returning
       opt_white
-      while object
+      while o = object
+        last = o
       end
       error "Parse terminated at #{peek.inspect}" if peek
+      last
     end
 
     def context
@@ -352,7 +354,7 @@ class ADL
 
     def object
       return nil if peek('close') or !peek
-      return true if expect('semi')   # Empty definition
+      return @adl.stack.last if expect('semi')   # Empty definition
       object_name = path_name
       definition(object_name)
     end
@@ -372,14 +374,16 @@ class ADL
           assignment(defining)
         elsif object_name and peek('equals') || peek('approx')
           variable = @adl.resolve_name(object_name, 0)
-          assigned = assignment(variable)
+          assigned = defining = assignment(variable)
+        elsif object_name
+          # error("Useless bare name #{object_name}")
         end
         if !is_block || is_array || assigned
           peek 'close' or require 'semi'
         end
       end
       opt_white
-      true
+      defining || true
     end
 
     def type
@@ -562,5 +566,8 @@ class ADL
 end
 
 adl = ADL.new
-adl.parse(File.read(ARGV[0]))
+top = nil
+ARGV.each do |file|
+  top = adl.parse(File.read(file), top)
+end
 adl.emit
