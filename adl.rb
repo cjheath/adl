@@ -73,6 +73,14 @@ class ADL
       (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name || '<anonymous>')
     end
 
+    def pathname_relative_to object
+      s = ancestry
+      o = object.ancestry
+      c = s & o
+      c.pop if (s-c).empty?
+      '.'*(o-c).size + (s-c).map(&:name)*'.'
+    end
+
     def top?
       !@parent
     end
@@ -129,20 +137,21 @@ class ADL
     def inline level = ''
       %Q{#{@is_final ? ' =' : ' ~='} #{
         if ADLObject === @value
-          @value.pathname
+          # REVISIT: Problem is, it's not always relative to our parent (c.f. self_assignment?):
+          @value.pathname_relative_to(@parent)
         elsif Array === @value
           "[\n" +
           @value.map do |v|
             level+"\t"+
               if ADLObject === v
-                v.pathname
+                v.pathname_relative_to(@parent)
               else
-                v.inspect
+                v.inspect.gsub(/"/,"'")
               end
           end* ",\n" +
           "\n#{level}]"
         else
-          @value.inspect
+          @value.inspect.gsub(/"/,"'")
         end
       }}
     end
@@ -224,14 +233,14 @@ class ADL
       o = m
       path_name.shift
     end
-    error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
+    error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname} looking at #{@scanner.context.inspect}") unless o
     return o if path_name.empty?
 
     # Now descend from the current position down the named children
     # REVISIT: If we descend a supertype's child, this becomes contextual!
     path_name.each do |n|
       m = o.member?(n)
-      error("Failed to find #{n.inspect} in #{o.pathname}") unless m
+      error("Failed to find #{n.inspect} in #{o.pathname} looking at #{@scanner.context.inspect}") unless m
       o = m   # Descend
     end
     o
