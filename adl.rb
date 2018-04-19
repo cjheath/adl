@@ -584,7 +584,7 @@ top = nil
 ARGV.each do |file|
   top = adl.parse(File.read(file), top)
 end
-if emit_all
+if emit_all || !top
   adl.emit
 else
   top.emit ''
