@@ -134,13 +134,13 @@ class ADL
           "[\n" +
           @value.map do |v|
             level+"\t"+
-              if ADLObject === @value
-                @value.pathname
+              if ADLObject === v
+                v.pathname
               else
-                @value.inspect
+                v.inspect
               end
           end* ",\n" +
-          "#{level}]"
+          "\n#{level}]"
         else
           @value.inspect
         end
