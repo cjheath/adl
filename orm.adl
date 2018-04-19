@@ -1,0 +1,167 @@
+Fact Based Model: {
+    Object Type Name: String;
+    Object Type: {
+	Alternate Name: Object Type Name[];
+    }
+
+    Canonical Value: String;
+
+    Data Type: Object Type;
+
+    Domain Object Type: Object Type {
+	Is Independent: Boolean;
+    }
+
+    Value Type: Domain Object Type {
+	Maps To -> Data Type;
+	Requires Restriction: Boolean;
+	Parameter: {
+	    -> Data Type;
+	    Canonical Value;
+	    Restriction Style: Enumeration {
+		Fixed: Restriction Style;
+		Ascending: Restriction Style;
+		Descending: Restriction Style;
+	    }
+	};
+	Parameters => Parameter;
+    }
+
+    Entity Type: Domain Object Type {
+	Is Personal: Boolean;
+    }
+
+    Derivation Rule: {
+	Formal Language: String;
+	Description: String;
+    }
+
+    Fact Type: {
+	Objectified As -> Entity Type;
+	Role: {
+	    Host -> Object Type;
+	}
+	Reading: {
+	    Front Text: String;
+	    Reading Role: {
+		Prebound Text: String;
+		Postbound Text: String;
+		Following Text: String;
+		-> Role;
+	    }
+	}
+	Link Fact Type: Fact Type {
+	    Mirror -> Role;
+	    Objectification -> Role;
+	}
+	Derivation Rule;
+    }
+
+    Subtyping: {
+	Supertype -> Object Type;
+	Subtype -> Object Type;
+	Identity Fact Type -> Fact Type;
+	Derivation Rule;
+    }
+
+    Constraint: {
+	Alethic: Boolean;
+    }
+    Unique Constraint: Constraint {
+	=> Fact Type.Role;
+	Preferred Identifier For -> Entity Type;
+    }
+    Mandatory Constraint: Constraint {
+	=> Fact Type.Role;
+    }
+    Value Range: {
+	Minimum: Canonical Value;
+	Maximum: Canonical Value;
+    }
+    Value Constraint: Constraint {
+	-> Value Type;
+	=> Canonical Value;
+	=> Value Range;
+    }
+    Role Value Constraint: Constraint {
+	-> Fact Type.Role;
+	=> Canonical Value;
+	=> Value Range;
+    }
+
+    Frequency Constraint: Constraint {
+	-> Fact Type.Role;
+	Minimum: Integer;
+	Maximum: Integer{Minimum = 2}
+    }
+
+    Set Comparison Constraint {
+	Role Set: {
+	    => Fact Type.Role;
+	}[];
+    }
+    Subset Constraint: Set Comparison Constraint {
+    }
+    Join Subset Constraint: Subset Constraint {
+	Inadequately Defined;
+    }
+    Exclusion Constraint: Set Comparison Constraint {
+	Is Mandatory: Boolean;
+    }
+    Equality Constraint: Set Comparison Constraint {
+    }
+
+    Value Comparison Constraint: Constraint {
+	First -> Fact Type.Role;
+	Second -> Fact Type.Role;
+	Comparator: Enumeration {
+	    Equals: Comparator;
+	    NotEquals: Comparator;
+	    LessThan: Comparator;
+	    LessThanOrEqual: Comparator;
+	    GreaterThanOrEqual: Comparator;
+	    GreaterThan: Comparator;
+	}
+    }
+    Ring Constraint: Constraint {
+	First -> Fact Type.Role;
+	Second -> Fact Type.Role;
+	Is Irreflexive: Boolean;
+	Is Antisymmetric: Boolean;
+	Is Asymmetric: Boolean;
+	Is Intransitive: Boolean;
+	Is Strongly Intransitive: Boolean;
+	Is Acyclic: Boolean;
+	Is Reflexive: Boolean;
+	Is Transitive: Boolean;
+	Is Symmetric: Boolean;
+    }
+    Object Cardinality Constraint: Constraint {
+	-> Object Type;
+	Minimum: Integer{Minimum = 1};
+	Maximum: Integer;
+    }
+    Role Cardinality Constraint: Constraint {
+	-> Fact Type.Role;
+	Minimum: Integer;
+	Maximum: Integer;
+    }
+
+    Population: {
+	Fact: {
+	    -> Fact Type;
+	}
+	Instance: {
+	    -> Object Type;
+	    Canonical Value;
+	    Objectifies -> Fact;
+	}
+	Fact Role Instance: {
+	    -> Fact;
+	    -> Fact Type.Role;
+	    -> Instance;
+	}
+	Instances => Instance;
+	Facts => Fact;
+    }
+}
