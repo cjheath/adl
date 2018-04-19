@@ -4,7 +4,7 @@ adl             = object*
 
 object          = path_name? definition
 
-definition      = (reference | type? block? post_definition ';' | type? block | ';' | alias_from )
+definition      = (reference | alias_from | type? block? post_definition ';' | type? block | ';' )
 
 post_definition = array_indicator assignment? | assignment
 
