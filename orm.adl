@@ -68,11 +68,11 @@ Fact Based Model: {
 	Alethic: Boolean;
     }
     Unique Constraint: Constraint {
-	=> Fact Type.Role;
+	Roles => Fact Type.Role;
 	Preferred Identifier For -> Entity Type;
     }
     Mandatory Constraint: Constraint {
-	=> Fact Type.Role;
+	Roles => Fact Type.Role;
     }
     Value Range: {
 	Minimum: Canonical Value;
@@ -80,13 +80,13 @@ Fact Based Model: {
     }
     Value Constraint: Constraint {
 	-> Value Type;
-	=> Canonical Value;
-	=> Value Range;
+	Canonical Values => Canonical Value;
+	Value Ranges => Value Range;
     }
     Role Value Constraint: Constraint {
 	-> Fact Type.Role;
-	=> Canonical Value;
-	=> Value Range;
+	Canonical Values => Canonical Value;
+	Value Ranges => Value Range;
     }
 
     Frequency Constraint: Constraint {
@@ -97,7 +97,7 @@ Fact Based Model: {
 
     Set Comparison Constraint {
 	Role Set: {
-	    => Fact Type.Role;
+	    Roles => Fact Type.Role;
 	}[];
     }
     Subset Constraint: Set Comparison Constraint {
