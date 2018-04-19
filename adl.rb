@@ -356,7 +356,7 @@ class ADL
     end
 
     def context
-      @token[0,5].map{|t,v| v}*''
+      @token[0,8].map{|t,v| v}*''
     end
 
     def object
