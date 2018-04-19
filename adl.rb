@@ -570,9 +570,15 @@ class ADL
 end
 
 adl = ADL.new
+if emit_all = (ARGV[0] == '-a')
+  ARGV.shift
+end
 top = nil
 ARGV.each do |file|
   top = adl.parse(File.read(file), top)
-  puts "Parsed #{file} yielding #{top.inspect}"
 end
-adl.emit
+if emit_all
+  adl.emit
+else
+  top.emit ''
+end
