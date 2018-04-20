@@ -1,5 +1,3 @@
-require 'byebug'
-
 class ADL
   attr_reader :stack
 
@@ -74,11 +72,15 @@ class ADL
     end
 
     def pathname_relative_to object
+      pathname
+=begin
+      # REVISIT: Implement this properly
       s = ancestry
       o = object.ancestry
       c = s & o
       c.pop if (s-c).empty?
       '.'*(o-c).size + (s-c).map(&:name)*'.'
+=end
     end
 
     def top?
@@ -345,13 +347,20 @@ class ADL
 
     def initialize adl, io
       @adl = adl
-      @io = io
-      @token = []
-      @io.scan(parse_re) do |a|
-        match = $~
-        @token << match.names.map{|n| match[n] ? [n, match[n]] : nil}.compact[0]
+      @input = io.to_s
+      @offset = 0
+      @current = nil    # The kind of token at @offset (if it has been scanned)
+      @value = nil      # The text associated with the current token
+      @line_number = 1
+    end
+
+    def next_token rule = nil
+      match = (rule || parse_re).match(@input[@offset..-1])
+      if !match
+        @current = @value = nil
+      else
+        @current, @value = match.names.map{|n| match[n] ? [n, match[n]] : nil}.compact[0]
       end
-      # puts @token.map(&:inspect)*"\n"
     end
 
     def parse
@@ -365,7 +374,7 @@ class ADL
     end
 
     def context
-      @token[0,8].map{|t,v| v}*''
+      @input[@offset, 60]
     end
 
     def object
@@ -570,13 +579,17 @@ class ADL
 
     # Consume the current token, returning the value
     def consume
-      # puts "consuming #{peek.inspect}" unless @token[0][0] == 'white'
-      @token.shift[1]
+      next_token unless @current
+      # puts "consuming #{@current.inspect}" unless @current == 'white'
+      t, v, @current, @value = @current, @value, nil, nil
+      @offset += v.size
+      v
     end
 
-    # If token is next, consume it and retrun the value, else return nil
+    # If token is next, consume it and return the value, else return nil
     def expect token
-      return nil unless @token[0] && @token[0][0] == token
+      next_token unless @current
+      return nil unless @current && @current == token
       [consume, opt_white][0]
     end
 
@@ -587,7 +600,8 @@ class ADL
 
     # Without consuming it, return or match the next token
     def peek token = nil
-      @token[0] && (token ? @token[0][0] == token : @token[0])
+      next_token unless @current
+      @current && (token ? @current == token : @current)
     end
   end
 end
