@@ -19,7 +19,9 @@ class ADL
     end
 
     def adopt child
-      raise "Cannot have two children called #{child.name}" if child.name && member?(child.name)
+      if child.name && member?(child.name)
+        raise "Cannot have two children called #{child.name}"
+      end
       members << child
     end
 
@@ -47,6 +49,10 @@ class ADL
       existing && existing.value
     end
 
+    def assigned_transitive variable
+      assigned(variable) or @zuper && @zuper.assigned_transitive(variable)
+    end
+
     def assign variable, value, is_final
       if a = assigned(variable) and a != value and variable != self   # Reference variable Super allows self-assignment
         raise "#{inspect} cannot have two assignments to #{variable.inspect}"
@@ -62,9 +68,9 @@ class ADL
       name && members.detect{|m| m.name == name}
     end
 
-    def inherited_member? name
+    def member_transitive? name
       members.detect{|m| m.name == name} or
-        (@zuper and @zuper.inherited_member?(name))
+        (@zuper and @zuper.member_transitive?(name))
     end
 
     def pathname
@@ -171,8 +177,9 @@ class ADL
     @top = ADLObject.new(nil, 'TOP', nil, nil)
     @builtin = ADLObject.new(@top, 'ADL', nil, nil)
     @object = ADLObject.new(@builtin, 'Object', nil, nil)
-    @reference = ADLObject.new(@builtin, 'Reference', @object, nil)
     @regexp = ADLObject.new(@builtin, 'Regular Expression', @object, nil)
+    @syntax = ADLObject.new(@object, 'Syntax', @regexp, nil)
+    @reference = ADLObject.new(@builtin, 'Reference', @object, nil)
     @assignment = ADLObject.new(@builtin, 'Assignment', @object, nil)
     @string = ADLObject.new(@builtin, 'String', @object, nil)
     @string.syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
@@ -226,7 +233,7 @@ class ADL
     # Ascend the parent chain until we fail or find our first name:
     # REVISIT: If we descend a supertype's child, this may become contextual!
     unless no_ascend
-      until path_name.empty? or m = o.inherited_member?(path_name[0])
+      until path_name.empty? or m = o.member_transitive?(path_name[0])
         unless o.parent
           error("Failed to find #{path_name[0].inspect} from #{@stack.last.name} looking at #{@scanner.context.inspect}")
         end
@@ -484,21 +491,19 @@ class ADL
     def assignment variable
       if operator = ((is_final = expect('equals')) || expect('approx'))
         opt_white
-
-        val = value variable
-
         parent = @adl.stack.last
+
+        val = value(variable, nil)
+
         parent.assign variable, val, is_final
       end
     end
 
-    def value variable
-      # REVISIT: Detect the required value type from the variable, including arrays, and deal with it
-
+    def value variable, conform_to
       integer or
       string or
       (p = path_name and @adl.resolve_name(p)) or   # REVISIT: The name resolution should be type-restricted
-      array(variable) or
+      array(variable, conform_to) or
       expect('regexp')
     end
 
@@ -510,10 +515,10 @@ class ADL
       s = expect('string') and eval(s)
     end
 
-    def array variable
+    def array variable, conform_to
       return nil unless expect('lbrack')
       array_value = []
-      while val = value(variable)
+      while val = value(variable, conform_to)
         array_value << val
         break unless expect('comma')
       end
