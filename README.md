@@ -1,9 +1,10 @@
 <h3 align="center">Quick Introduction to the Aspect Definition Language</h3>
 
-<center>
+<div align="center">
 (c) Copyright, Clifford Heath, 1983-2018.
-</center>
+</div>
 
+<p>
 <div style="width: 50%; margin: 4em 25% 2em 25%;">
 The Aspect Definition Language (ADL) is a language for
 defining the classification, attributes and values of
@@ -12,8 +13,11 @@ as are objects defined using the language. Contextual
 extension (sometimes called Aspects or views) is also
 supported. The syntax is free-form, except inside value
 literals. Whitespace and newlines are considered as
-equivalent to a single space and are ignored.
+equivalent to a single space and are ignored. A comment
+(beginning with //) continues to the end of line and
+is considered as white-space.
 </div>
+</p>
 
 <table cellpadding="5">
 
@@ -23,22 +27,22 @@ equivalent to a single space and are ignored.
 <th valign="top" width="40%">Examples</td>
 </tr>
 
-<!-- REVISIT: Comments? -->
-
 <tr>
 <th align="right" valign="top">Object</th>
 <td valign="top">
 <p>
 Everything in ADL is an Object, including the
 top supertype which is called "Object".
-Any named object may have supertype objects,
+Any named object may have subtype objects,
 so there is no distinction between types (classes)
-and instances. Any normal object may also contain
-child objects.
+and instances. Any object may also contain child
+objects.
 </p>
 <td valign="top">
+Object is built-in. Foo is a subtype of Object.
 <pre>
-Object:
+Object:;
+Foo: Object;
 </pre>
 </td>
 </tr>
@@ -48,49 +52,44 @@ Object:
 <td valign="top">
 <p>
 Every Object has a value assigned to its Parent variable,
-except the Origin object, which serves as the outermost
-parent. The Parent of an object may not be re-assigned.
+except the TOP object, which serves as the outermost
+parent. The ADL builtin objects belong the ADL object
+which is in this TOP object.
+Variables (including Parent) may not be re-assigned.
+TOP, Object and ADL are built-in. We'll indicate
+others as we procede.
 </p>
-</tr>
-
-<tr>
-<th align="right" valign="top" width="10%">Built-ins</th>
+</td>
 <td valign="top">
 <p>
-Some Objects are built-in (including Object and Origin).
-We'll indicate more as we proceed.
+You normally won't see TOP or ADL. This is because
+each file (including the built-in definitions)
+normally creates its own namespace, and subsequent
+files descend inside the previous file's namespace.
 </p>
 </td>
 </tr>
 
 <tr>
-<!-- REVISIT: Consider renaming this Symbol, since it's global.
-Or possibly, disallow references to Name as a variable or assignment?
-But then, what about other built-ins, like Parent and Super?
-Can we use local Context notation to contain these variables to local lookup only?
--->
 <th align="right" valign="top" width="10%">Name</th>
 <td valign="top">
 <p>
-An Object may have a Name, which can be one
-or more words. The amount of whitespace between
-the words may vary and is considered equivalent
-to a single space.
-A word is an sequence of alphanumeric or
-underscore characters, and may even start with
+An Object may have a Name, which can be one or
+more words.  A word is an sequence of alphanumeric
+or underscore characters, and may even start with
 a digit, so <strong>42</strong> is a valid Name.
+The amount of whitespace between the words may vary
+and is considered equivalent to a single space.
 </p>
 <p>
-An object may be anonymous, for purposes described
-below.
-</p>
-<p>
-A Name is unique within a given Parent, but anonymous
-objects are unrestricted.
+An object may also be anonymous, for purposes described
+below.  Each Name is unique within a given Parent,
+but anonymous objects are unrestricted.
 </p>
 <td valign="top">
-Declare an object called Person. It has Origin for
-a Parent, and Object for a supertype.
+Declare an object called Person. It has Object for
+a supertype. Its parent depends on the context of
+this declaration.
 <pre>Person:
 </pre>
 </td>
@@ -104,30 +103,15 @@ An object is declared using colon <b>:</b>
 after the name (if any) followed by the name
 of its Super (supertype object).  If no supertype
 name is given, the supertype is Object.
+The supertype name is found in the current parent
+(searching that parent's supertypes) or in an
+enclosing parent, up to TOP.
 </p>
 </td>
 <td valign="top">
 Declare an object called Employee with supertype Person:
 <pre>
 Employee: Person;
-</pre>
-</td>
-</tr>
-
-<tr>
-<th align="right" valign="top">Arrays</th>
-<td valign="top">
-<p>
-A new Object may refer to an array (vector) of
-its supertype, using square brackets after the
-supertype name.  The objects in the array are
-maintained in the sequence they were defined.
-</p>
-<p>
-</p>
-<td valign="top">
-<pre>
-Given Name: String[];
 </pre>
 </td>
 </tr>
@@ -142,16 +126,17 @@ A single child object may be created by declaring
 it following a dot "." after the name of its parent,
 or by opening the Aspect (namespace) of the parent
 between braces (curly brackets), and declaring
-children separated by semi-colons.
+children separated by semi-colons. The semi-colon
+is not required before or after a closing brace.
 </p>
-<p>
+<!--p>
 The parent name before the dot is not required to
 have yet been declared. A place-holder object is
 created that has an undefined (Origin) supertype.
 The type of this parent remains incomplete until
 it is defined explicitly, but the object may not
 be otherwise referred to until its type is defined.
-</p>
+</p-->
 </td>
 <td valign="top">
 Declare two child objects for Person. Each is a
@@ -176,7 +161,8 @@ Using the same name again with the same parent will
 re-open the existing object. If the supertype is
 provided it must match the existing definition; the
 supertype cannot be changed.
-An object with no name cannot be re-opened.
+An object with no name cannot be referenced so cannot
+be re-opened.
 </p>
 <td valign="top">
 We saw this in the previous example. Person was re-opened
@@ -200,13 +186,14 @@ in a brace-list, or after the "." operator.
 <td valign="top">
 <pre>
 Person: {
-    Given Name: String[] {
+    Given Name: String {
 	Max Length = 48;
-    }
+    }[];
 }
-Person {
+Person {	// Re-open Person to extend it
     Family Name: String;
 }
+// Re-open Person.Family Name to set Max Length
 Person.Family Name.Max Length = 24;
 </pre>
 </td>
@@ -223,7 +210,7 @@ of its declaration.
 </td>
 <td valign="top">
 <p>
-Declare an anonymous object which is a supertype of
+Declare an anonymous object which is a subtype of
 Person. Given Names is an array, so the assigned value
 must also be an Array, declared using square brackets.
 <pre>
@@ -250,14 +237,9 @@ supertype. This is called eponymous naming.
 </td>
 <td valign="top">
 <p>
-Date is a predefined Variable type, so the
-following declares that an Event has a Date
-variable. This has the same effect as declaring
-<br><strong>Date: Date;</strong><br>
-Note that the supertype reference works in
-this case because it has not yet been defined
-locally, but if it had, a preceding dot would
-force an explicit up traversal.
+If Date is an existing type, the following
+declares that an Event has a variable whose
+name and supertype are both Date.
 </p>
 <pre>
 Event: {
@@ -265,6 +247,16 @@ Event: {
 }
 : Event { Date = 2001-03-19 }
 </pre>
+<p>
+This has the same effect as declaring
+<pre>
+Date: Date;
+</pre>
+Note that the supertype reference works in
+this case because it has not yet been defined
+locally, but if it had, a preceding dot would
+force an explicit up traversal.
+</p>
 </td>
 </tr>
 
@@ -272,21 +264,62 @@ Event: {
 <th align="right" valign="top">Variables</th>
 <td valign="top">
 <p>
-There is a special built-in object called Variable.
-Variable has a number of built-in supertypes.
+Any Object may define a Syntax, which is a restricted
+regular expression that describes the format of a value
+that can be assigned for that object.
+
+There is a number of built-in variables, or
+you can define your own.
+</p>
+<p>
+Syntax is a variable of type Regular Expression.
+The Syntax of Regular Expression is not regular.
+Reference is also special; it requires an ADL path name
+for an object. See below.
+</p>
 </td>
 <td valign="top">
 <pre>
-Variable: Object;
-String: Variable;
-Date: Variable;
-Number: Variable;
+String:;
+Number:;
     Integer: Number;
-    Real: Number;
     Decimal: Number;
-Enumeration: Variable;
-Boolean: Enumeration;
-Reference: Variable;
+    Real: Decimal;
+    Float: Real;
+Temporal:;
+    Date: Temporal;
+    Time: Temporal;
+    Date Time: Temporal;
+Regular Expression:;
+Syntax: Regular Expression;
+Reference:;
+</pre>
+</td>
+</tr>
+
+<tr>
+<th align="right" valign="top">Regular Expressions</th>
+<td valign="top">
+<p>
+Regular Expressions in ADL open and close with the
+<strong>/</strong> character. They provide a specific
+set of features.
+<ul>
+<li> alternatives using <strong>|</strong> </li>
+<li> grouping using <strong>(...)</strong> </li>
+<li> character escapes prefixed by <strong>\</strong>: <strong>0befntr\*+?()|/[</strong> </li>
+<li> repetitions and optionality using <strong>*</strong>, <strong>+</strong> and <strong>?</strong>, </li>
+<li> character classes </li>
+<li> octal <strong>\0NNN</strong>, hexadecimal <strong>\xXXX</strong> and Unicode characters <strong>\uXXXX</strong> </li>
+<li> negative lookahead <strong>(?!regexp)</strong> and capture groups <strong>(?<someName>regexp)</strong> </li>
+<li> <strong>\s</strong> to skip whitespace. Note that literal whitespace is not allowed.
+</ul>
+</p>
+</td>
+<td valign="top">
+Many languages (not ADL) define identifier names like this:
+<pre>
+/[a-zA-Z_][a-zA-Z0-9_]*/
 </pre>
 </td>
 </tr>
@@ -295,11 +328,11 @@ Reference: Variable;
 <th align="right" valign="top">Assignments</th>
 <td valign="top">
 <p>
-Any object that contains a Variable (or that <strong>is</strong>
-a Variable), or whose supertypes contain a Variable that
+Any object that contains a variable (or that <strong>is</strong>
+a variable), or whose supertypes contain a variable that
 it inherits, may contain one Assignment to that variable.
 An Assignment is a special anonymous child object
-that associates a Value with that Variable for that Parent
+that associates a Value with that variable for that Parent
 object. Assignment has its own syntax, and cannot be
 declared using the usual object definition syntax.
 </p>
@@ -324,6 +357,10 @@ Here's a variable with an assignment to itself:
 <pre>
 Forty Two: Integer = 42;
 </pre>
+<p>
+The variable Forty Two has an assignment to Forty Two
+(itself) with the value 42.
+</p>
 </td>
 </tr>
 
@@ -356,36 +393,46 @@ Bread Slicer: Baking Product {
 </tr>
 
 <tr>
+<th align="right" valign="top">Arrays</th>
+<td valign="top">
+<p>
+A new Object may refer to an array (vector) of
+its supertype, using square brackets after the
+supertype name. When this variable is assigned,
+the array syntax must be used for its values
+</p>
+<p>
+</p>
+<td valign="top">
+<pre>
+Given Name: String[];
+</pre>
+</td>
+</tr>
+
+<tr>
 <th align="right" valign="top">Values</th>
 <td valign="top">
 <p>
-Each Variable has an associated Syntax for literal
-values that may be assigned. Syntax is defined as
-a restricted regular expression, supporting
-alternatives using <strong>|</strong>, grouping
-using <strong>(...)</strong>, a number of character
-escapes using <strong>\</strong>, repetitions and
-optionality using <strong>*</strong>, <strong>+</strong>
-and <strong>?</strong>, and character classes.
-</p>
-<p>
-Each of the built-in Variables each has its own
-Syntax.
+As discussed, each variable has an associated Syntax
+for literal values. This syntax is used when processing
+an Assignment to that variable. If the variable is
+declared to be an array, the values are separated
+by commas and enclosed in square brackets (whitespace
+around these is skipped).
 </p>
 <td valign="top">
-Here are some of the built-in definitions.
 Note that the syntax for a regular expression
 cannot be encoded using the allowed syntax
 for regular expressions, since it is not
 itself regular. It's built-in.
 <pre>
-Regular Expression: String;
-Variable: Object {
-    Syntax: Regular Expression;
-}
-Integer: Variable {
+Integer: Number {	// This is built-in
     Syntax = /-?[1-9][0-9]+|0/;
 }
+Some Primes: Integer[] = [2, 3, 5, 7, 9, 11, 13, 17];
+Names: String{Syntax = /[[:alpha:]\s]+\s[:alpha:]+/}
+Names = [Fred Fly, Joe Bloggs];	// Using custom syntax
 </pre>
 </td>
 </tr>
@@ -409,10 +456,10 @@ The default assignment for all References is Object,
 and that assignment is final. However, any subtype
 of Reference may assign a more restricted type.
 </p>
-<td>
+<td valign="top">
 <p>
 Employment is between a Company and a Person,
-and that's final. A Company cannot employ a Dog.
+and that's final (a Company cannot employ a Dog).
 Every value in the Project array must be a Project.
 </p>
 <pre>
@@ -435,7 +482,7 @@ Employment: {
 There is a short-hand syntax for defining Reference
 subtypes and their arrays, using <b>-&gt;</b> and
 <b>=&gt;</b>. Eponymous naming of reference variables
-is also allowed, see the definition below.
+is also allowed, see the description above.
 </p>
 <td>
 <p>
@@ -451,6 +498,34 @@ Employment: {
     Employee -> Person;
     => Project;
 }
+</pre>
+</td>
+</tr>
+
+<tr>
+<th align="right" valign="top">Enumerations</th>
+<td valign="top">
+<p>
+Reference short-hand provides a nice way to handle
+enumerations, such as the built-in Boolean.
+</p>
+<td>
+<p>
+Boolean is built-in, declared like this:
+<pre>
+Enumeration: Object;
+Boolean: Enumeration;
+True: Boolean;
+False: Boolean;
+Boolean{Is Sterile = True}
+</pre>
+<p>
+Making an object Sterile prevents definition of any
+further subtypes. It is however possible to have a
+reference to such a thing:
+</p>
+<pre>
+Is Allowed -> Boolean ~= True;
 </pre>
 </td>
 </tr>
@@ -519,11 +594,13 @@ value.
 <p>
 If a Name is present in an object, but also in a
 parent object, a reference to the parent object
-is still possible. Prefix the name by a dot, and
-the local object (and inherited objects) will be
+is still possible. Prefix the name by its parent's
+name, and the search will find the parent first.
+Otherwise, prefix the name by one or more dots.
+Each dot starts the search one level further up,
+and prevents the search from stepping any further up.
+The local object (and inherited objects) will be
 ignored, and the search will start at the parent.
-Multiple leading dots may traverse to further
-ancestors.
 </p>
 </td>
 <td valign="top">
@@ -535,17 +612,17 @@ instead of the global Product.
 Product:;
 Sale Item: {
     -> Product;
-    Alternate -> .Product;
+    Alternate -> ..Product;
 }
 </pre>
 </td>
 </tr>
 
-<tr>
-<th align="right" valign="top">New kinds of Variable</th>
+<!--tr>
+<th align="right" valign="top">New kinds of variable</th>
 <td valign="top">
 <p>
-You can define new subtypes of Variable,
+You can define new subtypes of variable,
 with their own syntax, which is used when
 parsing an assignment. A new variable does
 not have to be a subtype of any of the
@@ -570,18 +647,19 @@ Employee: Person {
 }
 </pre>
 </td>
-</tr>
+</tr-->
 
 <tr>
 <th align="right" valign="top">Parameter Variables</th>
 <td valign="top">
 <p>
-Some Variables contain their own parameter variables.
+Some variables contain their own parameter variables.
 For example String (which has Max Length) and Number
 (Minimum, Maximum). These parameter variables do not
 appear special; you can assign to them anywhere you
 might expect to. Refer to the definition of the
-built-ins for full details.
+built-ins for full details. However, enforcement of
+the meaning of a parameter is up to an implementation.
 </p>
 </td>
 <td valign="top">
