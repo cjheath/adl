@@ -129,21 +129,12 @@ between braces (curly brackets), and declaring
 children separated by semi-colons. The semi-colon
 is not required before or after a closing brace.
 </p>
-<!--p>
-The parent name before the dot is not required to
-have yet been declared. A place-holder object is
-created that has an undefined (Origin) supertype.
-The type of this parent remains incomplete until
-it is defined explicitly, but the object may not
-be otherwise referred to until its type is defined.
-</p-->
 </td>
 <td valign="top">
 Declare two child objects for Person. Each is a
 subtype of the built-in variable String (described below).
-After the first statement, Person is a placeholder
-with a Origin type. The second statement declares
-that Person is a subtype of Object.
+The second statement declares that Person is a
+subtype of Object.
 <pre>
 Person.Family Name: String;
 Person: {
@@ -548,12 +539,12 @@ be usable from that object.
 </p>
 </td>
 <td valign="top">
-Here Product is defined in the top scope (the Origin
-object). Then in the Retail object, we define
-Toaster to be a Product - referring to Product as
-it was defined in the Parent's scope. Finally after
-returning to the top scope, we traverse into the
-Retail space again to assign the Toaster a Price.
+Here Product is defined in the current scope.
+Then in the Retail object, we define Toaster to be
+a Product - referring to Product as it was defined
+in the Parent's scope. Finally after returning to
+the top scope, we traverse the Retail space again
+to assign the Toaster a Price.
 <pre>
 Product: {
     Name: String;
@@ -810,14 +801,14 @@ Note that joe smith's Given Name is assigned Final.
 </p>
 
 <p>
-Back in global context (or rather, Origin context),
+Back in the top context for these declarations,
 New Context is re-opened and the Family Name 'Smith'
 (seen in the global context as Surname) is contextually
 re-assigned. Note that from the point of view of
 New Context, joe smith is still has a Family name of
 Smith (this assignment applies) but from the
 global context looking in, his Surname is Schmidt.
-The Given Name cannot be re-assigned even contextually,
+The Given Name cannot be re-assigned (even contextually),
 since it had a final assignment already.
 </p>
 <pre>
