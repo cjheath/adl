@@ -133,8 +133,6 @@ is not required before or after a closing brace.
 <td valign="top">
 Declare two child objects for Person. Each is a
 subtype of the built-in variable String (described below).
-The second statement declares that Person is a
-subtype of Object.
 <pre>
 Person.Family Name: String;
 Person: {
@@ -255,21 +253,38 @@ force an explicit up traversal.
 <th align="right" valign="top">Variables</th>
 <td valign="top">
 <p>
-Any Object may define a Syntax, which is a restricted
-regular expression that describes the format of a value
-that can be assigned for that object.
+Any Object with a value syntax allows value assignment,
+so serves as a variable.  Any parent (including by
+inheritance) of such an object may contain one assignment
+to that variable. The variable may also contains one
+assignment to itself, which serves as a default value.
 
-There is a number of built-in variables, or
-you can define your own.
+A number of variables are provided, or you can define
+your own. Just assign the Syntax variable of your object
+and it becomes a variable which accepts a value matching
+that syntax.
 </p>
 <p>
-Syntax is a variable of type Regular Expression.
-The Syntax of Regular Expression is not regular.
-Reference is also special; it requires an ADL path name
-for an object. See below.
+Syntax accepts a Regular Expression. Regular Expression
+also has a syntax, but that syntax is not regular (cannot
+be described by a Regular Expression), so it is a special
+built-in.
+</p>
+<p>
+Reference is also a special Variable. Assignment to a
+Reference requires an ADL path name for an object. See below.
 </p>
 </td>
 <td valign="top">
+These are the true built-in variables:
+<pre>
+Regular Expression:;
+Object {
+    Syntax: Regular Expression;
+}
+Reference:;
+</pre>
+The following are provided, but are not true built-ins:
 <pre>
 String:;
 Number:;
@@ -281,9 +296,6 @@ Temporal:;
     Date: Temporal;
     Time: Temporal;
     Date Time: Temporal;
-Regular Expression:;
-Syntax: Regular Expression;
-Reference:;
 </pre>
 </td>
 </tr>
@@ -298,7 +310,7 @@ set of features.
 <ul>
 <li> alternatives using <strong>|</strong> </li>
 <li> grouping using <strong>(...)</strong> </li>
-<li> character escapes prefixed by <strong>\</strong>: <strong>0befntr\*+?()|/[</strong> </li>
+<li> character escapes prefixed by a <strong>\</strong> character: <strong>0befntr\*+?()|/[</strong> </li>
 <li> repetitions and optionality using <strong>*</strong>, <strong>+</strong> and <strong>?</strong>, </li>
 <li> character classes </li>
 <li> octal <strong>\0NNN</strong>, hexadecimal <strong>\xXXX</strong> and Unicode characters <strong>\uXXXX</strong> </li>
@@ -308,6 +320,14 @@ set of features.
 </p>
 </td>
 <td valign="top">
+<p>
+The provided syntax for some numeric variables is:
+</p>
+<pre>
+Integer.Syntax = /[-+]?[1-9][0-9]*/;
+Decimal.Syntax =
+  /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?/;
+</pre>
 Many languages (not ADL) define identifier names like this:
 <pre>
 /[a-zA-Z_][a-zA-Z0-9_]*/
