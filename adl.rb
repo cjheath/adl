@@ -99,7 +99,7 @@ class ADL
 
     def zuper_name
       case
-      when @zuper && @zuper.parent.parent.parent == nil && @zuper.name == 'Object'
+      when @zuper && @zuper.parent.parent == nil && @zuper.name == 'Object'
         ':'
       when @zuper
         ': '+@zuper.name
@@ -175,21 +175,12 @@ class ADL
 
   def make_built_in
     @top = ADLObject.new(nil, 'TOP', nil, nil)
-    @builtin = ADLObject.new(@top, 'ADL', nil, nil)
-    @object = ADLObject.new(@builtin, 'Object', nil, nil)
-    @regexp = ADLObject.new(@builtin, 'Regular Expression', @object, nil)
+    @object = ADLObject.new(@top, 'Object', nil, nil)
+    @regexp = ADLObject.new(@top, 'Regular Expression', @object, nil)
     @syntax = ADLObject.new(@object, 'Syntax', @regexp, nil)
-    @reference = ADLObject.new(@builtin, 'Reference', @object, nil)
-    @assignment = ADLObject.new(@builtin, 'Assignment', @object, nil)
-    @string = ADLObject.new(@builtin, 'String', @object, nil)
-    @string.syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
-    @enumeration = ADLObject.new(@builtin, 'Enumeration', @object, nil)
-    @boolean = ADLObject.new(@builtin, 'Boolean', @enumeration, nil)
-    @is_sterile = ADLObject.new(@object, 'Is Sterile', @boolean, nil)
-    @false = ADLObject.new(@builtin, 'False', @boolean, nil)
-    @true = ADLObject.new(@builtin, 'True', @boolean, nil)
-
-    @alias = ADLObject.new(@builtin, 'Alias', @object, nil)
+    @reference = ADLObject.new(@top, 'Reference', @object, nil)
+    @assignment = ADLObject.new(@top, 'Assignment', @object, nil)
+    @alias = ADLObject.new(@top, 'Alias', @object, nil)
     @alias_for = ADLObject.new(@alias, 'For', @reference, nil)
   end
 
@@ -233,7 +224,7 @@ class ADL
     # Ascend the parent chain until we fail or find our first name:
     # REVISIT: If we descend a supertype's child, this may become contextual!
     unless no_ascend
-      until path_name.empty? or m = o.member_transitive?(path_name[0])
+      until path_name.empty? or path_name[0] == (m = o).name or m = o.member_transitive?(path_name[0])
         unless o.parent
           error("Failed to find #{path_name[0].inspect} from #{@stack.last.name} looking at #{@scanner.context.inspect}")
         end
@@ -398,19 +389,34 @@ class ADL
         supertype_name = type
 
         # We only want to start a new object if there's a supertype, or a block, or an array indicator
-        if supertype_name || peek('open') || peek('lbrack') || inheriting
+        if inheriting || supertype_name || peek('lbrack')
           defining = @adl.start_object(object_name, supertype_name)
-          is_block = block object_name
+          has_block = block object_name
           is_array = array_indicator
           @adl.end_object
           assignment(defining)
+        elsif peek('open')
+          defining = @adl.stack.last
+          if reopen = @adl.resolve_name(object_name, 0)
+            if (@adl.stack & reopen.ancestry) != @adl.stack
+              # puts "REVISIT: Contextual extension"
+            end
+
+            # Save the stack to restore later, and replace it with reopen.ancestry
+            saved = @adl.stack.dup
+            @adl.stack.replace reopen.ancestry
+            has_block = block object_name
+            @adl.stack.replace saved          # restore the stack
+            defining = reopen
+          end
         elsif object_name and peek('equals') || peek('approx')
           variable = @adl.resolve_name(object_name, 0)
           assigned = defining = assignment(variable)
         elsif object_name
-          # error("Useless bare name #{object_name}")
+          # This may be the trailing namespace to use for a following file.
+          defining = @adl.resolve_name(object_name, 0)
         end
-        if !is_block || is_array || assigned
+        if !has_block || is_array || assigned
           peek 'close' or require 'semi'
         end
       end
@@ -469,12 +475,12 @@ class ADL
         # Add a final assignment (to itself) for its type:
         defining.assign(defining, reference_object, true)
 
-        is_block = block object_name
+        has_block = block object_name
         @adl.end_object
 
         # The following assignment has the same parent as the Reference itself
         assignment(defining)
-        peek('rbrack') or require 'semi' if !is_block || is_assigned
+        peek('rbrack') or require 'semi' if !has_block || is_assigned
         opt_white
         defining
       end

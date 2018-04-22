@@ -95,7 +95,7 @@ Fact Based Model: {
 	Maximum: Integer{Minimum = 2}
     }
 
-    Set Comparison Constraint {
+    Set Comparison Constraint: Constraint {
 	Role Set: {
 	    Roles => Fact Type.Role;
 	}[];

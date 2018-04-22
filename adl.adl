@@ -1,6 +1,14 @@
-// The ADL object is the namespace for the ADL built-in objects.
-// There are a few really built-in ones, but we extend them here.
-ADL {
+// Top is the namespace for the ADL built-in objects.
+// There are a few truly built-in objects, but we extend them here.
+TOP {
+	Enumeration:;				// This is a mnemonic convenience only
+	Boolean: Enumeration;			// A Reference to Boolean can only be refined
+	False: Boolean;				// To one of the subtypes
+	True: Boolean;
+
+	String: {
+		Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
+	}
 	Object {
 		Parent -> Object;		// The container of this object
 		Name: String;			// The name of this object
@@ -11,20 +19,16 @@ ADL {
 		Syntax: Regular Expression;	// A literal value conforms to this regular grammar
 		Is Array -> Boolean ~= False;	// The assignment is an array of values
 	}
+	Boolean{Is Sterile = True;}		// and no other alternatives can be added
 
 	Reference: {Reference = Object};	// The built-in Syntax accepts a path name
-	Regular Expression:;			// The built-in Syntax is not regular
+	Regular Expression;			// The built-in Syntax is not regular
 	Assignment: {
 		Variable -> Object;		// The Object whose Syntax the Value conforms to
 		Value: String[];		// The Value(s) must match the Syntax for the Object
 		Is Final -> Boolean;		// May not be overridden (but refinement is allowed)
 	}
 
-	Enumeration:;				// This is a mnemonic convenience only
-	Boolean: Enumeration;			// A Reference to Boolean can only be refined
-	False: Boolean;				// To one of the subtypes
-	True: Boolean;
-	Boolean{Is Sterile = True;}		// and no other alternatives can be added
 	Alias: {
 		For -> Object;
 	}
@@ -49,9 +53,7 @@ ADL {
 		Mantissa: Integer ~= 53;
 	}
 
-	String: {
-		// This is internally defined and cannot be re-assigned
-		// Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
+	String {
 		Min Length: Integer;
 		Max Length: Integer;
 	}
