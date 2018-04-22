@@ -3,10 +3,7 @@ class ADL
 
   class ADLObject
     attr_reader :name, :parent, :zuper
-    attr_accessor :syntax
-    attr_accessor :has_block
-    attr_accessor :zuper_placeholder
-    attr_writer :zuper  # Reference objects get created then changed
+    attr_accessor :is_array, :is_sterile, :is_complete
 
     def initialize parent, name, zuper, aspect = nil
       @parent, @name, @zuper, @aspect = parent, name, zuper, aspect || parent
@@ -32,21 +29,26 @@ class ADL
     end
 
     def supertypes
-      @supertypes ||= [self]+(@zuper ? @zuper.supertypes : [])
+      @supertypes ||= begin
+        ([self]+(@zuper ? @zuper.supertypes : [])).freeze
+      end
     end
 
     def assigned variable
-      if variable.parent == supertypes[-1]
+      if variable.parent == (o = supertypes[-1])  # supertypes[-1] is always Object
         case variable.name
-        when 'Name'; return @name
-        when 'Parent'; return @parent
-        when 'Super'; return @zuper
-        when 'Aspect'; return @aspect
-        when 'Syntax'; return @syntax
+        when 'Name'; return [@name, o, true]
+        when 'Parent'; return [@parent, o, true]
+        when 'Super'; return [@zuper, o, true]
+        when 'Aspect'; return [@aspect, o, true]
+        when 'Syntax'; return [@syntax, o, true]
+        when 'Is Array'; return [@is_array, o, true]
+        when 'Is Sterile'; return [@is_sterile, o, true]
+        when 'Is Complete'; return [@is_complete, o, true]
         end
       end
       existing = members.detect{|m| Assignment === m && m.variable == variable}
-      existing && existing.value
+      existing && [existing.value, existing.parent, existing.is_final]
     end
 
     def assigned_transitive variable
@@ -54,7 +56,8 @@ class ADL
     end
 
     def assign variable, value, is_final
-      if a = assigned(variable) and a != value and variable != self   # Reference variable Super allows self-assignment
+      a, p, f = assigned(variable)
+      if a and a != value and variable != self   # Reference variable Super allows self-assignment
         raise "#{inspect} cannot have two assignments to #{variable.inspect}"
       end
       if variable.name == 'Syntax' && variable.parent.name == 'Object'  # Check namespace of Syntax properly here
@@ -64,6 +67,14 @@ class ADL
       end
     end
 
+    def is_reference
+      supertypes[-2].name == 'Reference'
+    end
+
+    def is_syntax
+      s = supertypes[-3] and s.name == 'Syntax'
+    end
+
     def member? name
       name && members.detect{|m| m.name == name}
     end
@@ -71,6 +82,10 @@ class ADL
     def member_transitive? name
       members.detect{|m| m.name == name} or
         (@zuper and @zuper.member_transitive?(name))
+    end
+
+    def syntax_transitive
+      @syntax || (@zuper && @zuper.syntax_transitive)
     end
 
     def pathname
@@ -118,7 +133,7 @@ class ADL
 
       self_assignment = members.detect{|m| Assignment === m && m.variable == self }
       others = members-[self_assignment]
-      has_attrs = !others.empty? || syntax
+      has_attrs = !others.empty? || @syntax
       print "#{level}#{@name}#{zuper_name}#{has_attrs ? (zuper_name ? ' ' : '')+"{\n" : ''}"
       puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/;" if @syntax
       others.each do |m|
@@ -260,7 +275,6 @@ class ADL
     o = parent.member?(local_name) ||
       ADLObject.new(parent, local_name, zuper)
 
-    o.zuper_placeholder = supertype_name*' ' if supertype_name
     @stack.push o
     o
   end
@@ -270,7 +284,6 @@ class ADL
   end
 
   def start_block
-    @stack.last.has_block = true
   end
 
   def end_block
@@ -392,7 +405,7 @@ class ADL
         if inheriting || supertype_name || peek('lbrack')
           defining = @adl.start_object(object_name, supertype_name)
           has_block = block object_name
-          is_array = array_indicator
+          defining.is_array = is_array = !!array_indicator
           @adl.end_object
           assignment(defining)
         elsif peek('open')
@@ -411,12 +424,12 @@ class ADL
           end
         elsif object_name and peek('equals') || peek('approx')
           variable = @adl.resolve_name(object_name, 0)
-          assigned = defining = assignment(variable)
+          is_assignment = defining = assignment(variable)
         elsif object_name
           # This may be the trailing namespace to use for a following file.
           defining = @adl.resolve_name(object_name, 0)
         end
-        if !has_block || is_array || assigned
+        if !has_block || is_array || is_assignment
           peek 'close' or require 'semi'
         end
       end
@@ -471,6 +484,7 @@ class ADL
 
         # Create the reference
         defining = @adl.start_object(object_name||reference_to, ['Reference'])
+        defining.is_array = operator == '=>'
 
         # Add a final assignment (to itself) for its type:
         defining.assign(defining, reference_object, true)
@@ -479,8 +493,9 @@ class ADL
         @adl.end_object
 
         # The following assignment has the same parent as the Reference itself
-        assignment(defining)
-        peek('rbrack') or require 'semi' if !has_block || is_assigned
+        has_assignment = assignment(defining)
+
+        peek('rbrack') or require 'semi' if !has_block || has_assignment
         opt_white
         defining
       end
@@ -495,22 +510,76 @@ class ADL
     end
 
     def assignment variable
-      if operator = ((is_final = expect('equals')) || expect('approx'))
+      if operator = ((is_final = !!expect('equals')) || expect('approx'))
         opt_white
         parent = @adl.stack.last
 
-        val = value(variable, nil)
+        # Re-assignment is illegal
+        local_value, = parent.assigned(variable)
+        error("Cannot reassign #{parent.name}.#{variable.name}") if local_value
+
+        # Detect the required value type from the variable, including arrays, and deal with it
+        controlling_syntax = variable
+        if variable.is_syntax
+          val = expect('regexp')
+        else
+          if variable.is_reference
+            existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
+            refine_from = (final && existing) || parent.supertypes[-1] # Use Object as a default
+          else
+            # If this variable is a parameter of the same type as its parent, and this parent is also a subtype,
+            # allow any value that the subtype would allow. This special case supports e.g. Number.Minimum
+            if variable.supertypes.include?(variable.parent) && parent.supertypes.include?(variable.parent)
+              controlling_syntax = parent
+            end
+            # Find an existing assignment, including inherited, to check for Is Final
+            existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
+            error("Cannot override final assignment #{parent.name}.#{variable.name} = #{existing.inspect}") if final
+          end
+
+          val = value(controlling_syntax, refine_from)
+        end
 
         parent.assign variable, val, is_final
       end
     end
 
-    def value variable, conform_to
-      integer or
-      string or
-      (p = path_name and @adl.resolve_name(p)) or   # REVISIT: The name resolution should be type-restricted
-      array(variable, conform_to) or
-      expect('regexp')
+    def value variable, refine_from
+      if variable.is_array
+        val = array(variable, refine_from)
+      else
+        atomic_value(variable, refine_from)
+      end
+    end
+
+    def atomic_value variable, refine_from
+      # puts "Looking for value of #{variable.name}#{refine_from ? " refining #{refine_from.name}" : ''}"
+      if refine_from
+        p = path_name
+        error("Assignment to #{variable.name} must name an ADL object") unless p
+        val = @adl.resolve_name(p)
+        # If the variable is a reference and refine_from is set, the object must be a subtype
+        if refine_from && !val.supertypes.include?(refine_from)
+          error("Assignment of #{val.inspect} to #{parent.name}.#{variable.name} must refine the existing final assignment of #{refine_from.inspect}") unless p
+        end
+        val
+      else
+        syntax = variable.syntax_transitive
+        error("#{variable.inspect} has no Syntax so cannot be assigned") unless syntax
+        # Get the Syntax for the variable and REVISIT: accept a value of that type
+        val = (integer or string)
+      end
+    end
+
+    def array variable, refine_from
+      return nil unless expect('lbrack')
+      array_value = []
+      while val = atomic_value(variable, refine_from)
+        array_value << val
+        break unless expect('comma')
+      end
+      error("Array elements must separated by , and end in ]") unless expect('rbrack')
+      array_value
     end
 
     def integer
@@ -519,17 +588,6 @@ class ADL
 
     def string
       s = expect('string') and eval(s)
-    end
-
-    def array variable, conform_to
-      return nil unless expect('lbrack')
-      array_value = []
-      while val = value(variable, conform_to)
-        array_value << val
-        break unless expect('comma')
-      end
-      error("Array elements must separated by , and end in ]") unless expect('rbrack')
-      array_value
     end
 
     def path_name

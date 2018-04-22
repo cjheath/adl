@@ -17,7 +17,7 @@ TOP {
 		Is Sterile -> Boolean ~= False;	// No further subtypes may be added
 		Is Complete -> Boolean ~= False;// No further contents may be added
 		Syntax: Regular Expression;	// A literal value conforms to this regular grammar
-		Is Array -> Boolean ~= False;	// The assignment is an array of values
+		Is Array -> Boolean ~= False;	// An assignment will be an array of values
 	}
 	Boolean{Is Sterile = True;}		// and no other alternatives can be added
 
