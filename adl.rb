@@ -216,7 +216,7 @@ class ADL
 
   # Report a parse failure
   def error message
-    puts message
+    puts "At line #{@scanner.line_number}, #{message}"
     exit 1
   end
 
@@ -365,12 +365,19 @@ class ADL
       @line_number = 1
     end
 
+    def line_number
+      @input[0, @offset].count("\n")+1
+    end
+
     def next_token rule = nil
       match = (rule || parse_re).match(@input[@offset..-1])
       if !match
         @current = @value = nil
-      else
+      elsif !rule
         @current, @value = match.names.map{|n| match[n] ? [n, match[n]] : nil}.compact[0]
+      else
+        @current = match ? rule : nil
+        @value = match ? match.to_s : ''
       end
     end
 
@@ -567,7 +574,12 @@ class ADL
         syntax = variable.syntax_transitive
         error("#{variable.inspect} has no Syntax so cannot be assigned") unless syntax
         # Get the Syntax for the variable and REVISIT: accept a value of that type
-        val = (integer or string)
+        val = next_token syntax
+        error("Expected value matching syntax for #{variable.name}") unless val
+        consume
+        opt_white
+        val
+        # val = (integer or string)
       end
     end
 
@@ -643,7 +655,7 @@ class ADL
 
     # Report a parse failure
     def error message
-      @adl.error "Parse failed at #{peek.inspect}: #{message}"
+      @adl.error "Parse failed, line #{line_number}, at #{context.inspect}: #{message}"
     end
 
     # Consume the current token, returning the value
@@ -663,7 +675,7 @@ class ADL
     end
 
     def require token
-      error "Expected #{token}" unless t = expect(token)
+      error "Expected #{token} at #{context.inspect}" unless t = expect(token)
       t
     end
 
