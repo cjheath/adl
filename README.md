@@ -53,19 +53,19 @@ Foo: Object;
 <p>
 Every Object has a value assigned to its Parent variable,
 except the TOP object, which serves as the outermost
-parent. The ADL builtin objects belong the ADL object
-which is in this TOP object.
+parent. The ADL builtin objects belong the TOP object.
 Variables (including Parent) may not be re-assigned.
-TOP, Object and ADL are built-in. We'll indicate
-others as we procede.
+TOP and Object are built-in. We'll indicate others as
+we procede.
 </p>
 </td>
 <td valign="top">
 <p>
-You normally won't see TOP or ADL. This is because
-each file (including the built-in definitions)
-normally creates its own namespace, and subsequent
-files descend inside the previous file's namespace.
+You normally won't see TOP. This is because each
+file (including the built-in definitions) normally
+creates its own namespace, and subsequent files
+descend inside the last object from the previous
+file.
 </p>
 </td>
 </tr>
