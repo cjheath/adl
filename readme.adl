@@ -1,0 +1,50 @@
+ReadMe: {
+	Person:;
+	Employee: Person;
+	Person.Family Name: String;
+	Person: {
+		Given Name: String[];
+	}
+
+	Employee {
+		Employee Number: Integer;
+	}
+
+	Person {
+		Given Name: String {
+			Max Length = 48;
+		}[];
+	}
+	Person {
+		Family Name: String;
+	}
+	Person.Family Name.Max Length = 24;
+
+	: Person {
+		Given Name = ['John'];
+		Family Name = 'Smith';
+	}
+
+	Event: {
+		Date
+	}
+	: Event { Date = 2001-03-19 }
+
+	: Employee {
+		Given Name = ['John'];
+		Family Name = 'Smith';
+		Employee Number = 42317;
+	}
+
+	Forty Two : Integer = 42;
+
+	Product: {
+		Discount: Decimal;
+	}
+	Baking Product : Product {
+		Discount ~= 8.5
+	}
+	Bread Slicer: Baking Product {
+		Discount = 10;
+	}
+}

@@ -95,7 +95,7 @@ class ADL
     def pathname_relative_to object
       pathname
 =begin
-      # REVISIT: Implement this properly
+      # REVISIT: Implement emitting relative names properly
       s = ancestry
       o = object.ancestry
       c = s & o
@@ -169,12 +169,12 @@ class ADL
               if ADLObject === v
                 v.pathname_relative_to(@parent)
               else
-                v.inspect.gsub(/"/,"'")
+                v
               end
           end* ",\n" +
           "\n#{level}]"
         else
-          @value.inspect.gsub(/"/,"'")
+          @value
         end
       }}
     end
@@ -266,10 +266,12 @@ class ADL
     # Resolve the object_name prefix to find the parent and local name:
     if object_name
       parent = resolve_name(object_name[0..-2], 0)
+      @stack.replace(parent.ancestry)
     else
       parent = @stack.last
     end
     local_name = object_name ? object_name[-1] : nil
+
     # Resolve the supertype_name to find the zuper:
     zuper = supertype_name ? resolve_name(supertype_name, 0) : @object
     o = parent.member?(local_name) ||
@@ -281,12 +283,6 @@ class ADL
 
   def end_object
     @stack.pop
-  end
-
-  def start_block
-  end
-
-  def end_block
   end
 
   class Scanner
@@ -402,6 +398,7 @@ class ADL
 
     def definition(object_name)
       # print "In #{@adl.stack.last.inspect} defining #{object_name} and looking at "; p peek; debugger
+      save = @adl.stack.dup
       unless defining = reference(object_name) || alias_from(object_name)
         inheriting = peek('inherits')
         supertype_name = type
@@ -414,21 +411,16 @@ class ADL
           @adl.end_object
           assignment(defining)
         elsif peek('open')
-          defining = @adl.stack.last
-          if reopen = @adl.resolve_name(object_name, 0)
-            if (@adl.stack & reopen.ancestry) != @adl.stack
-              # puts "REVISIT: Contextual extension"
-            end
-
-            # Save the stack to restore later, and replace it with reopen.ancestry
-            saved = @adl.stack.dup
-            @adl.stack.replace reopen.ancestry
-            has_block = block object_name
-            @adl.stack.replace saved          # restore the stack
-            defining = reopen
+          defining = @adl.resolve_name(object_name, 0)
+          if (@adl.stack & defining.ancestry) != @adl.stack
+            # puts "REVISIT: Contextual extension"
           end
+          @adl.stack.replace defining.ancestry
+          has_block = block object_name
         elsif object_name and peek('equals') || peek('approx')
-          variable = @adl.resolve_name(object_name, 0)
+          reopen = @adl.resolve_name(object_name[0..-2], 0)
+          @adl.stack.replace reopen.ancestry
+          variable = @adl.resolve_name([object_name[-1]], 0)
           is_assignment = defining = assignment(variable)
         elsif object_name
           # This may be the trailing namespace to use for a following file.
@@ -438,6 +430,7 @@ class ADL
           peek 'close' or require 'semi'
         end
       end
+      @adl.stack.replace(save)
       opt_white
       defining || true
     end
@@ -454,12 +447,10 @@ class ADL
     def block object_name
       if has_block = expect('open')
         opt_white
-        @adl.start_block
         while object
         end
         require 'close'
         opt_white
-        @adl.end_block
         true
       end
     end
@@ -561,7 +552,7 @@ class ADL
       # puts "Looking for value of #{variable.name}#{refine_from ? " refining #{refine_from.name}" : ''}"
       if refine_from
         if supertype_name = type
-          # Literal object
+          # Literal object. What should the parent of such objects be?
           defining = @adl.start_object(nil, supertype_name)
           has_block = block nil
           @adl.end_object
@@ -579,13 +570,12 @@ class ADL
       else
         syntax = variable.syntax_transitive
         error("#{variable.inspect} has no Syntax so cannot be assigned") unless syntax
-        # Get the Syntax for the variable and REVISIT: accept a value of that type
+        # Get the Syntax for the variable and accept a value of that type
         val = next_token syntax
         error("Expected value matching syntax for #{variable.name}") unless val
         consume
         opt_white
         val
-        # val = (integer or string)
       end
     end
 
