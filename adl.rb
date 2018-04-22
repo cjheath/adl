@@ -560,12 +560,20 @@ class ADL
     def atomic_value variable, refine_from
       # puts "Looking for value of #{variable.name}#{refine_from ? " refining #{refine_from.name}" : ''}"
       if refine_from
-        p = path_name
-        error("Assignment to #{variable.name} must name an ADL object") unless p
-        val = @adl.resolve_name(p)
-        # If the variable is a reference and refine_from is set, the object must be a subtype
+        if supertype_name = type
+          # Literal object
+          defining = @adl.start_object(nil, supertype_name)
+          has_block = block nil
+          @adl.end_object
+          val = defining
+        else
+          p = path_name
+          error("Assignment to #{variable.name} must name an ADL object") unless p
+          val = @adl.resolve_name(p)
+          # If the variable is a reference and refine_from is set, the object must be a subtype
+        end
         if refine_from && !val.supertypes.include?(refine_from)
-          error("Assignment of #{val.inspect} to #{parent.name}.#{variable.name} must refine the existing final assignment of #{refine_from.inspect}") unless p
+          error("Assignment of #{val.inspect} to #{variable.name} must refine the existing final assignment of #{refine_from.name}") unless p
         end
         val
       else
