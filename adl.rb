@@ -61,7 +61,7 @@ class ADL
         raise "#{inspect} cannot have two assignments to #{variable.inspect}"
       end
       if variable.name == 'Syntax' && variable.parent.name == 'Object'  # Check namespace of Syntax properly here
-        @syntax = Regexp.new(value[1..-2])
+        @syntax = Regexp.new('\A'+value[1..-2])
       else
         Assignment.new(self, variable, value, is_final)
       end
