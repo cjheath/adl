@@ -216,7 +216,7 @@ class ADL
 
   # Report a parse failure
   def error message
-    puts "At line #{@scanner.line_number}, #{message}"
+    puts "#{message} at #{@scanner.location}"
     exit 1
   end
 
@@ -241,21 +241,21 @@ class ADL
     unless no_ascend
       until path_name.empty? or path_name[0] == (m = o).name or m = o.member_transitive?(path_name[0])
         unless o.parent
-          error("Failed to find #{path_name[0].inspect} from #{@stack.last.name} looking at #{@scanner.context.inspect}")
+          error("Failed to find #{path_name[0].inspect} from #{@stack.last.name}")
         end
         o = o.parent    # Ascend
       end
       o = m
       path_name.shift
     end
-    error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname} looking at #{@scanner.context.inspect}") unless o
+    error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
     return o if path_name.empty?
 
     # Now descend from the current position down the named children
     # REVISIT: If we descend a supertype's child, this becomes contextual!
     path_name.each do |n|
       m = o.member?(n)
-      error("Failed to find #{n.inspect} in #{o.pathname} looking at #{@scanner.context.inspect}") unless m
+      error("Failed to find #{n.inspect} in #{o.pathname}") unless m
       o = m   # Descend
     end
     o
@@ -362,11 +362,13 @@ class ADL
       @offset = 0
       @current = nil    # The kind of token at @offset (if it has been scanned)
       @value = nil      # The text associated with the current token
-      @line_number = 1
     end
 
-    def line_number
-      @input[0, @offset].count("\n")+1
+    def location
+      line_number = @input[0, @offset].count("\n")+1
+      column_number = @offset-(@input[0, @offset].rindex("\n") || 1)-1
+      line_text = @input[(@offset-column_number)..-1].sub(/\n.*/m,'')
+      "Line #{line_number} column #{column_number}:\n#{line_text}\n"
     end
 
     def next_token rule = nil
@@ -389,10 +391,6 @@ class ADL
       end
       error "Parse terminated at #{peek.inspect}" if peek
       last
-    end
-
-    def context
-      @input[@offset, 60]
     end
 
     def object
@@ -655,7 +653,7 @@ class ADL
 
     # Report a parse failure
     def error message
-      @adl.error "Parse failed, line #{line_number}, at #{context.inspect}: #{message}"
+      @adl.error message
     end
 
     # Consume the current token, returning the value
@@ -675,7 +673,7 @@ class ADL
     end
 
     def require token
-      error "Expected #{token} at #{context.inspect}" unless t = expect(token)
+      error "Expected #{token}" unless t = expect(token)
       t
     end
 
