@@ -20,7 +20,7 @@ Oil Supply : Fact Based Model {
 		Maps To = Text;
 		: Value Constraint {
 			Value Type = Season;
-			Values = [ 'Spring', 'Summer', 'Autumn', 'Winter' ];
+			// Values = [ 'Spring', 'Summer', 'Autumn', 'Winter' ];
 		}
 	}
 	Cost: Value Type { Maps To = Money; }
@@ -31,7 +31,7 @@ Oil Supply : Fact Based Model {
 			Value Type = Transport Mode;
 			// We need a way to ensure that these values conform to the Maps To.Syntax
 			// Or allow the canonical value syntaxes to be used if there's no Syntax defined?
-			Values = [ 'Rail', 'Road', 'Sea' ];
+			// Values = [ 'Rail', 'Road', 'Sea' ];
 		}
 	}
 

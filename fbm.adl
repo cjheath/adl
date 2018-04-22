@@ -9,12 +9,12 @@ Fact Based Model: {
     Data Type: Object Type;
 
     Domain Object Type: Object Type {
-	Is Independent: Boolean;
+	Is Independent -> Boolean;
     }
 
     Value Type: Domain Object Type {
 	Maps To -> Data Type;
-	Requires Restriction: Boolean;
+	Requires Restriction -> Boolean;
 	Parameter: {
 	    -> Data Type;
 	    Value -> Canonical Value;
@@ -28,7 +28,7 @@ Fact Based Model: {
     }
 
     Entity Type: Domain Object Type {
-	Is Personal: Boolean;
+	Is Personal -> Boolean;
     }
 
     Derivation Rule: {
@@ -65,7 +65,7 @@ Fact Based Model: {
     }
 
     Constraint: {
-	Alethic: Boolean;
+	Alethic -> Boolean;
     }
     Unique Constraint: Constraint {
 	Roles => Fact Type.Role;
@@ -103,10 +103,10 @@ Fact Based Model: {
     Subset Constraint: Set Comparison Constraint {
     }
     Join Subset Constraint: Subset Constraint {
-	Inadequately Defined;
+	Inadequately Defined:;
     }
     Exclusion Constraint: Set Comparison Constraint {
-	Is Mandatory: Boolean;
+	Is Mandatory -> Boolean;
     }
     Equality Constraint: Set Comparison Constraint {
     }
@@ -126,15 +126,15 @@ Fact Based Model: {
     Ring Constraint: Constraint {
 	First -> Fact Type.Role;
 	Second -> Fact Type.Role;
-	Is Irreflexive: Boolean;
-	Is Antisymmetric: Boolean;
-	Is Asymmetric: Boolean;
-	Is Intransitive: Boolean;
-	Is Strongly Intransitive: Boolean;
-	Is Acyclic: Boolean;
-	Is Reflexive: Boolean;
-	Is Transitive: Boolean;
-	Is Symmetric: Boolean;
+	Is Irreflexive -> Boolean;
+	Is Antisymmetric -> Boolean;
+	Is Asymmetric -> Boolean;
+	Is Intransitive -> Boolean;
+	Is Strongly Intransitive -> Boolean;
+	Is Acyclic -> Boolean;
+	Is Reflexive -> Boolean;
+	Is Transitive -> Boolean;
+	Is Symmetric -> Boolean;
     }
     Object Cardinality Constraint: Constraint {
 	-> Object Type;
