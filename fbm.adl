@@ -4,9 +4,10 @@ Fact Based Model: {
 	Alternate Name: Object Type Name[];
     }
 
-    Canonical Value: String;
-
+    // This file does not provide a library of concrete data types.
     Data Type: Object Type;
+    Data Value:;
+    Value Range:;
 
     Domain Object Type: Object Type {
 	Is Independent -> Boolean;
@@ -17,7 +18,7 @@ Fact Based Model: {
 	Requires Restriction -> Boolean;
 	Parameter: {
 	    -> Data Type;
-	    Value -> Canonical Value;
+	    Value -> Data Value;
 	    Restriction Style: Enumeration {
 		Fixed: Restriction Style;
 		Ascending: Restriction Style;
@@ -74,18 +75,16 @@ Fact Based Model: {
     Mandatory Constraint: Constraint {
 	Roles => Fact Type.Role;
     }
-    Value Range: {
-	Minimum: Canonical Value;
-	Maximum: Canonical Value;
-    }
+
     Value Constraint: Constraint {
 	-> Value Type;
-	Values => Canonical Value;
+	// The Values should match the Data Type that the Value Type.Maps To
+	Values => Data Value;
 	Value Ranges => Value Range;
     }
     Role Value Constraint: Constraint {
 	-> Fact Type.Role;
-	Values => Canonical Value;
+	Values => Data Value;
 	Value Ranges => Value Range;
     }
 
@@ -153,7 +152,7 @@ Fact Based Model: {
 	}
 	Instance: {
 	    -> Object Type;
-	    Value -> Canonical Value;
+	    Value -> Data Value;
 	    Objectifies -> Fact;
 	}
 	Fact Role Instance: {

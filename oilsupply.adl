@@ -8,19 +8,14 @@ Oil Supply : Fact Based Model {
 		Maps To = Integer;
 		: Value Constraint {
 			Value Type = Month Nr;
-			range1: Value Range {
-				Minimum = 1;
-				Maximum = 12;
-			}
-			// Need object literals to avoid using a named range here:
-			// Value Ranges = [ range1 ];
+			Value Ranges = [:Integer Range { Minimum = 1; Maximum = 12; }];
 		}
 	}
 	Season: Value Type {
 		Maps To = Text;
 		: Value Constraint {
 			Value Type = Season;
-			// Values = [ 'Spring', 'Summer', 'Autumn', 'Winter' ];
+			Values = [:String Value = 'Spring', :String Value = 'Summer', :String Value = 'Autumn', :String Value = 'Winter'];
 		}
 	}
 	Cost: Value Type { Maps To = Money; }
@@ -29,9 +24,7 @@ Oil Supply : Fact Based Model {
 		Maps To = Text;
 		: Value Constraint {
 			Value Type = Transport Mode;
-			// We need a way to ensure that these values conform to the Maps To.Syntax
-			// Or allow the canonical value syntaxes to be used if there's no Syntax defined?
-			// Values = [ 'Rail', 'Road', 'Sea' ];
+			Values = [:String Value = 'Rail', :String Value = 'Road', :String Value = 'Sea'];
 		}
 	}
 
