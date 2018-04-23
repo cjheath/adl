@@ -6,7 +6,7 @@ object          = path_name? definition
 
 definition      = (reference | alias_from | type? block? post_definition ';' | type? block | ';' )
 
-post_definition = array_indicator assignment? | assignment
+alias_from      = '!' path_name
 
 type            =  ':' path_name?
 
@@ -25,26 +25,27 @@ reference       = ('->' | '=>') path_name (';' | block? tentative_assignment ';'
 
 block           = '{' object* '}'
 
+post_definition = array_indicator assignment? | assignment
+
+array_indicator = '[]'
+
 assignment      = final_assignment | tentative_assignment
 
 final_assignment = '=' value
 
 tentative_assignment = '~=' value
 
-array_indicator = '[]'
-
-alias_from      = '!' path_name
-
-// The value syntax depends on the Variable in the assignment.
 value           = atomic_value | array
 
-// If the Variable is a reference, the value is a path_name.
+array           = '[' (atomic_value (',' atomic_value)? ']'
+
 // If the Variable is a Regular Expression the value is a regexp.
+// If the Variable is a Reference, the value is a path_name or object literal.
 // Otherwise, the value is defined by the Syntax of the variable (regexp_match).
 // See builtin.adl for the syntax of values of builtin variables.
-atomic_value    = regexp | path_name | regexp_match
+atomic_value    = regexp | path_name | object_literal | regexp_match
 
-array           = '[' (atomic_value (',' atomic_value)? ']'
+object_literal	= type block? assignment?
 
 // Above here, white-space is free. Below here, no implicit white-space is allowed.
 
