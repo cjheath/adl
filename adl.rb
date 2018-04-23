@@ -131,12 +131,8 @@ class ADL
     def inline
       self_assignment = members.detect{|m| m.variable == self}
       others = members-[self_assignment]
-      "#{zuper_name}#{
-        if others.empty?
-          ''
-        else
-          '{' + others.map{|m| m.variable.name + m.inline}*'; ' + '}'
-        end
+      ":#{@zuper}#{
+        others.empty? ? '' : '{' + others.map{|m| m.variable.name + m.inline}*'; ' + '}'
       }#{self_assignment ? self_assignment.inline : ''}"
     end
 
