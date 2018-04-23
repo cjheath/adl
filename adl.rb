@@ -75,6 +75,10 @@ class ADL
       s = supertypes[-3] and s.name == 'Syntax'
     end
 
+    def is_object_literal
+      parent == nil && name == nil
+    end
+
     def member? name
       name && members.detect{|m| m.name == name}
     end
@@ -123,6 +127,19 @@ class ADL
       end
     end
 
+    # This is used for object literals
+    def inline
+      self_assignment = members.detect{|m| m.variable == self}
+      others = members-[self_assignment]
+      "#{zuper_name}#{
+        if others.empty?
+          ''
+        else
+          '{' + others.map{|m| m.variable.name + m.inline}*'; ' + '}'
+        end
+      }#{self_assignment ? self_assignment.inline : ''}"
+    end
+
     def emit level = nil
       unless level
         members.each do |m|
@@ -154,20 +171,28 @@ class ADL
     end
 
     def inspect
-      @parent.pathname+'.'+@variable.name+(@is_final ? '=' : '~=') + @value.inspect
+      "#{@parent ? @parent.pathname : '-'}.#{@variable.name}#{@is_final ? '=' : '~='} #{@value.inspect}"
     end
 
     def inline level = ''
       %Q{#{@is_final ? ' =' : ' ~='} #{
         if ADLObject === @value
-          # REVISIT: Problem is, it's not always relative to our parent (c.f. self_assignment?):
-          @value.pathname_relative_to(@parent)
+          if @value.is_object_literal
+            @value.inline
+          else
+            # REVISIT: Problem is, it's not always relative to our parent (c.f. self_assignment?):
+            @value.pathname_relative_to(@parent)
+          end
         elsif Array === @value
           "[\n" +
           @value.map do |v|
             level+"\t"+
               if ADLObject === v
-                v.pathname_relative_to(@parent)
+                if v.is_object_literal
+                  v.inline
+                else
+                  v.pathname_relative_to(@parent)
+                end
               else
                 v
               end
@@ -262,7 +287,7 @@ class ADL
   end
 
   # Called when the name and type have been parsed
-  def start_object(object_name, supertype_name)
+  def start_object(object_name, supertype_name, orphan = false)
     # Resolve the object_name prefix to find the parent and local name:
     if object_name
       parent = resolve_name(object_name[0..-2], 0)
@@ -275,7 +300,7 @@ class ADL
     # Resolve the supertype_name to find the zuper:
     zuper = supertype_name ? resolve_name(supertype_name, 0) : @object
     o = parent.member?(local_name) ||
-      ADLObject.new(parent, local_name, zuper)
+      ADLObject.new(orphan ? nil : parent, local_name, zuper)
 
     @stack.push o
     o
@@ -553,8 +578,9 @@ class ADL
       if refine_from
         if supertype_name = type
           # Literal object. What should the parent of such objects be?
-          defining = @adl.start_object(nil, supertype_name)
+          defining = @adl.start_object(nil, supertype_name, true)
           has_block = block nil
+          assignment(defining)
           @adl.end_object
           val = defining
         else
