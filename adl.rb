@@ -434,7 +434,7 @@ class ADL
           has_block = block object_name
           defining.is_array = is_array = !!array_indicator
           @adl.end_object
-          assignment(defining)
+          is_assignment = assignment(defining)
         elsif peek('open')
           defining = @adl.resolve_name(object_name, 0)
           if (@adl.stack & defining.ancestry) != @adl.stack
@@ -547,6 +547,7 @@ class ADL
           if variable.is_reference
             existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
             refine_from = (final && existing) || parent.supertypes[-1] # Use Object as a default
+            refine_from = Array(refine_from)[0] # In case of an array Reference
           else
             # If this variable is a parameter of the same type as its parent, and this parent is also a subtype,
             # allow any value that the subtype would allow. This special case supports e.g. Number.Minimum
@@ -566,10 +567,12 @@ class ADL
     end
 
     def value variable, refine_from
-      if variable.is_array
+      if variable.is_array and peek('lbrack')
         val = array(variable, refine_from)
       else
-        atomic_value(variable, refine_from)
+        a = atomic_value(variable, refine_from)
+        a = [a] if variable.is_array
+        a
       end
     end
 
@@ -590,7 +593,7 @@ class ADL
           # If the variable is a reference and refine_from is set, the object must be a subtype
         end
         if refine_from && !val.supertypes.include?(refine_from)
-          error("Assignment of #{val.inspect} to #{variable.name} must refine the existing final assignment of #{refine_from.name}") unless p
+          error("Assignment of #{val.inspect} to #{variable.name} must refine the existing final assignment of #{refine_from.name}")
         end
         val
       else

@@ -272,7 +272,8 @@ built-in.
 </p>
 <p>
 Reference is also a special Variable. Assignment to a
-Reference requires an ADL path name for an object. See below.
+Reference requires an ADL path name for an object, or
+an object literal. See below.
 </p>
 </td>
 <td valign="top">
@@ -452,10 +453,11 @@ Names = [Fred Fly, Joe Bloggs];	// Using custom syntax
 <th align="right" valign="top">Reference Variables</th>
 <td valign="top">
 <p>
-The built-in variable Reference allows assigning
-a reference to another Object. The Syntax for the
-value of a Reference is the syntax defined for
-object names.
+The built-in variable Reference allows assigning a
+reference to another Object. The Syntax supports a
+path name for referring to a named object, or an
+object literal (an anonymous object of the right
+type).
 </p>
 <p>
 There is a special rule for assigning to a Reference
@@ -476,11 +478,19 @@ Every value in the Project array must be a Project.
 <pre>
 Company:;
 Person:;
-Project:;
+Project: { Codename: String }
+Acme Inc: Company;
+John Smith: Person;
 Employment: {
     Company: Reference = Company;
     Person: Reference = Person;
     Project: Reference[] = Project;
+}
+: Employment {
+    Company = Acme Inc;
+    Person = John Smith;
+    Project =	// Literal object:
+    	[:Project{Codename = 'Sekrit'}]
 }
 </pre>
 </td>

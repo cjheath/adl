@@ -20,9 +20,24 @@ ReadMe: {
 	}
 	Person.Family Name.Max Length = 24;
 
-	: Person {
+	js : Person {
 		Given Name = ['John'];
 		Family Name = 'Smith';
+	}
+
+	Company:;
+	Project: { Project Name: String }
+	Acme Inc: Company;
+	Employment: {
+	    Company -> Company;
+	    Person -> Person;
+	    Task: Reference[] = Project;
+	    // Task => Project;
+	}
+	: Employment {
+	    Company = Acme Inc;
+	    Person = js;
+	    Task = :Project{Project Name = 'Sekrit'}
 	}
 
 	Event: {
