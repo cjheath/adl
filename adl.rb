@@ -501,7 +501,7 @@ class ADL
         end
 
         # Create the reference
-        defining = @adl.start_object(object_name||reference_to, ['Reference'])
+        defining = @adl.start_object(object_name||[reference_to.last], ['Reference'])
         defining.is_array = operator == '=>'
 
         # Add a final assignment (to itself) for its type:
