@@ -220,8 +220,8 @@ class ADL
     @alias_for = ADLObject.new(@alias, 'For', @reference, nil)
   end
 
-  def parse io, top = nil
-    @scanner = Scanner.new(self, io)
+  def parse io, filename, top = nil
+    @scanner = Scanner.new(self, io, filename)
     @stack = (top || @top).ancestry+[]
     @scanner.parse
   end
@@ -373,9 +373,10 @@ class ADL
       }x
     }
 
-    def initialize adl, io
+    def initialize adl, io, filename
       @adl = adl
       @input = io.to_s
+      @filename = filename
       @offset = 0
       @current = nil    # The kind of token at @offset (if it has been scanned)
       @value = nil      # The text associated with the current token
@@ -385,7 +386,7 @@ class ADL
       line_number = @input[0, @offset].count("\n")+1
       column_number = @offset-(@input[0, @offset].rindex("\n") || 1)-1
       line_text = @input[(@offset-column_number)..-1].sub(/\n.*/m,'')
-      "Line #{line_number} column #{column_number}:\n#{line_text}\n"
+      "line #{line_number} column #{column_number} of #{@filename}:\n#{line_text}\n"
     end
 
     def next_token rule = nil
@@ -713,8 +714,8 @@ if emit_all = (ARGV[0] == '-a')
   ARGV.shift
 end
 top = nil
-ARGV.each do |file|
-  top = adl.parse(File.read(file), top)
+ARGV.each do |filename|
+  top = adl.parse(File.read(filename), filename, top)
 end
 if emit_all || !top
   adl.emit
