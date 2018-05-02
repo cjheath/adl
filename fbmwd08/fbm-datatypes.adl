@@ -1,0 +1,29 @@
+// An initial data types library for demonstration purposes.
+Data Types: {
+	Integer: Data Type;
+	Text: Data Type;
+	Money: Data Type;
+
+	Integer Value: Data Value {
+		// REVISIT: ADL should be able to copy the Syntax from the built-in Integer object.
+		Syntax = /0|[-+]?[1-9][0-9]*/;
+		Data Type = Integer;
+	}
+	String Value: Data Value {
+		Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
+		Data Type = Text;
+	}
+	Money Value: Data Value {
+		Syntax = /[-+]?[0-9]*.[0-9]*/;
+		Data Type = Money;
+	}
+
+	Integer Range: Data Value Range {
+		Minimum: Integer Value;
+		Maximum: Integer Value;
+	}
+	String Range: Data Value Range {
+		Minimum: String Value;
+		Maximum: String Value;
+	}
+}

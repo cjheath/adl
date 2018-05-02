@@ -1,0 +1,287 @@
+//
+// This model permits representation of any model that is legal according to the
+// Fact Based Modeling Working Group (FBMWG) Model Exchange Standard Working Draft 8,
+// with very few exceptions or modifications (noted in comments below).
+//
+// Note that this Aspect Definition Language is *permissive*.
+// It aims to structure but not to validate or enforce semantic rules.
+// These rules are defined in the Standard itself, and should be validated by external methods.
+//
+Fact Based Model: {
+	// A Fact Based Model is made up of Object Types, Fact Types, Constraints and Populations
+	// These forward declarations merely kick things off:
+	Object Type:;
+	Fact Type:;
+	Constraint:;
+	Population:;
+
+	// Some basic data types and enumerations:
+	Position: Integer;
+	Formal Language: Enumeration;	// Enumeration of formal derivation languages
+	Language Culture: {
+		Language: String;	// ISO639-2 (3 character) language code
+		Culture: String;	// ISO3166 (2 character) country code
+	}
+
+	Modality: Enumeration;
+	Alethic Modality: Modality;
+	Deontic Modality: Modality;
+
+	World Assumption: Enumeration;
+	Open World Assumption: World Assumption;
+	Open World With Negation Assumption: World Assumption;
+	Close World Assumption: World Assumption;
+
+	// Comparator is an extensible enumeration. Here are the standard values.
+	Comparator: Enumeration;
+	Equals Comparator: Comparator;
+	NotEquals Comparator: Comparator;
+	LessThan Comparator: Comparator;
+	LessThanOrEqual Comparator: Comparator;
+	GreaterThanOrEqual Comparator: Comparator;
+	GreaterThan Comparator: Comparator;
+
+	// Instantiation Method is an extensible enumeration. Here are the standard values.
+	Instantiation Method: Enumeration;
+	Asserted: Instantiation Method;
+	Derived: Instantiation Method;
+	Semiderived: Instantiation Method;
+
+	Rule: {
+		// NOTE: WD08 allows a rule to be in more than one Formal Language. I think this is wrong
+		Is Expressed In => Formal Language;
+	}
+
+	Derivation Evaluation: Enumeration;		// open enumeration of Derivation Evaluation approaches:
+
+	// NOTE: The FBMWG standard allows a Derivation Rule to derive more than one subtype or fact type. This model restricts that.
+	Derivation Text: String;
+	Derivation Rule: Rule {
+		Immediate: Derivation Evaluation;	// Standard Derivation Evaluation
+		OnDemandCached: Derivation Evaluation;
+		OnDemandUncached: Derivation Evaluation;
+		-> Derivation Evaluation;
+		Description: Derivation Text;
+	}
+
+	Identity Fact Type: Fact Type;
+	Object Type: {
+		// In this representation, the Subtyping object should be a child of the Subtype
+		Subtyping: {
+			Supertype -> Object Type;
+			-> Identity Fact Type;
+			Provides Identification Path -> Boolean;
+		}
+		Supertypes => Subtyping;
+		-> Instantiation Method;
+		-> Derivation Rule;
+	}
+
+	Data Type: Object Type;
+
+	// NOTE: Canonical Data Value and Data Value have been flattened into one
+	Data Value: {
+		-> Data Type;
+		-> Language Culture;
+		Lexical Value: String;
+	}
+	Data Value Range: {
+		Minimum -> Data Value;
+		Minimum Is Included -> Boolean;
+		Maximum -> Data Value;
+		Maximum Is Included -> Boolean;
+	}
+
+	Data Type {
+		Alternate Names: Name[];
+
+		// NOTE: I would rather call it Data Type.Parameter, not Facet
+		// These are the Facet Restriction Styles
+		Facet Restriction Style: Enumeration;
+		FixedValue: Facet Restriction Style;	// Value may not be overridden
+		AscendingRestriction: Facet Restriction Style;	// Ascending means larger is more restrictive
+		DescendingRestriction: Facet Restriction Style;	// Descending means smaller is more restrictive
+		Facet: {
+			-> Data Type;	// A Facet Restriction value must be of this Data Type
+			-> Facet Restriction Style;
+			Standard Facet Name: String;		// What is this for?
+			Default Value: Data Value;
+			Requires Restriction -> Boolean;
+		}
+	}
+	Domain Object Type: Object Type {
+		Is Independent -> Boolean;
+		Alternate Names: Name[];
+	}
+	Uniqueness Constraint: Constraint;
+	Entity Type: Domain Object Type {
+		Preferred Identifier -> Uniqueness Constraint;
+		Is Personal -> Boolean;
+	}
+	Value Type: Domain Object Type {
+		Maps To -> Data Type;
+		// NOTE: WD08 allows a facet restriction on Object Type. That doesn't make sense.
+		Facet Restriction: {
+			-> Data Type.Facet;
+			Is Fixed -> Boolean;
+			Data Value;
+		}
+	}
+
+	Fact Type: {
+		Objectified As -> Entity Type;
+
+		// Name of the Role object can be a number
+		Role: {
+			Host -> Object Type;
+			Link -> Fact Type;
+		}
+		Roles => Role;
+
+		Reading Text: String;
+		// NOTE: I removed Predicate here. It adds no value
+		Reading: {
+			Preference: Position;
+			Front Text: Reading Text;
+			// NOTE: WD08 calls this ReadingRoleText. "Text" is redundant here.
+			Reading Role: {
+				-> Role;
+				Following: Reading Text;
+				Postbound: Reading Text;
+				Prebound: Reading Text;
+			}
+		}
+		-> Derivation Rule;
+		-> Instantiation Method;	// How is the derived population managed?
+		-> World Assumption;		// For unary Fact Types only.
+	}
+	Identity Fact Type: Fact Type {
+		Subtype -> Object Type;
+		Supertype -> Object Type;
+	}
+	Comparison Operation: Fact Type {
+		-> Comparator;
+	}
+	// NOTE: For better derivations, we also need explicit Link Fact Types here, because we need to Join over them.
+
+	Join: {
+		Join Type: Enumeration;
+		Inner: Join Type;
+		Outer: Join Type;
+		Type -> Join Type;
+		Is First -> Boolean;
+		To -> Fact Type.Role;
+		From -> Fact Type.Role;
+	}
+	Join Path: {
+		Is Expressed In => Formal Language;
+		=> Join;
+	}
+
+	Constraint: {
+		-> Modality;
+		Is Asserted On A Derived Fact Type -> Boolean;
+	}
+	Cardinality Range: {
+		Minimum: Integer;
+		Maximum: Integer;
+	}
+	Cardinality Constraint: Constraint {
+		Cardinality => Cardinality Range;
+	}
+	Object Type Cardinality Constraint: Cardinality Constraint {
+		-> Object Type;
+	}
+	Role Cardinality Constraint: Cardinality Constraint {
+		-> Fact Type.Role;
+	}
+	Frequency Range: {
+		Maximum: Integer;
+		Minimum: Integer;
+	}
+	Frequency Constraint: Constraint {
+		// NOTE: WD08 allows a Frequency Constraint to apply to a list of Roles. It's not obvious that this is useful.
+		=> Fact Type.Role;
+		Frequency => Frequency Range;
+		Bound: Integer;
+		-> Join Path;
+	}
+	General Constraint: Constraint {
+		-> Object Type;		// General Constraint Applies To Object Type
+		-> ..Fact Type.Role;	// General Constraint Applies To Role
+		-> Fact Type;		// General Constraint Applies To Fact Type
+		Description: String;	// either this or Formal Language
+		=> Formal Language;	// General Constraint Is Expressed In Formal Language
+	}
+	Mandatory Constraint: Constraint {
+		=> Fact Type.Role;		// Mandatory Constrained Role
+		// -> Exclusion Constraint;	// Do this from the other end
+	}
+	Ring Constraint: Constraint {
+		First -> Fact Type.Role;
+		Second -> Fact Type.Role;
+		Is Acyclic -> Boolean;
+		Is Antisymmetric -> Boolean;
+		Is Asymmetric -> Boolean;
+		Is Intransitive -> Boolean;
+		Is Irreflexive -> Boolean;
+		Is Reflexive -> Boolean;
+		Is Strongly Intransitive -> Boolean;
+		Is Symmetric -> Boolean;
+		Is Transitive -> Boolean;
+		-> Join Path;
+	}
+	Set Comparison Constraint: Constraint {
+		Set Comparison Argument: {
+			=> Fact Type.Role;	// Comparison Constrained Role
+		}
+		-> Join Path;
+	}
+	Equality Constraint: Set Comparison Constraint {
+		=> Set Comparison Argument;
+	}
+	Exclusion Constraint: Set Comparison Constraint {
+		=> Set Comparison Argument;
+		-> Mandatory Constraint;
+	}
+	Subset Constraint: Set Comparison Constraint {
+		Subset -> Set Comparison Argument;
+		Superset -> Set Comparison Argument;
+	}
+	Uniqueness Constraint: Constraint {
+		=> Fact Type.Role;
+		-> Join Path;
+	}
+	Value Comparison Constraint: Constraint {
+		First -> Fact Type.Role;
+		Second -> Fact Type.Role;
+		-> Comparator;
+		-> Join Path;
+	}
+	Value Constraint: Constraint {
+		=> Data Value;
+		=> Data Value Range;
+	}
+	Value Type Constraint: Value Constraint {
+		-> Value Type;
+	}
+	Role Value Constraint: Value Constraint {
+		-> Fact Type.Role;
+	}
+
+	Population: {
+		Fact: {
+			-> Fact Type;
+		}
+		Domain Object: {
+			-> Object Type;
+			-> Data Value;		// Only if the Object Type is a Value Type
+			Objectifies -> Fact;	// If set, this is a Typed Object
+		}
+		Fact Role Instance: {
+			-> Fact;
+			-> Fact Type.Role;
+			-> Domain Object;
+		}
+	}
+}

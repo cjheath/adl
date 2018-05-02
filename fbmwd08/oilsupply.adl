@@ -1,0 +1,117 @@
+Oil Supply : Fact Based Model {
+	// Value Types:
+	Refinery Name: Value Type { Maps To = Text; }
+	Region Name: Value Type { Maps To = Text; }
+	Product Name: Value Type { Maps To = Text; }
+	Year Nr: Value Type { Maps To = Integer; }
+	Month Nr: Value Type {
+		Maps To = Integer;
+		: Value Type Constraint {
+			Value Type = Month Nr;
+			Data Value Range = [:Integer Range { Minimum = 1; Maximum = 12; }];
+		}
+	}
+	Season: Value Type {
+		Maps To = Text;
+		: Value Type Constraint {
+			Value Type = Season;
+			Data Value = [:String Value = 'Spring', :String Value = 'Summer', :String Value = 'Autumn', :String Value = 'Winter'];
+		}
+	}
+	Cost: Value Type { Maps To = Money; }
+	Quantity: Value Type { Maps To = Integer; }
+	Transport Mode: Value Type {
+		Maps To = Text;
+		: Value Type Constraint {
+			Value Type = Transport Mode;
+			Data Value = [:String Value = 'Rail', :String Value = 'Road', :String Value = 'Sea'];
+		}
+	}
+
+	// Entity Types:
+	Supply Period: Entity Type;
+	Refinery: Entity Type;
+	Region: Entity Type;
+	Product: Entity Type;
+	Transport Route: Entity Type;
+	Production Forecast: Entity Type;
+	Regional Demand: Entity Type;
+	Month: Entity Type;
+	Year: Entity Type;
+	Transport Route: Entity Type;
+	Acceptable Substitution: Entity Type;
+
+	// Product may be substituted by alternate-Product in Season:
+	: Fact Type {
+		Objectified As = Acceptable Substitution;
+		Product: Role { Host = Oil Supply.Product }
+		Alternate Product: Role { Host = ..Product }
+		Season: Role { Host = ..Season }
+		// Product may be substituted by alternate-Product in Season:
+		: Reading {
+			1 : Reading Role { Role = Product; Following = 'may be substituted by' }
+			2 : Reading Role { Role = Alternate Product; Prebound = 'alternate'; Following = 'in' }
+			3 : Reading Role { Role = Season; }
+		}
+		// ADD: alternate-Product is an acceptable substitute for Product in Season;
+
+		: Ring Constraint {
+			First -> Product;
+			Second -> Alternate Product;
+			Is Strongly Intransitive = True;
+			Is Acyclic = True;
+		}
+		: Uniqueness Constraint {
+			Roles = [Product, Alternate Product, Season];
+			Preferred Identifier For -> Acceptable Substitution;
+		}
+	}
+
+	// Transport Route:
+	: Fact Type {
+		Objectified As = Transport Route;
+		Transport Mode: Role { Host = ..Transport Mode; }
+		Refinery: Role { Host = ..Refinery; }
+		Region: Role { Host = ..Region; }
+		// ADD: Transport Mode transportation is available from Refinery to Region
+		// ADD: Transport Mode transportation is available to Region from Refinery
+	}
+
+	// Transport Route incurs at most one Cost per kl;
+	: Fact Type {
+		Transport Route: Role { Host = ..Transport Route; }
+		Cost: Role { Host = ..Cost; }
+		: Uniqueness Constraint { Roles = [Transport Route] }
+		: Reading {
+			// ADD: Transport Reading incurs Cost per kL
+		}
+	}
+
+	// Production Forecast:
+	: Fact Type {
+		Objectified As = Production Forecast;
+		// ADD: Refinery in Supply Period will make Product in one Quantity,
+		// ADD: Refinery will make Product in Supply Period in Quantity,
+		// ADD: Refinery will make Quantity of Product in Supply Period;
+	}
+
+	// Regional Demand Forecast:
+	: Fact Type {
+		1 : Role { Host = Region }
+		2 : Role { Host = Supply Period }
+		3 : Role { Host = Product }
+		4 : Role { Host = Quantity }
+		// ADD: Region in Supply Period will need Product in one Quantity,
+		// ADD: Region will need Product in Supply Period in Quantity,
+		// ADD: Region will need Quantity of Product in Supply Period;
+	}
+
+	// ADD: Month is in one Season:
+	// ADD: Product is called Product Name
+	// ADD: Refinery is called Refinery Name
+	// ADD: Region is called Region Name
+	// ADD: Year has Year Nr
+	// ADD: Supply Period is in Year
+	// ADD: Supply Period is in Month
+
+}
