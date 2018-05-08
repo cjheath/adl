@@ -2,17 +2,17 @@ class ADL
   attr_reader :stack
 
   class ADLObject
-    attr_reader :name, :parent, :zuper
+    attr_reader :parent, :name, :zuper, :aspect, :syntax
     attr_accessor :is_array, :is_sterile, :is_complete
+
+    def members
+      @members ||= []
+    end
 
     def initialize parent, name, zuper, aspect = nil
       @parent, @name, @zuper, @aspect = parent, name, zuper, aspect || parent
 
       @parent.adopt(self) if @parent
-    end
-
-    def members
-      @members ||= []
     end
 
     def adopt child
@@ -36,15 +36,20 @@ class ADL
 
     def assigned variable
       if variable.parent == (o = supertypes[-1])  # supertypes[-1] is always Object
-        case variable.name
-        when 'Name'; return [@name, o, true]
-        when 'Parent'; return [@parent, o, true]
-        when 'Super'; return [@zuper, o, true]
-        when 'Aspect'; return [@aspect, o, true]
-        when 'Syntax'; return [@syntax, o, true]
-        when 'Is Array'; return [@is_array, o, true]
-        when 'Is Sterile'; return [@is_sterile, o, true]
-        when 'Is Complete'; return [@is_complete, o, true]
+        result =
+          case variable.name
+          when 'Name'; [@name, o, true]
+          when 'Parent'; [@parent, o, true]
+          when 'Super'; [@zuper, o, true]
+          when 'Aspect'; [@aspect, o, true]
+          when 'Syntax'; [@syntax, o, true]
+          when 'Is Array'; [@is_array, o, true]
+          when 'Is Sterile'; [@is_sterile, o, true]
+          when 'Is Complete'; [@is_complete, o, true]
+          end
+        if result
+          result[2] = false unless result[0] != nil
+          return result
         end
       end
       existing = members.detect{|m| Assignment === m && m.variable == variable}
@@ -55,30 +60,6 @@ class ADL
       assigned(variable) or @zuper && @zuper.assigned_transitive(variable)
     end
 
-    def assign variable, value, is_final
-      a, p, f = assigned(variable)
-      if a and a != value and variable != self   # Reference variable Super allows self-assignment
-        raise "#{inspect} cannot have two assignments to #{variable.inspect}"
-      end
-      if variable.name == 'Syntax' && variable.parent.name == 'Object'  # Check namespace of Syntax properly here
-        @syntax = Regexp.new('\A'+value[1..-2])
-      else
-        Assignment.new(self, variable, value, is_final)
-      end
-    end
-
-    def is_reference
-      supertypes[-2].name == 'Reference'
-    end
-
-    def is_syntax
-      s = supertypes[-3] and s.name == 'Syntax'
-    end
-
-    def is_object_literal
-      parent == nil && name == nil
-    end
-
     def member? name
       name && members.detect{|m| m.name == name}
     end
@@ -86,6 +67,18 @@ class ADL
     def member_transitive? name
       members.detect{|m| m.name == name} or
         (@zuper and @zuper.member_transitive?(name))
+    end
+
+    def is_reference
+      supertypes[-1].name == 'Object' && supertypes[-2].name == 'Reference'
+    end
+
+    def is_syntax
+      (s = supertypes) and s.size >= 3 and s[-1].name == 'Object' and s[-2].name == 'Regular Expression' and s[-3].name == 'Syntax'
+    end
+
+    def is_object_literal
+      parent == nil && name == nil
     end
 
     def syntax_transitive
@@ -112,10 +105,6 @@ class ADL
       !@parent
     end
 
-    def inspect
-      "#{pathname}#{zuper_name}"
-    end
-
     def zuper_name
       case
       when @zuper && @zuper.parent.parent == nil && @zuper.name == 'Object'
@@ -127,13 +116,29 @@ class ADL
       end
     end
 
+    def inspect
+      "#{pathname}#{zuper_name}"
+    end
+
+    def assign variable, value, is_final
+      a, p, f = assigned(variable)
+      if a and a != value and variable != self   # Reference variable Super allows self-assignment
+        raise "#{inspect} cannot have two assignments to #{variable.inspect}"
+      end
+      if variable.is_syntax
+        @syntax = Regexp.new('\A'+value[1..-2])
+      else
+        Assignment.new(self, variable, value, is_final)
+      end
+    end
+
     # This is used for object literals
-    def inline
+    def as_inline
       self_assignment = members.detect{|m| m.variable == self}
       others = members-[self_assignment]
       ":#{@zuper.name}#{
-        others.empty? ? '' : '{' + others.map{|m| m.variable.name + m.inline}*'; ' + '}'
-      }#{self_assignment ? self_assignment.inline : ''}"
+        others.empty? ? '' : '{' + others.map{|m| m.variable.name + m.as_inline}*'; ' + '}'
+      }#{self_assignment ? self_assignment.as_inline : ''}"
     end
 
     def emit level = nil
@@ -147,13 +152,14 @@ class ADL
       self_assignment = members.detect{|m| Assignment === m && m.variable == self }
       others = members-[self_assignment]
       has_attrs = !others.empty? || @syntax
+
       print "#{level}#{@name}#{zuper_name}#{has_attrs ? (zuper_name ? ' ' : '')+"{\n" : ''}"
       puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/;" if @syntax
       others.each do |m|
         m.emit(level+"\t")
       end
       print "#{level}}" if has_attrs
-      print "#{self_assignment && self_assignment.inline}" unless members.empty?
+      print "#{self_assignment && self_assignment.as_inline}" unless members.empty?
       puts((!has_attrs || self_assignment) ? ';' : '')
     end
   end
@@ -170,11 +176,11 @@ class ADL
       "#{@parent ? @parent.pathname : '-'}.#{@variable.name}#{@is_final ? '=' : '~='} #{@value.inspect}"
     end
 
-    def inline level = ''
+    def as_inline level = ''
       %Q{#{@is_final ? ' =' : ' ~='} #{
         if ADLObject === @value
           if @value.is_object_literal
-            @value.inline
+            @value.as_inline
           else
             # REVISIT: Problem is, it's not always relative to our parent (c.f. self_assignment?):
             @value.pathname_relative_to(@parent)
@@ -185,7 +191,7 @@ class ADL
             level+"\t"+
               if ADLObject === v
                 if v.is_object_literal
-                  v.inline
+                  v.as_inline
                 else
                   v.pathname_relative_to(@parent)
                 end
@@ -201,7 +207,7 @@ class ADL
     end
 
     def emit level = ''
-      puts "#{level}#{@variable.name}#{inline level};"
+      puts "#{level}#{@variable.name}#{as_inline level};"
     end
   end
 
@@ -228,11 +234,6 @@ class ADL
 
   def emit
     @top.emit
-  end
-
-  # print an indent for displaying the parse
-  def indent
-    print "\t"*(@stack.size-1)
   end
 
   # Report a parse failure
