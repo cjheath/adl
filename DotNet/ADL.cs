@@ -50,7 +50,7 @@ namespace ADL
 	public	ADLObject	zuper{get; private set;}
 	public	ADLObject	aspect{get; private set;}
 	public	Regex		syntax{get; private set;}
-	public	bool		is_array{get; private set;}
+	public	bool		is_array{get; set;}
 	public	bool		is_sterile{get; private set;}
 	public	bool		is_complete{get; private set;}
 	public	List<ADLObject>	members{get;}
@@ -383,8 +383,8 @@ namespace ADL
 		    _stack = new List<ADLObject>();
 		return _stack;
 	    }
-	    private set{
-		_stack = value;
+	    set{
+		_stack = new List<ADLObject>(value);
 	    }
 	}
 	public ADLObject    stacktop{get{
@@ -416,10 +416,71 @@ namespace ADL
 	    System.Environment.Exit(1);
 	}
 
-	public	ADLObject   resolve_name(string[] path_name, int levels_up = 1)
+	public	ADLObject   resolve_name(List<string> path_name, int levels_up = 1)
+	{
+	    ADLObject	o = stacktop;
+	    for (int i = 0; i < levels_up; i++)
+		o = o.parent;
+	    if (path_name.Count == 0)
+		return o;
+	    List<string>	remaining = new List<string>(path_name);
+	    bool	no_ascend = false;
+	    if (remaining[0] == ".")	    // Do not implicitly ascend
+	    {
+	        no_ascend = true;
+		remaining.RemoveAt(0);
+		while (remaining[0] == "." && o != null)    // just ascend explicitly
+		{
+		    remaining.RemoveAt(0);
+		    o = o.parent;
+		}
+	    }
+	    if (remaining.Count == 0)
+		return o;
+
+	    ADLObject	start_parent = o;
+	    ADLObject   m = null;
+
+	    // Ascend the parent chain until we fail or find our first name:
+	    // REVISIT: If we descend a supertype's child, this may become contextual!
+	    if (!no_ascend)
+	    {
+	        while (remaining.Count > 0 && remaining[0] != (m = o).name && (m = o.member_transitive(remaining[0])) != null)
+		{
+		    if (o.parent == null)
+		        error("Failed to find "+remaining[0]+" from "+stacktop.name);
+		    o = o.parent;    // Ascend
+		}
+
+	        o = m;
+		remaining.RemoveAt(0);
+	    }
+	    if (o == null)
+		error("Failed to find "+remaining[0]+" from "+start_parent.pathname());
+	    while (remaining.Count == 0)
+		return o;
+
+	    // Now descend from the current position down the named children
+	    // REVISIT: If we descend a supertype's child, this becomes contextual!
+	    foreach (var n in remaining)
+	    {
+	        m = o.member(n);
+		if (m == null)
+		    error("Failed to find "+n+" in "+o.pathname());
+		o = m;   // Descend
+	    }
+
+	    return o;
+	}
+
+	public	ADLObject   start_object(List<string> object_name, List<string> supertype_name)
+	{
+	    return null;    // REVISIT: Implement
+	}
+
+	public	void   end_object()
 	{
 	    // REVISIT: Implement
-	    return null;
 	}
 
 	public	ADLObject   top;
@@ -494,11 +555,11 @@ namespace ADL
 
 	    if (expect("semi") != null)
 		return adl.stacktop;  // Empty definition
-	    string[] object_name = path_name();
+	    List<string>    object_name = path_name();
 	    return definition(object_name);
 	}
 
-	private string[] path_name()
+	private List<string> path_name()
 	{
 	    List<string> names = new List<string>();
 	    while (expect("scope") != null)
@@ -521,178 +582,225 @@ namespace ADL
 		else
 		    break;
 	    }
-	    return names.Count == 0 ? null : names.ToArray();
+	    return names.Count == 0 ? null : names;
 	}
 
-	private ADLObject definition(string[] object_name)
+	private ADLObject	definition(List<string> object_name)
 	{
-	    return null;
-/*
-	    var save = m_adl.stack.dup;
+	    List<ADLObject> save = new List<ADLObject>(adl.stack);  // Save the stack
+	    ADLObject	    defining = null;
 
 	    if ((defining = reference(object_name)) != null || (defining = alias_from(object_name)) != null)
 	    {
-		inheriting = peek("inherites");
-		supertype_name = type;
-
-		if (inheriting || supertype_name || peek("lbrack"))
+		bool		inheriting = peek("inherits");
+		List<string>	supertype_name = type();
+		bool		is_array = false;
+		bool		has_block = false;
+		bool		is_assignment = false;
+		List<string>	name_prefix = null;
+		if (object_name != null)
 		{
-		    defining = m_adl.start_object(object_name, supertype_name);
+		    name_prefix = new List<string>(object_name);
+		    name_prefix.RemoveAt(object_name.Count-1);
+		}
+
+		if (inheriting || supertype_name != null || peek("lbrack"))
+		{
+		    defining = adl.start_object(object_name, supertype_name);
 		    has_block = block(object_name);
-		    defining.is_array = array_indicator;
-		    is_array = array_indicator;
-		    m_adl.end_object;
-		    is_assignment = Assignment(defining);
-		} else if (peek("open"))
+		    is_array = array_indicator();
+		    defining.is_array = is_array;
+		    adl.end_object();
+		    is_assignment = assignment(defining) != null;
+		}
+		else if (peek("open"))
 		{
-		    defining = m_adl.resolve_name(obbject_name, 0);
-		    if ((m_adl.stack && defining.ancestry) != m_adl.stack)
-		    {
-
-		    }
-		    m_adl.stack.replace(defining.anerstry);
+		    defining = adl.resolve_name(object_name, 0);
+		    // if (defining.ancestry is not a prefix of adl.stack)
+			// REVISIT: This is contextual extension
+		    adl.stack = defining.ancestry;
 		    has_block = block(object_name);
 		}
-		else if (object_name && peek("equals") || peek("approx"))
+		else if (object_name != null && (peek("equals") || peek("approx")))
 		{
-		    reopen = m_adl.resolve_name(object_name[0...- 2], 0);
-		    m_adl.stack.replace(reopen.ancestry);
-		    varialbe = m_adl.resolve_name([object_name[0...- 2]],0);
-		    is_assignment = Assignment(variable);
-		    defining = Assignment(variable);
+		    ADLObject	reopen = adl.resolve_name(name_prefix, 0);
+		    adl.stack = reopen.ancestry;
+		    ADLObject	variable;
+		    variable = adl.resolve_name(name_prefix, 0);
+		    defining = assignment(variable);
+		    is_assignment = defining != null;
 		}
-		else if (object_name)
+		else if (object_name != null)
 		{
-		    defining = m_adl.resolve_name(object_name, 0);
+		    defining = adl.resolve_name(object_name, 0);
 		}
 
 		if (!has_block || is_array || is_assignment)
 		{
-		    peek "close" || require "semi"
+		    if (!peek("close"))
+			require("semi");
 		}
 	    }
-	    m_adl.stack.replace(save);
+	    adl.stack = save;
 	    opt_white();
 
-	    return defining || true;
-    */
+	    return defining;
 	}
 
-/*
-	private void type()
+	private List<string> type()
 	{
-	    if (expect("inherits"))
+	    if (expect("inherits") != null)
 	    {
 		opt_white();
-		supertype_name = path_name;
-		if (!(supertype_name || peek("semi") || peek("open") || peek("approx") || peek("equals"))) Console.WriteLine("Expected supertype, body or ;");
-		return supertype_name || ["Object"]
+		List<string>	supertype_name = path_name();
+		if (supertype_name == null || peek("semi") || peek("open") || peek("approx") || peek("equals"))
+		    Console.WriteLine("Expected supertype, body or ;");
+		return supertype_name == null ? supertype_name : new List<string>{"Object"};
 	    }
+	    return null;
 	}
 
-	private bool block(object_name)
+	private bool block(List<string> object_name)
 	{
-	    if (has_block == expect("open"))
+	    bool    has_block = expect("open") != null;
+	    if (has_block)
 	    {
 		opt_white();
-		while ()
-		{
-
-		}
-		require "close";
+		while (object_definition() != null)
+		    ;
+		require("close");
 		opt_white();
 		return true;
 	    }
+	    return false;
 	}
 
 	private bool array_indicator()
 	{
-	    if (expect("lbrack"))
+	    if (expect("lbrack") != null)
 	    {
 		opt_white();
-		require "rbrack";
+		require("rbrack");
 		opt_white();
 		return true;
 	    }
+	    return false;
 	}
-	private bool reference(object_name)
+
+	private ADLObject reference(List<string> object_name)
 	{
-	    if (m_operator == (expect('arrow') || expect('darrow')))
+	    ADLObject	defining = null;
+
+	    string  op;
+	    if ((op = expect("arrow")) != null || (op = expect("darrow")) != null)
 	    {
 		opt_white();
-		reference_to = path_name;
-		if (reference_to) Console.WriteLine("expected path name for Reference");
+		List<string>	reference_to = path_name();
+		if (reference_to == null)
+		    error("expected path name for Reference");
 
-		reference_object = m_adl.resolve_name()reference_to,0);
+		// Find what this is a reference to
+		ADLObject   reference_object = adl.resolve_name(reference_to, 0);
 
-		if (!object_name && reference_object.parent == m_adl.stack.last)
-		{
-		    Console.WriteLine("Reference to " + reference_to + ' ' + " in " + reference_object.parent.pathname + " cannot have the same name");
-		}
+		// An eponymous reference uses reference_to for object_name. It better not be local.
+		if (object_name == null && reference_object.parent == adl.stacktop)
+		    error("Reference to " + String.Join(" ", reference_to.ToArray()) + ' ' + " in " + reference_object.parent.pathname() + " cannot have the same name");
 
-		defining = m_adl.start_object(object_name || [reference_to.last],["Reference"]);
-		defining.is_array = "=>";
-		m_operator = "=>";
+		List<string>	def_name = object_name;
+		if (def_name == null)
+		    def_name = new List<string>{reference_to[reference_to.Count-1]};
+		defining = adl.start_object(def_name, new List<string>{"Reference"});
 
-		defining.assign(defining, reference_object, true);
+		defining.is_array = op == "=>";
 
-		has_block = block(object_name);
-		m_adl.end_object;
-		has_assignment = Assignment(defining);
+		defining.assign(defining, new Value(reference_object), true);
 
-		if (!has_block || has_assignment) peek("rblock") || require("semi");
+		bool	has_block = block(object_name);
+		adl.end_object();
+		bool	has_assignment = assignment(defining) != null;
+
+		if (!has_block || has_assignment)
+		    if (!peek("rblock"))
+			require("semi");
 
 		opt_white();
-		defining();
+		return defining;
 	    }
+	    return null;
 	}
 
-	private ADLObject alias_from(object_name) {
-	    if (expect("rename")) return null;
-	    defining = m_adl.start_object(object_name, ['Alias']);
-	    defining.assign(defining, m_alias_for, false);
-	    m_adl.end_object();
-	    defining();
-	}
-
-	private ADLObject assignment(variable)
+	private ADLObject alias_from(List<string> object_name)
 	{
-	    if (m_operator == ((is_final = !!expect("equals")) || expect("approx")))
+	    if (expect("rename") != null)
+		return null;
+	    ADLObject	defining = null;
+/*
+	    defining = adl.start_object(object_name, ['Alias']);
+	    defining.assign(defining, m_alias_for, false);
+	    adl.end_object();
+*/
+	    return defining;
+	}
+
+	private ADLObject assignment(ADLObject variable)
+	{
+	    string  op;
+	    if ((op = expect("equals")) != null || (op = expect("approx")) != null)
 	    {
+		bool	is_final = op == "=";
 		opt_white();
-		if (local_value) Console.WriteLine("Cannot reassign " + parent.name + "." + variable.name);
 
-		controlling_syntax = variable;
+		ADLObject   parent = adl.stacktop;
 
-		if (variable.is_syntax)
+		Tuple<Value, ADLObject, bool>	existing = parent.assigned(variable);
+		if (existing != null)
+		    error("Cannot reassign " + parent.name + "." + variable.name);
+
+		ADLObject   controlling_syntax = variable;
+		ADLObject   refine_from = null;
+		Value	    val;
+
+		if (variable.is_syntax())
 		{
-		    val = expect("regexp");
+		    // Parse a Regular Expression
+		    val = new Value(new Regex(expect("regexp")));
 		}
 		else
 		{
-		    if (variable.is_reference)
+		    if (variable.is_reference())
 		    {
-			existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable);
-			refine_from = (final && existing) || parent.supertypes[-1];
-			refine_from = Array(refine_from)[0];
+			Tuple<Value, ADLObject, bool>	overriding = parent.assigned_transitive(variable);
+			if (overriding == null)
+			    overriding = variable.assigned(variable);
+			if (overriding.Item3)	// Final
+			    // REVISIT: What if overriding.Item1 is an array?
+			    refine_from = overriding.Item1.o_val;
+/*
+			if (!refine_from == null)
+			    refine_from = parent.supertypes().last
+*/
 		    }
 		    else
 		    {
-			if variable.supertypes.include ? (variable.parent) && parent.supertypes.include ? (variable.parent)
-			  {
+/*
+			if (variable.supertypes.include ? (variable.parent) && parent.supertypes.include ? (variable.parent)
+			{
 			    controlling_syntax = parent;
 			}
 			existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable);
 			if (final) Console.WriteLine("Cannot override final assignment " + parent.name + "." + variable.name + "=" + existing.inspect);
+*/
 		    }
-		    val = value(controlling_syntax, refine_from);
+		    val = parse_value(controlling_syntax, refine_from);
 		}
 		parent.assign(variable, val, is_final);
 	    }
+	    return null;
 	}
 
-	private void value(variable, refine_from)
+	private Value	parse_value(ADLObject variable, ADLObject refine_from)
 	{
+/*
 	    if (variable.is_array && peek("lbrack"))
 	    {
 		val = f_array(variable, refine_from)
@@ -703,25 +811,28 @@ namespace ADL
 		if (variable.is_array) a = [a];
 		a;
 	    }
+*/
+	    return null;
 	}
 
+/*
 	private void atomic_value(variable, refine_from)
 	{
 	    if (refine_from)
 	    {
 		if (supertype_name == type)
 		{
-		    defining = m_adl.start_object(null, supertype_name, true);
+		    defining = adl.start_object(null, supertype_name, true);
 		    has_block = block nil;
 		    assignment(defining);
-		    m_adl.end_object;
+		    adl.end_object;
 		    val = defining;
 		}
 		else
 		{
 		    p = path_name;
 		    if (!p) Console.WriteLine("Assignment to " + variable.name " must name an ADL object");
-		    val = m_adl.resolve_name(p);
+		    val = adl.resolve_name(p);
 		}
 		if (refine_from && !val.supertypes.contain(refine_from))
 		{
