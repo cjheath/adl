@@ -1,14 +1,14 @@
 // White space includes space, tab, newline and a comment as '//' followed by any characters to end-of-line
 
-adl             = object*
+adl             = definition*
 
-object          = path_name? definition
+definition      = path_name? body
 
-definition      = (reference | alias_from | type? block? post_definition ';' | type? block | ';' )
+body            = (reference | alias_from | supertype? block? post_body ';' | supertype? block | ';' )
 
 alias_from      = '!' path_name
 
-type            =  ':' path_name?
+supertype       =  ':' path_name?
 
 path_name       = ascend* (name (descend name)*)?
 
@@ -23,9 +23,9 @@ integer         = [1-9] [0-9]*
 
 reference       = ('->' | '=>') path_name (';' | block? tentative_assignment ';' | block)
 
-block           = '{' object* '}'
+block           = '{' definition* '}'
 
-post_definition = array_indicator assignment? | assignment
+post_body        = array_indicator assignment? | assignment
 
 array_indicator = '[]'
 
@@ -45,7 +45,7 @@ array           = '[' (atomic_value (',' atomic_value)? ']'
 // See builtin.adl for the syntax of values of builtin variables.
 atomic_value    = regexp | path_name | object_literal | regexp_match
 
-object_literal	= type block? assignment?
+object_literal  = supertype block? assignment?
 
 // Above here, white-space is free. Below here, no implicit white-space is allowed.
 

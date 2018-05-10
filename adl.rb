@@ -283,7 +283,7 @@ class ADL
     o
   end
 
-  # Called when the name and type have been parsed
+  # Called when the name and supertype have been parsed
   def start_object(object_name, supertype_name, orphan = false)
     # Resolve the object_name prefix to find the parent and local name:
     if object_name
@@ -408,26 +408,26 @@ class ADL
     def parse
       # Any rule that consumes a token that may be followed by white space should skip it before returning
       opt_white
-      while o = object
+      while o = definition
         last = o
       end
       error "Parse terminated at #{peek.inspect}" if peek
       last
     end
 
-    def object
+    def definition
       return nil if peek('close') or !peek
       return @adl.stack.last if expect('semi')   # Empty definition
       object_name = path_name
-      definition(object_name)
+      body(object_name)
     end
 
-    def definition(object_name)
+    def body(object_name)
       # print "In #{@adl.stack.last.inspect} defining #{object_name} and looking at "; p peek; debugger
       save = @adl.stack.dup
       unless defining = reference(object_name) || alias_from(object_name)
         inheriting = peek('inherits')
-        supertype_name = type
+        supertype_name = supertype
 
         # We only want to start a new object if there's a supertype, or a block, or an array indicator
         if inheriting || supertype_name || peek('lbrack')
@@ -461,7 +461,7 @@ class ADL
       defining || true
     end
 
-    def type
+    def supertype
       if expect('inherits')
         opt_white
         supertype_name = path_name
@@ -473,7 +473,7 @@ class ADL
     def block object_name
       if has_block = expect('open')
         opt_white
-        while object
+        while definition
         end
         require 'close'
         opt_white
@@ -538,7 +538,7 @@ class ADL
 
         # Re-assignment is illegal
         local_value, = parent.assigned(variable)
-        error("Cannot reassign #{parent.name}.#{variable.name}") if local_value
+        error("Cannot reassign #{parent.name}.#{variable.name} from #{local_value.inspect}") if local_value
 
         # Detect the required value type from the variable, including arrays, and deal with it
         controlling_syntax = variable
@@ -560,16 +560,16 @@ class ADL
             error("Cannot override final assignment #{parent.name}.#{variable.name} = #{existing.inspect}") if final
           end
 
-          val = value(controlling_syntax, refine_from)
+          val = parse_value(controlling_syntax, refine_from)
         end
 
         parent.assign variable, val, is_final
       end
     end
 
-    def value variable, refine_from
+    def parse_value variable, refine_from
       if variable.is_array and peek('lbrack')
-        val = array(variable, refine_from)
+        val = parse_array(variable, refine_from)
       else
         a = atomic_value(variable, refine_from)
         a = [a] if variable.is_array
@@ -580,10 +580,10 @@ class ADL
     def atomic_value variable, refine_from
       # puts "Looking for value of #{variable.name}#{refine_from ? " refining #{refine_from.name}" : ''}"
       if refine_from
-        if supertype_name = type
+        if supertype_name = supertype
           # Literal object. What should the parent of such objects be?
           defining = @adl.start_object(nil, supertype_name, true)
-          has_block = block nil
+          block(nil)
           assignment(defining)
           @adl.end_object
           val = defining
@@ -609,7 +609,7 @@ class ADL
       end
     end
 
-    def array variable, refine_from
+    def parse_array variable, refine_from
       return nil unless expect('lbrack')
       array_value = []
       while val = atomic_value(variable, refine_from)
