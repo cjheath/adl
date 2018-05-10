@@ -440,7 +440,7 @@ throw new System.ArgumentException("Failed here");
 	    {
 	        no_ascend = true;
 		remaining.RemoveAt(0);
-		while (remaining[0] == "." && o != null)    // just ascend explicitly
+		while (remaining.Count > 0 && remaining[0] == "." && o != null)    // just ascend explicitly
 		{
 		    remaining.RemoveAt(0);
 		    o = o.parent;
@@ -470,7 +470,7 @@ throw new System.ArgumentException("Failed here");
 	    }
 	    if (o == null)
 		error("Failed to find "+remaining[0]+" from "+start_parent.pathname());
-	    while (remaining.Count == 0)
+	    if (remaining.Count == 0)
 		return o;
 
 	    // Now descend from the current position down the named children
@@ -851,7 +851,7 @@ Console.WriteLine("reference found");
 			Tuple<Value, ADLObject, bool>	overriding = parent.assigned_transitive(variable);
 			if (existing == null)
 			    existing = variable.assigned(variable);
-			if (existing.Item3)	// Is Final
+			if (existing != null && existing.Item3)	// Is Final
 			    error("Cannot override final assignment " + parent.name + "." + variable.name + "=" + existing.ToString());
 		    }
 		    val = parse_value(controlling_syntax, refine_from);
@@ -890,7 +890,7 @@ Console.WriteLine("reference found");
 		else
 		{
 		    List<string>	p = path_name();
-		    if (p != null)
+		    if (p == null)
 			error("Assignment to " + variable.name + " must name an ADL object");
 		    o = adl.resolve_name(p);
 		    val = new Value(o);
