@@ -76,7 +76,7 @@ namespace ADL
 	{
 	    if (child.name != null && member(child.name) != null)
 		throw new System.ArgumentException("Can't have two children called "+child.name);
-Console.WriteLine("Adding child "+child.pathname()+" to parent "+pathname());
+	    // Console.WriteLine("Adding child "+child.pathname()+" to parent "+pathname());
 
 	    members.Add(child);
 	}
@@ -504,6 +504,10 @@ throw new System.ArgumentException("Failed here");
 	    // Resolve the supertype_name to find the zuper:
 	    ADLObject	zuper = supertype_name != null ? resolve_name(supertype_name, 0) : _object;
 
+// Console.Write("definition name="+(object_name == null ? "<anonymous>" : adl.joined_name(object_name)));
+// Console.Write(", inheriting: "+(inheriting ? "TRUE" : "FALSE"));
+// Console.WriteLine(", supertype name="+(supertype_name == null ? "<none>" : adl.joined_name(supertype_name)));
+
 	    string	local_name = object_name[object_name.Count-1];
 	    ADLObject	o = parent.member(local_name);
 	    if (o != null)
@@ -527,21 +531,21 @@ throw new System.ArgumentException("Failed here");
 	public	ADLObject   top;
 	private	ADLObject   _object;
 	private	ADLObject   regexp;
-	private	ADLObject   syntax;
-	private	ADLObject   reference;
-	private	ADLObject   assignment;
-	private	ADLObject   alias;
-	private	ADLObject   alias_for;
+	// private	ADLObject   syntax;
+	// private	ADLObject   reference;
+	// private	ADLObject   assignment;	// We find this by name
+	// private	ADLObject   alias;
+	// private	ADLObject   alias_for;
 	private void	make_built_ins()
 	{
 	    top = new ADLObject(null, "TOP", null, null);
 	    _object = new ADLObject(top, "Object", null, null);
 	    regexp = new ADLObject(top, "Regular Expression", _object, null);
-	    syntax = new ADLObject(_object, "Syntax", regexp, null);
-	    reference = new ADLObject(top, "Reference", _object, null);
-	    assignment = new ADLObject(top, "Assignment", _object, null);
-	    alias = new ADLObject(top, "Alias", _object, null);
-	    alias_for = new ADLObject(alias, "For", reference, null);
+	    /*syntax =*/ new ADLObject(_object, "Syntax", regexp, null);
+	    /*reference =*/ new ADLObject(top, "Reference", _object, null);
+	    /*assignment =*/ new ADLObject(top, "Assignment", _object, null);
+	    // alias = new ADLObject(top, "Alias", _object, null);
+	    // alias_for = new ADLObject(alias, "For", reference, null);
 	}
 
 	public string joined_name(List<string> parts)
@@ -558,7 +562,6 @@ throw new System.ArgumentException("Failed here");
 	private int	    offset;	// Character offset in input
 	private	string	    current;    // Name of the current token
 	private	string	    value;	// Value of the current token
-	private	ADLObject   last;	// The last ADLObject that was defined
 
 	public Scanner(ADL _adl, string _io, string _filename)
 	{
@@ -648,24 +651,18 @@ throw new System.ArgumentException("Failed here");
 	    }
 	    else
 	    {
-Console.Write("definition name="+(object_name == null ? "<anonymous>" : adl.joined_name(object_name)));
 		bool		inheriting = peek("inherits");
-Console.Write(", inheriting: "+(inheriting ? "TRUE" : "FALSE"));
 		List<string>	supertype_name = supertype();
 		bool		is_array = false;
 		bool		has_block = false;
 		bool		is_assignment = false;
 
-Console.WriteLine(", supertype name="+(supertype_name == null ? "<none>" : adl.joined_name(supertype_name)));
-
 		if (inheriting || supertype_name != null || peek("lbrack"))
 		{
-Console.WriteLine("starting object");
 		    defining = adl.start_object(object_name, supertype_name);
 		    has_block = block(object_name);
 		    is_array = array_indicator();
 		    defining.is_array = is_array;
-Console.WriteLine("ending object");
 		    adl.end_object();
 		    is_assignment = assignment(defining) != null;
 		}
@@ -754,7 +751,6 @@ Console.WriteLine("ending object");
 	    string  op;
 	    if ((op = expect("arrow")) != null || (op = expect("darrow")) != null)
 	    {
-Console.WriteLine("reference found");
 		opt_white();
 		List<string>	reference_to = path_name();
 		if (reference_to == null)
@@ -848,7 +844,7 @@ Console.WriteLine("reference found");
 		    {
 			if (variable.supertypes.Contains(variable.parent) && parent.supertypes.Contains(variable.parent))
 			    controlling_syntax = parent;
-			Tuple<Value, ADLObject, bool>	overriding = parent.assigned_transitive(variable);
+			existing = parent.assigned_transitive(variable);
 			if (existing == null)
 			    existing = variable.assigned(variable);
 			if (existing != null && existing.Item3)	// Is Final
@@ -980,7 +976,9 @@ Console.WriteLine("reference found");
 	    int line_number = to_here.Count(c => c == '\n') + 1;
 	    int column_number = to_here.LastIndexOf('\n');
 	    column_number = column_number == -1 ? to_here.Length-1 : offset-column_number-1;
-	    string line_text = input.Substring((offset - column_number), 100); // REVISIT: Remove from first \n to end: .sub(/\n.* / m, '');
+	    string line_text = input.Substring((offset - column_number));
+	    if (line_text.IndexOf("\n") > 0)
+		line_text = line_text.Remove(line_text.IndexOf("\n"));
 	    return "line "+line_number+" column "+column_number+" of "+filename+":\n"+line_text+"\n";
 	}
 
