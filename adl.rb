@@ -422,6 +422,30 @@ class ADL
       body(object_name)
     end
 
+    def path_name
+      names = []
+      while expect('scope')
+        opt_white
+        names << '.'
+      end
+      while n = (expect('symbol') or expect('integer'))
+        opt_white
+        names << [n]
+        while n = (expect('symbol') or expect('integer'))
+          opt_white
+          names[-1] << n  # Compound name - this is a following word
+        end
+        # Make the name array into a multi-word string:
+        names[-1] = names[-1]*' '
+        if expect('scope')
+          opt_white
+        else
+          break
+        end
+      end
+      names.empty? ? nil : names
+    end
+
     def body(object_name)
       # print "In #{@adl.stack.last.inspect} defining #{object_name} and looking at "; p peek; debugger
       save = @adl.stack.dup
@@ -602,7 +626,7 @@ class ADL
         error("#{variable.inspect} has no Syntax so cannot be assigned") unless syntax
         # Get the Syntax for the variable and accept a value of that type
         val = next_token syntax
-        error("Expected value matching syntax for #{variable.name}") unless val
+        error("Expected a value matching the syntax for an #{variable.name}") unless val
         consume
         opt_white
         val
@@ -621,35 +645,8 @@ class ADL
     end
 
     def integer
+      # REVISIT: Not sure we should eval() here:
       s = expect('integer') and eval(s)
-    end
-
-    def string
-      s = expect('string') and eval(s)
-    end
-
-    def path_name
-      names = []
-      while expect('scope')
-        opt_white
-        names << '.'
-      end
-      while n = (expect('symbol') or expect('integer'))
-        opt_white
-        names << [n]
-        while n = (expect('symbol') or expect('integer'))
-          opt_white
-          names[-1] << n  # Compound name - this is a following word
-        end
-        # Make the name array into a multi-word string:
-        names[-1] = names[-1]*' '
-        if expect('scope')
-          opt_white
-        else
-          break
-        end
-      end
-      names.empty? ? nil : names
     end
 
     def opt_white

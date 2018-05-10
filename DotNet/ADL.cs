@@ -37,7 +37,7 @@ namespace ADL
 	    else if (m_s_val != null)
 		return m_s_val;
 	    else if (m_a_val != null)
-		throw new System.ArgumentException("Not Implemented");
+		throw new System.ArgumentException("REVISIT: Array value ToString Not Implemented");
 	    else
 		return m_b_val.ToString();
 	}
@@ -76,7 +76,6 @@ namespace ADL
 	{
 	    if (child.name != null && member(child.name) != null)
 		throw new System.ArgumentException("Can't have two children called "+child.name);
-	    // Console.WriteLine("Adding child "+child.pathname()+" to parent "+pathname());
 
 	    members.Add(child);
 	}
@@ -111,7 +110,8 @@ namespace ADL
 	    }
 	}
 
-	public Tuple<Value, ADLObject, bool> assigned(ADLObject variable) {
+	public Tuple<Value, ADLObject, bool> assigned(ADLObject variable)
+	{
 	    ADLObject outermost = supertypes.Last();	// This will always be "Object"
 
 	    if (variable.parent == outermost)
@@ -165,22 +165,20 @@ namespace ADL
 	}
 
 	// Is this object a subtype of the "Reference" built-in?
-	public bool is_reference()
-	{
+	public bool is_reference{get{
 	    List<ADLObject> s = supertypes;
 	    return supertypes[supertypes.Count-1].name == "Object" &&
 		supertypes[supertypes.Count-2].name == "Reference";
-	}
+	}}
 
 	// Is this object a subtype of the "Syntax" built-in?
-	public bool is_syntax()
-	{
+	public bool is_syntax{get{
 	    List<ADLObject> s = supertypes;
 	    return s.Count >= 3 &&
 		s[supertypes.Count-1].name == "Object" &&
 		s[supertypes.Count-2].name == "Regular Expression" &&
 		s[supertypes.Count-3].name == "Syntax";
-	}
+	}}
 
 	public bool is_object_literal{get{
 	    // Object Literals have no parent and no name.
@@ -216,10 +214,9 @@ namespace ADL
 	    return new String('.', common) + String.Join(".", mine.Select(m => m.name));
 	}
 
-	private bool is_top()
-	{
+	private bool is_top{get{
 	    return parent == null;
-	}
+	}}
 
 	public string	zuper_name()
 	{
@@ -239,7 +236,6 @@ namespace ADL
 
 	public void assign(ADLObject variable, Value value, bool is_final)
 	{
-// Console.WriteLine("assigning "+value.ToString()+" to "+variable.pathname());
 	    Tuple<Value, ADLObject, bool> t = assigned(variable);
 	    Value	a = t != null ? t.Item1 : null;	    // Existing value
 	    //ADLObject	p = t != null ? t.Item2 : null;	    // Location of existing assignment
@@ -248,7 +244,7 @@ namespace ADL
 	    if (a != null && a != value && variable != this)
 		throw new System.ArgumentException("#{inspect} cannot have two assignments to #{variable.inspect}");
 
-	    if (variable.is_syntax())
+	    if (variable.is_syntax)
 	    {
 		string	s = value.s_val;
 		if (s == null)
@@ -284,9 +280,8 @@ namespace ADL
 	{
 	    if (level == null)
 	    {
-		foreach (ADLObject m in members) {
+		foreach (ADLObject m in members)
 		    m.emit("");
-		}
 		return;
 	    }
 
@@ -415,16 +410,11 @@ namespace ADL
 	    return o;
 	}
 
-	public void	emit()
-	{
-	    top.emit();
-	}
-
 	public void	error(string message)
 	{
 	    Console.WriteLine(message + " at " + scanner.location());
-throw new System.ArgumentException("Failed here");
-	    // System.Environment.Exit(1);
+	    // throw new System.ArgumentException("Failed here");
+	    System.Environment.Exit(1);
 	}
 
 	public	ADLObject   resolve_name(List<string> path_name, int levels_up = 1)
@@ -487,7 +477,7 @@ throw new System.ArgumentException("Failed here");
 	}
 
 	// Called when the name and supertype have been parsed
-	public	ADLObject   start_object(List<string> object_name, List<string> supertype_name, bool orphan = false)
+	public virtual ADLObject    start_object(List<string> object_name, List<string> supertype_name, bool orphan = false)
 	{
 	    ADLObject	parent;
 	    if (object_name != null)
@@ -497,16 +487,10 @@ throw new System.ArgumentException("Failed here");
 		parent = resolve_name(parent_name, 0);
 	    }
 	    else
-	    {
 		parent = stacktop;
-	    }
 
 	    // Resolve the supertype_name to find the zuper:
 	    ADLObject	zuper = supertype_name != null ? resolve_name(supertype_name, 0) : _object;
-
-// Console.Write("definition name="+(object_name == null ? "<anonymous>" : adl.joined_name(object_name)));
-// Console.Write(", inheriting: "+(inheriting ? "TRUE" : "FALSE"));
-// Console.WriteLine(", supertype name="+(supertype_name == null ? "<none>" : adl.joined_name(supertype_name)));
 
 	    string	local_name = object_name[object_name.Count-1];
 	    ADLObject	o = parent.member(local_name);
@@ -523,9 +507,8 @@ throw new System.ArgumentException("Failed here");
 	    return o;
 	}
 
-	public	void   end_object()
+	public virtual void	end_object()
 	{
-	    // REVISIT: Implement
 	}
 
 	public	ADLObject   top;
@@ -541,9 +524,12 @@ throw new System.ArgumentException("Failed here");
 	    top = new ADLObject(null, "TOP", null, null);
 	    _object = new ADLObject(top, "Object", null, null);
 	    regexp = new ADLObject(top, "Regular Expression", _object, null);
-	    /*syntax =*/ new ADLObject(_object, "Syntax", regexp, null);
-	    /*reference =*/ new ADLObject(top, "Reference", _object, null);
-	    /*assignment =*/ new ADLObject(top, "Assignment", _object, null);
+	    // syntax =
+		new ADLObject(_object, "Syntax", regexp, null);
+	    // reference =
+		new ADLObject(top, "Reference", _object, null);
+	    // assignment =
+		new ADLObject(top, "Assignment", _object, null);
 	    // alias = new ADLObject(top, "Alias", _object, null);
 	    // alias_for = new ADLObject(alias, "For", reference, null);
 	}
@@ -587,7 +573,7 @@ throw new System.ArgumentException("Failed here");
 	    return last;
 	}
 
-	private void	 opt_white()
+	private void	opt_white()
 	{
 	    white();
 	}
@@ -627,9 +613,7 @@ throw new System.ArgumentException("Failed here");
 		}
 		names.Add(n);
 		if (expect("scope") != null)
-		{
 		    opt_white();
-		}
 		else
 		    break;
 	    }
@@ -688,15 +672,11 @@ throw new System.ArgumentException("Failed here");
 		    is_assignment = defining != null;
 		}
 		else if (object_name != null)
-		{
 		    defining = adl.resolve_name(object_name, 0);
-		}
 
 		if (!has_block || is_array || is_assignment)
-		{
 		    if (!peek("close"))
 			require("semi");
-		}
 	    }
 	    adl.stack = save;
 	    opt_white();
@@ -818,22 +798,23 @@ throw new System.ArgumentException("Failed here");
 		ADLObject   refine_from = null;
 		Value	    val;
 
-		if (variable.is_syntax())
-		{
-		    // Parse a Regular Expression
+		if (variable.is_syntax)
+		{	    // Parse a Regular Expression
 		    val = new Value(new Regex(expect("regexp")));
 		}
 		else
 		{
-		    if (variable.is_reference())
+		    if (variable.is_reference)
 		    {
 			Tuple<Value, ADLObject, bool>	overriding = parent.assigned_transitive(variable);
 			if (overriding == null)
 			    overriding = variable.assigned(variable);
 			if (overriding != null && overriding.Item3)	// Final
-			    // REVISIT: What if overriding.Item1 is an array?
-			    refine_from = overriding.Item1.o_val;
-			// Default to refine_from Object
+			    if (overriding.Item1.a_val != null)	// the Value is an array
+				refine_from = overriding.Item1.a_val[0].o_val;
+			    else
+				refine_from = overriding.Item1.o_val;
+			// Otherwise just refine_from Object
 			if (refine_from == null)
 			{
 			    List<ADLObject> st = parent.supertypes;
@@ -875,8 +856,7 @@ throw new System.ArgumentException("Failed here");
 		List<string>	supertype_name = supertype();
 		ADLObject	o;
 		if (supertype_name != null)
-		{
-		    // Literal object
+		{	// Literal object
 		    o = adl.start_object(null, supertype_name, true);
 		    block(null);
 		    assignment(o);
@@ -905,7 +885,7 @@ throw new System.ArgumentException("Failed here");
 		    error(variable.inspect() + " has no Syntax so cannot be assigned");
 		string	s = next_token(syntax);
 		if (s == null)
-		    error("Expected value matching syntax for " + variable.name);
+		    error("Expected a value matching the syntax for an " + variable.name);
 		consume();
 		opt_white();
 		return new Value(s);
@@ -933,12 +913,6 @@ throw new System.ArgumentException("Failed here");
 	private Value integer()
 	{
 	    string  s = expect("integer");
-	    return new Value(s);
-	}
-
-	private Value parse_string()
-	{
-	    string  s = expect("string");
 	    return new Value(s);
 	}
 
@@ -1009,7 +983,7 @@ throw new System.ArgumentException("Failed here");
 		current = rule.ToString();
 		value = match.ToString();
 	    }
-//	    Console.WriteLine("next_token returning "+current+" '"+value+"'");
+	    // Console.WriteLine("next_token returning "+current+" '"+value+"'");
 	    return value;
 	}
 
@@ -1024,8 +998,6 @@ throw new System.ArgumentException("Failed here");
 	{
 	    if (current == null)
 		next_token();
-
-	    // puts "consuming #{@current.inspect}" unless @current == 'white'
 
 	    current = null;
 	    string v = value;
@@ -1063,16 +1035,13 @@ throw new System.ArgumentException("Failed here");
 	{
 	    if (current == null)
 		next_token();
-// Console.WriteLine("peek sees "+(current != null ? current : "nothing"));
 	    return current;
 	}
 
 	// Return true if the next token is 'token', without consuming it.
 	private bool	 peek(string token)
 	{
-	    bool ok = peek() == token;
-// Console.WriteLine("peek "+(ok ? "succeeds" : "fails")+" at finding "+token);
-	    return ok;
+	    return peek() == token;
 	}
     }
 
@@ -1085,7 +1054,7 @@ throw new System.ArgumentException("Failed here");
 		scope = adl.parse(File.ReadAllText(arg), arg, scope);
 	    if (scope != null)
 	     	scope.emit();
-		adl.top.emit();
+//		adl.top.emit();
 	}
     }
 }
