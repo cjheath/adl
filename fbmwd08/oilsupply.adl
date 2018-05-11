@@ -15,7 +15,7 @@ Oil Supply : Fact Based Model {
 		Maps To = Text;
 		: Value Type Constraint {
 			Value Type = Season;
-			Data Value = [:String Value = 'Spring', :String Value = 'Summer', :String Value = 'Autumn', :String Value = 'Winter'];
+			// Data Value = [:String Value = 'Spring', :String Value = 'Summer', :String Value = 'Autumn', :String Value = 'Winter'];
 		}
 	}
 	Cost: Value Type { Maps To = Money; }
@@ -24,7 +24,7 @@ Oil Supply : Fact Based Model {
 		Maps To = Text;
 		: Value Type Constraint {
 			Value Type = Transport Mode;
-			Data Value = [:String Value = 'Rail', :String Value = 'Road', :String Value = 'Sea'];
+			// Data Value = [:String Value = 'Rail', :String Value = 'Road', :String Value = 'Sea'];
 		}
 	}
 

@@ -53,7 +53,7 @@ namespace ADL
 	public	bool		is_array{get; set;}
 	public	bool		is_sterile{get; private set;}
 	public	bool		is_complete{get; private set;}
-	public	List<ADLObject>	members{get;}
+	public	List<ADLObject>	children{get;}
 
 	public	ADLObject(
 		ADLObject	_parent,
@@ -68,16 +68,16 @@ namespace ADL
 	    aspect = _aspect;
 	    if (parent != null)
 	    	parent.adopt(this);
-	    members = new List<ADLObject>();
+	    children = new List<ADLObject>();
 	}
 
 	// Adopt this child
-	public void adopt(ADLObject child)
+	public void adopt(ADLObject _child)
 	{
-	    if (child.name != null && member(child.name) != null)
-		throw new System.ArgumentException("Can't have two children called "+child.name);
+	    if (_child.name != null && child(_child.name) != null)
+		throw new System.ArgumentException("Can't have two children called "+_child.name);
 
-	    members.Add(child);
+	    children.Add(_child);
 	}
 
 	// Get list of ancestors starting with the outermost and ending with this object
@@ -131,7 +131,7 @@ namespace ADL
 	    }
 
 	    // Find an existing assignment:
-	    Assignment	existing = members.Find(m => m is Assignment && (m as Assignment).variable == variable) as Assignment;
+	    Assignment	existing = children.Find(m => m is Assignment && (m as Assignment).variable == variable) as Assignment;
 	    if (existing == null)
 		return null;
 	    return Tuple.Create(existing.value, existing.parent, existing.is_final);
@@ -147,20 +147,20 @@ namespace ADL
 	    return null;
 	}
 
-	public ADLObject member(string name)
+	public ADLObject child(string name)
 	{
 	    if (name == null)
 		return null;
-	    return members.Find(m => m.name == name);
+	    return children.Find(m => m.name == name);
 	}
 
-	public ADLObject member_transitive(string name)
+	public ADLObject child_transitive(string name)
 	{
-	    ADLObject	m = member(name);
+	    ADLObject	m = child(name);
 	    if (m != null)
 		return m;
 	    if (zuper != null)
-		return zuper.member_transitive(name);
+		return zuper.child_transitive(name);
 	    return null;
 	}
 
@@ -258,8 +258,8 @@ namespace ADL
 
 	public virtual string as_inline(string level = "")
 	{
-	    Assignment self_assignment = members.Find(m => m is Assignment && (m as Assignment).variable == this) as Assignment;
-	    List<ADLObject> others = members.Where(m => m != self_assignment).ToList();
+	    Assignment self_assignment = children.Find(m => m is Assignment && (m as Assignment).variable == this) as Assignment;
+	    List<ADLObject> others = children.Where(m => m != self_assignment).ToList();
 
 	    return ":" +
 		zuper.name +
@@ -281,13 +281,13 @@ namespace ADL
 	{
 	    if (level == null)
 	    {
-		foreach (ADLObject m in members)
+		foreach (ADLObject m in children)
 		    m.emit("");
 		return;
 	    }
 
-	    Assignment self_assignment = members.Find(m => m is Assignment && (m as Assignment).variable == this) as Assignment;
-	    List<ADLObject> others = members.Where(m => m != self_assignment).ToList();
+	    Assignment self_assignment = children.Find(m => m is Assignment && (m as Assignment).variable == this) as Assignment;
+	    List<ADLObject> others = children.Where(m => m != self_assignment).ToList();
 	    bool    has_attrs = others.Any() || syntax != null;
 
 	    Console.Write(level);
@@ -305,7 +305,7 @@ namespace ADL
 
 	    if (has_attrs)
 		Console.Write(level+"}");
-	    if (self_assignment != null && members.Any())
+	    if (self_assignment != null && children.Any())
 		Console.Write(self_assignment.as_inline());
 	    Console.WriteLine(!has_attrs || self_assignment != null ? ";" : "");
 	}
@@ -315,7 +315,7 @@ namespace ADL
 	    ADLObject	p = this;
 	    while (p.parent != null)
 		p = p.parent;
-	    return member("Assignment");
+	    return child("Assignment");
 	}
     }
 
@@ -448,7 +448,7 @@ namespace ADL
 	    {
 	        while (remaining.Count > 0 && remaining[0] != (m = o).name)
 		{
-		    if ((m = o.member_transitive(remaining[0])) != null)
+		    if ((m = o.child_transitive(remaining[0])) != null)
 			break;	    // Found!
 		    if (o.parent == null)
 		        error("Failed to find "+remaining[0]+" from "+stacktop.pathname());
@@ -467,7 +467,7 @@ namespace ADL
 	    // REVISIT: If we descend a supertype's child, this becomes contextual!
 	    foreach (var n in remaining)
 	    {
-	        m = o.member(n);
+	        m = o.child(n);
 		if (m == null)
 		    error("Failed to find "+n+" in "+o.pathname());
 		o = m;   // Descend
@@ -494,7 +494,7 @@ namespace ADL
 
 	    string	local_name = object_name != null ? object_name[object_name.Count-1] : null;
 	    ADLObject	o;
-	    if (local_name != null && (o = parent.member(local_name)) != null)
+	    if (local_name != null && (o = parent.child(local_name)) != null)
 	    {
 		if (supertype_name != null && o.zuper.name != joined_name(supertype_name))
 		    error("Cannot change supertype of "+local_name+" from "+o.zuper.name+" to "+joined_name(supertype_name));

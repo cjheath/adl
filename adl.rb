@@ -5,8 +5,8 @@ class ADL
     attr_reader :parent, :name, :zuper, :aspect, :syntax
     attr_accessor :is_array, :is_sterile, :is_complete
 
-    def members
-      @members ||= []
+    def children
+      @children ||= []
     end
 
     def initialize parent, name, zuper, aspect = nil
@@ -16,10 +16,10 @@ class ADL
     end
 
     def adopt child
-      if child.name && member?(child.name)
+      if child.name && child?(child.name)
         raise "Cannot have two children called #{child.name}"
       end
-      members << child
+      children << child
     end
 
     def ancestry
@@ -52,7 +52,7 @@ class ADL
           return result
         end
       end
-      existing = members.detect{|m| Assignment === m && m.variable == variable}
+      existing = children.detect{|m| Assignment === m && m.variable == variable}
       existing && [existing.value, existing.parent, existing.is_final]
     end
 
@@ -60,13 +60,13 @@ class ADL
       assigned(variable) or @zuper && @zuper.assigned_transitive(variable)
     end
 
-    def member? name
-      name && members.detect{|m| m.name == name}
+    def child? name
+      name && children.detect{|m| m.name == name}
     end
 
-    def member_transitive? name
-      members.detect{|m| m.name == name} or
-        (@zuper and @zuper.member_transitive?(name))
+    def child_transitive? name
+      children.detect{|m| m.name == name} or
+        (@zuper and @zuper.child_transitive?(name))
     end
 
     def is_reference
@@ -134,8 +134,8 @@ class ADL
 
     # This is used for object literals
     def as_inline
-      self_assignment = members.detect{|m| m.variable == self}
-      others = members-[self_assignment]
+      self_assignment = children.detect{|m| m.variable == self}
+      others = children-[self_assignment]
       ":#{@zuper.name}#{
         others.empty? ? '' : '{' + others.map{|m| m.variable.name + m.as_inline}*'; ' + '}'
       }#{self_assignment ? self_assignment.as_inline : ''}"
@@ -143,14 +143,14 @@ class ADL
 
     def emit level = nil
       unless level
-        members.each do |m|
+        children.each do |m|
           m.emit('')
         end
         return
       end
 
-      self_assignment = members.detect{|m| Assignment === m && m.variable == self }
-      others = members-[self_assignment]
+      self_assignment = children.detect{|m| Assignment === m && m.variable == self }
+      others = children-[self_assignment]
       has_attrs = !others.empty? || @syntax
 
       print "#{level}#{@name}#{zuper_name}#{has_attrs ? (zuper_name ? ' ' : '')+"{\n" : ''}"
@@ -159,7 +159,7 @@ class ADL
         m.emit(level+"\t")
       end
       print "#{level}}" if has_attrs
-      print "#{self_assignment && self_assignment.as_inline}" unless members.empty?
+      print "#{self_assignment && self_assignment.as_inline}" unless children.empty?
       puts((!has_attrs || self_assignment) ? ';' : '')
     end
   end
@@ -260,7 +260,7 @@ class ADL
     start_parent = o
     # Ascend the parent chain until we fail or find our first name:
     unless no_ascend
-      until path_name.empty? or path_name[0] == (m = o).name or m = o.member_transitive?(path_name[0])
+      until path_name.empty? or path_name[0] == (m = o).name or m = o.child_transitive?(path_name[0])
         unless o.parent
           error("Failed to find #{path_name[0].inspect} from #{@stack.last.name}")
         end
@@ -275,7 +275,7 @@ class ADL
     # Now descend from the current position down the named children
     # REVISIT: If we descend a supertype's child, this becomes contextual!
     path_name.each do |n|
-      m = o.member?(n)
+      m = o.child?(n)
       error("Failed to find #{n.inspect} in #{o.pathname}") unless m
       o = m   # Descend
     end
@@ -296,7 +296,7 @@ class ADL
     zuper = supertype_name ? resolve_name(supertype_name, 0) : @object
 
     local_name = object_name ? object_name[-1] : nil
-    if local_name and o = parent.member?(local_name)
+    if local_name and o = parent.child?(local_name)
       error("Cannot change supertype of #{local_name} from #{o.zuper.name} to #{supertype_name*' '}") if supertype_name && o.zuper.name != supertype_name*' '
     else
       o = ADLObject.new(orphan ? nil : parent, local_name, zuper)
