@@ -234,7 +234,7 @@ namespace ADL
 	    return pathname() + zuper_name();
 	}
 
-	public void assign(ADLObject variable, Value value, bool is_final)
+	public ADLObject    assign(ADLObject variable, Value value, bool is_final)
 	{
 	    Tuple<Value, ADLObject, bool> t = assigned(variable);
 	    Value	a = t != null ? t.Item1 : null;	    // Existing value
@@ -247,12 +247,13 @@ namespace ADL
 	    if (variable.is_syntax)
 	    {
 		string	s = value.s_val;
-		if (s == null)
-		    throw new System.ArgumentException("Assignment to Syntax requires a string");
-		syntax = new Regex("^" + s.Substring(1, s.Length-2));
+		if (s == null)	// REVISIT: This should have already been checked
+		    throw new System.ArgumentException("Assignment to Syntax requires a Regexp string");
+		syntax = new Regex(@"\G" + s);
+		return variable;    // Not used, but flags that we succeeded
 	    }
 	    else
-		new Assignment(this, variable, value, is_final);
+		return new Assignment(this, variable, value, is_final);
 	}
 
 	public virtual string as_inline(string level = "")
@@ -443,7 +444,6 @@ namespace ADL
 	    ADLObject   m = null;
 
 	    // Ascend the parent chain until we fail or find our first name:
-	    // REVISIT: If we descend a supertype's child, this may become contextual!
 	    if (!no_ascend)
 	    {
 	        while (remaining.Count > 0 && remaining[0] != (m = o).name)
@@ -800,7 +800,7 @@ namespace ADL
 
 		if (variable.is_syntax)
 		{	    // Parse a Regular Expression
-		    val = new Value(new Regex(expect("regexp")));
+		    val = new Value(require("regexp"));
 		}
 		else
 		{
@@ -833,7 +833,7 @@ namespace ADL
 		    }
 		    val = parse_value(controlling_syntax, refine_from);
 		}
-		parent.assign(variable, val, is_final);
+		return parent.assign(variable, val, is_final);
 	    }
 	    return null;
 	}
@@ -918,7 +918,7 @@ namespace ADL
 
 	private static string Tokens =
 	    "(?<" + "white" + ">" +	@"(?:\s|//.*)+" + ")|" +
-	    "(?<" + "symbol" + ">" +	@"[_\p{L}][_\p{Nl}\p{L}]*" + ")|" +
+	    "(?<" + "symbol" + ">" +	@"[_\p{L}][_\p{L}\p{N}\p{Mn}]*" + ")|" +
 	    "(?<" + "integer" + ">" +	@"-?(?:[1-9][0-9]*|0)" + ")|" +
 	    "(?<" + "string" + ">" +	@"'(?:\\[0befntr\\']|\\[0-3][0-7][0-7]|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'" + ")|" +
 	    "(?<" + "open" + ">" +	@"{" + ")|" +
@@ -956,6 +956,8 @@ namespace ADL
 	    return "line "+line_number+" column "+column_number+" of "+filename+":\n"+line_text+"\n";
 	}
 
+	// Match a token to use as our lookahead token, disregarding any existing one.
+	// Use the token rule if provided, otherwise use the standard one
 	private string next_token(Regex rule = null)
 	{
 	    Regex	re = rule != null ? rule : parse_re();
@@ -1010,7 +1012,7 @@ namespace ADL
 	private string expect(string token)
 	{
 	    if (token == "regexp")
-		throw new System.NotImplementedException("REVISIT: Regexp parsing");
+		return expect_regexp();
 
 	    if (current == null)
 		next_token();
@@ -1022,12 +1024,27 @@ namespace ADL
 	    return v;
 	}
 
+	private bool expect(Regex rule)
+	{
+	    value = next_token(rule);
+	    if (value == null)
+		return false;
+	    offset += value.Length;
+	    return true;
+	}
+
 	private string require(string token)
 	{
 	    string    t = expect(token);
 	    if (t == null)
 		  error("Expected "+token);
 	    return t;
+	}
+
+	private void	require(Regex rule, string context)
+	{
+	    if (!expect(rule))
+		  error("In "+context+", expected "+rule.ToString()+" looking at "+input.Substring(offset, 10));
 	}
 
 	// Without consuming it, return the name of the next token
@@ -1041,7 +1058,100 @@ namespace ADL
 	// Return true if the next token is 'token', without consuming it.
 	private bool	 peek(string token)
 	{
+	    // N.B. You cannot peek for a regexp
 	    return peek() == token;
+	}
+
+	private string	expect_regexp()
+	{
+	    Regex   slash = new Regex(@"\G/");
+	    int	    start = offset;
+
+	    opt_white();
+	    if (!expect(slash))
+		return null;
+	    string  regex = regexp_sequence();
+	    if (regex != null)
+		if (!expect(slash))
+		    regex = null;
+	    current = null;	    // Don't leave a lookahead token
+	    if (regex == null)
+	    {
+		offset = start;	    // Don't consume any of the text
+		return null;
+	    }
+	    return regex;
+	}
+
+	private string regexp_sequence()
+	{
+	    int start = offset;
+	    regexp_alternate();
+	    while (expect(new Regex(@"\G\|")))
+		regexp_alternate();
+	    return input.Substring(start, offset-start);
+	}
+
+	private void	regexp_alternate()
+	{
+	    while (regexp_atom())
+		;
+	}
+
+	private bool	regexp_atom()
+	{
+	    if (!regexp_char() && !regexp_class() && !regexp_group())
+		return false;
+	    expect(new Regex(@"\G[*+?]"));	    // Optional multiplicity
+	    return true;
+	}
+
+	private	string	regexp_char_regex =
+		"("
+		+ @"\\s"				// Whitespace. Explicit space not allowed!
+		+ @"|\\[0-3][0-7][0-7]"			// Octal character
+		+ @"|\\x[0-9A-F][0-9A-F]"		// Hexadecimal character
+		+ @"|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]"// Unicode codepoint
+                + @"|\\[pP]{[A-Za-z_]+}"		// Unicode category or block
+		+ @"|\\[0befntr\\*+?()|/\[]"		// Various control characters or escaped specials
+		+ @"|[^*+?()|/\[ ]"			// Any other non-special character
+		+ ")";
+
+	private bool	regexp_char()
+	{
+	    return expect(new Regex(@"\G"+regexp_char_regex));
+	}
+
+	private bool	regexp_class()
+	{
+	    if (!expect(new Regex(@"\G\[")))
+		return false;
+	    expect(new Regex(@"\G\^"));			// Negate the class
+	    expect(new Regex(@"\G-"));			// A hyphen must be first
+	    Regex   regexp_class_char = new Regex(
+		    @"\G"
+		    + @"(?![-\]])"			// Not a closing bracket or a hyphen
+		    + "("
+		    + regexp_char_regex			// But any other regexp char
+		    + "|[+*?()/|]"			// including some special chars
+		    + ")"
+		);
+	    do {
+		require(regexp_class_char, "regexp class");
+		if (expect(new Regex(@"\G-")))
+		    require(regexp_class_char, "regexp class range end");
+	    } while (!expect(new Regex(@"\G\]")));
+	    return true;
+	}
+
+	private bool	regexp_group()
+	{
+	    if (!expect(new Regex(@"\G\(")))		// parenthesis opens the group
+		return false;
+	    expect(new Regex(@"\G\?<[_\p{L}\p{N}]+>|\?!")); // regexp_group_type (capture or negative lookahead)
+	    regexp_sequence();
+	    require(new Regex(@"\G\)"), "regexp group");	// The group must be closed
+	    return true;
 	}
     }
 

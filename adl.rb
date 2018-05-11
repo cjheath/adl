@@ -259,7 +259,6 @@ class ADL
 
     start_parent = o
     # Ascend the parent chain until we fail or find our first name:
-    # REVISIT: If we descend a supertype's child, this may become contextual!
     unless no_ascend
       until path_name.empty? or path_name[0] == (m = o).name or m = o.member_transitive?(path_name[0])
         unless o.parent
@@ -313,7 +312,7 @@ class ADL
   class Scanner
     Tokens = {
       white: %r{(\s|//.*)+},
-      symbol: %r{[_[:alpha:]][_[:alnum:]]*},
+      symbol: %r{[_\p{L}][_\p{L}\p{N}\p{Mn}]*},
       integer: %r{-?([1-9][0-9]*|0)},
       string: %r{
         '
@@ -347,15 +346,16 @@ class ADL
           (?<alternate>                         # Anything that can go between vertical bars (alternates)
             (?<atom>                            # Anything that may be repeated
               ( (?<char>                        # Any normal regexp char
-                  \\s                           # Single whitespace
+                  \\s                           # Single whitespace. Explicit space not allowed!
                   | \\[0-3][0-7][0-7]           # An octal character
                   | \\x[0-9A-F][0-9A-F]         # A hexadecimal character
                   | \\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F] # A Unicode character
+                  | \\[pP]{[A-Za-z_]+}          # Unicode category or block
                   | \\[0befntr\\*+?()|/\[]      # A control character or escaped regexp char
                   | [^*+?()/|\[ ]               # Anything else except these
                 )
               | \(                              # A parenthesised group
-                  (\?(<[_[:alnum:]]*>|!))?      # Optional capture name or negative lookahead
+                  (\?(<[_\p{L}\p{Mn}\p{N}]*>|!))?      # Optional capture name or negative lookahead
                   \g<sequence>*
                 \)
               | \[                              # Regexp range starts with [
@@ -364,7 +364,7 @@ class ADL
                   ( (?![-\]])                   # Not a closing ] or hyphen
                     ( (\g<char> | [+*?()/|] )   # A character including some special chars
                       (-(?![-\]])((\g<char>)|[+*?()/|]))?       # or a range of them
-                      | \[:(alpha|upper|lower|digit|alnum):\]   # POSIX character class
+                      | \\[pP]{_[A-Za-z]+}      # Unicode category or block, +ve or -ve
                     )
                   )*                            # zero or more range elements
                 \]

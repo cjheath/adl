@@ -17,7 +17,8 @@ descend         = '.'
 
 name            = symbol | integer
 
-symbol          = [_[:alpha:]] [_[:alnum:]]*
+// Unicode categories here: \p{L} = any letter, \p{N} = any digit, \p{Mn} = non-spacing mark (accent)
+symbol          = [_\p{L}] [_\p{L}\p{N}\p{Mn}]*
 
 integer         = [1-9] [0-9]*
 
@@ -62,6 +63,7 @@ regexp_char     = '\\s'
                 | '\\' [0-3] [0-7] [0-7]
                 | '\\x' [0-9A-F] [0-9A-F]
                 | '\\u' [0-9A-F] [0-9A-F] [0-9A-F] [0-9A-F]
+                | '\\' [pP] '{' [A-Za-z_]+ '}'
                 | '\\' [0befntr\\*+?()|/\[]
                 | [^*+?()|/\[ ]
 
@@ -69,9 +71,9 @@ regexp_class    = '[' '^'? '-'? regexp_class_part+ ']'
 
 regexp_class_part = !']' regexp_class_char '-' !']' regexp_class_char
                 | !']' regexp_class_char
-                | '[:' ('alpha'|'upper'|'lower'|'digit'|'alnum') ':]'
 
-regexp_class_char = !'-' regexp_char | [+*?()/|]
+regexp_class_char = !'-' regexp_char
+                | [+*?()/|]
 
 regexp_group    = '(' regexp_group_type? regexp_sequence ')'
 
@@ -79,4 +81,4 @@ regexp_group_type = regexp_group_capture | regexp_negative_lookahead
 
 regexp_negative_lookahead '?!'
 
-regexp_group_capture = '?<' [_[:alnum:]]+ '>'
+regexp_group_capture = '?<' [_\p{L}\p{D}]+ '>'
