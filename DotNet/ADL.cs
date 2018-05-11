@@ -23,19 +23,19 @@ namespace ADL
 	public	Regex	    r_val{get{return m_r_val;} private set{m_r_val = value;}}
 	public	List<Value> a_val{get{return m_a_val;} private set{m_a_val = value;}}
 
-	public	    Value(string _s_val) { s_val = _s_val; }
 	public	    Value(bool _b_val) { b_val = _b_val; }
+	public	    Value(string _s_val) { s_val = _s_val; }
 	public	    Value(ADLObject _o_val) { o_val = _o_val; }
 	public	    Value(Regex _r_val) { r_val = _r_val; }
 	public	    Value(List<Value> _a_val) { a_val = _a_val; }
 	public override string ToString()
 	{
-	    if (m_r_val != null)
-		return m_r_val.ToString();
+	    if (m_s_val != null)
+		return m_s_val;
 	    else if (m_o_val != null)
 		return m_o_val.inspect();
-	    else if (m_s_val != null)
-		return m_s_val;
+	    else if (m_r_val != null)
+		return m_r_val.ToString();
 	    else if (m_a_val != null)
 		throw new System.ArgumentException("REVISIT: Array value ToString Not Implemented");
 	    else
@@ -71,6 +71,28 @@ namespace ADL
 	    children = new List<ADLObject>();
 	}
 
+	// Return a string with all ancestor names from the top.
+	public virtual string pathname()
+	{
+	    return (parent != null ? parent.pathname() + "." : "") +
+		(name != null ? name : "<anonymous>");
+	}
+
+	public string pathname_relative_to(ADLObject them)
+	{
+	    // Trim a common prefix off the pathnames and concatenate the residual
+	    List<ADLObject> mine = new List<ADLObject>(ancestry);
+	    List<ADLObject> theirs = new List<ADLObject>(them.ancestry);
+	    int	    common = 0;
+	    while (mine.Any() && theirs.Any() && mine.First() == theirs.First()) {
+		mine.RemoveAt(0);
+		theirs.RemoveAt(0);
+		common += 1;
+	    }
+	    // REVISIT: If any residual object is anonymous, we need to use an ascending scope to get to the start point
+	    return new String('.', common) + String.Join(".", mine.Select(m => m.name));
+	}
+
 	// Adopt this child
 	public void adopt(ADLObject _child)
 	{
@@ -78,6 +100,23 @@ namespace ADL
 		throw new System.ArgumentException("Can't have two children called "+_child.name);
 
 	    children.Add(_child);
+	}
+
+	public ADLObject child(string name)
+	{
+	    return name == null ? null : children.Find(m => m.name == name);
+	}
+
+	// Search this object and its supertypes for an object of the given name
+	// REVISIT: This is where we need to implement aliases
+	public ADLObject child_transitive(string name)
+	{
+	    ADLObject	m = child(name);
+	    if (m != null)
+		return m;
+	    if (zuper != null)
+		return zuper.child_transitive(name);
+	    return null;
 	}
 
 	// Get list of ancestors starting with the outermost and ending with this object
@@ -110,6 +149,7 @@ namespace ADL
 	    }
 	}
 
+	// Search assignments
 	public Tuple<Value, ADLObject, bool> assigned(ADLObject variable)
 	{
 	    ADLObject outermost = supertypes.Last();	// This will always be "Object"
@@ -147,21 +187,26 @@ namespace ADL
 	    return null;
 	}
 
-	public ADLObject child(string name)
+	public ADLObject    assign(ADLObject variable, Value value, bool is_final)
 	{
-	    if (name == null)
-		return null;
-	    return children.Find(m => m.name == name);
-	}
+	    Tuple<Value, ADLObject, bool> t = assigned(variable);
+	    Value	a = t != null ? t.Item1 : null;	    // Existing value
+	    //ADLObject	p = t != null ? t.Item2 : null;	    // Location of existing assignment
+	    //bool    	f = t != null ? t.Item3 : false;
 
-	public ADLObject child_transitive(string name)
-	{
-	    ADLObject	m = child(name);
-	    if (m != null)
-		return m;
-	    if (zuper != null)
-		return zuper.child_transitive(name);
-	    return null;
+	    if (a != null && a != value && variable != this)
+		throw new System.ArgumentException("#{inspect} cannot have two assignments to #{variable.inspect}");
+
+	    if (variable.is_syntax)
+	    {
+		string	s = value.s_val;
+		if (s == null)	// REVISIT: This should have already been checked
+		    throw new System.ArgumentException("Assignment to Syntax requires a Regexp string");
+		syntax = new Regex(@"\G" + s);
+		return variable;    // Not used, but flags that we succeeded
+	    }
+	    else
+		return new Assignment(this, variable, value, is_final);
 	}
 
 	// Is this object a subtype of the "Reference" built-in?
@@ -194,29 +239,24 @@ namespace ADL
 	    return null;
 	}
 
-	// Return a string with all ancestor names from the top.
-	public virtual string pathname()
+	// Get the built-in supertype of all Assignments
+	public ADLObject   assignment_supertype()
 	{
-	    return (parent != null ? parent.pathname() + "." : "") +
-		(name != null ? name : "<anonymous>");
-	}
-
-	public string pathname_relative_to(ADLObject them)
-	{
-	    List<ADLObject> mine = new List<ADLObject>(ancestry);
-	    List<ADLObject> theirs = new List<ADLObject>(them.ancestry);
-	    int	    common = 0;
-	    while (mine.Any() && theirs.Any() && mine.First() == theirs.First()) {
-		mine.RemoveAt(0);
-		theirs.RemoveAt(0);
-		common += 1;
-	    }
-	    return new String('.', common) + String.Join(".", mine.Select(m => m.name));
+	    ADLObject	p = this;
+	    while (p.parent != null)
+		p = p.parent;
+	    return child("Assignment");
 	}
 
 	private bool is_top{get{
 	    return parent == null;
 	}}
+
+	// Manage generation of textual output
+	public virtual string inspect()
+	{
+	    return pathname() + zuper_name();
+	}
 
 	public string	zuper_name()
 	{
@@ -227,33 +267,6 @@ namespace ADL
 		    return ": "+zuper.name;
 	    else
 		return null;
-	}
-
-	public virtual string inspect()
-	{
-	    return pathname() + zuper_name();
-	}
-
-	public ADLObject    assign(ADLObject variable, Value value, bool is_final)
-	{
-	    Tuple<Value, ADLObject, bool> t = assigned(variable);
-	    Value	a = t != null ? t.Item1 : null;	    // Existing value
-	    //ADLObject	p = t != null ? t.Item2 : null;	    // Location of existing assignment
-	    //bool    	f = t != null ? t.Item3 : false;
-
-	    if (a != null && a != value && variable != this)
-		throw new System.ArgumentException("#{inspect} cannot have two assignments to #{variable.inspect}");
-
-	    if (variable.is_syntax)
-	    {
-		string	s = value.s_val;
-		if (s == null)	// REVISIT: This should have already been checked
-		    throw new System.ArgumentException("Assignment to Syntax requires a Regexp string");
-		syntax = new Regex(@"\G" + s);
-		return variable;    // Not used, but flags that we succeeded
-	    }
-	    else
-		return new Assignment(this, variable, value, is_final);
 	}
 
 	public virtual string as_inline(string level = "")
@@ -308,14 +321,6 @@ namespace ADL
 	    if (self_assignment != null && children.Any())
 		Console.Write(self_assignment.as_inline());
 	    Console.WriteLine(!has_attrs || self_assignment != null ? ";" : "");
-	}
-
-	public ADLObject   assignment_supertype()
-	{
-	    ADLObject	p = this;
-	    while (p.parent != null)
-		p = p.parent;
-	    return child("Assignment");
 	}
     }
 
@@ -380,8 +385,15 @@ namespace ADL
 	}
     }
 
-    class ADL
+    class Context
     {
+	public Context()
+	{
+	    make_built_ins();
+	}
+
+	public	ADLObject   top;
+
 	private List<ADLObject> _stack;
 	public List<ADLObject> stack{
 	    get{
@@ -396,11 +408,6 @@ namespace ADL
 	public ADLObject    stacktop{get{
 	    return stack[stack.Count-1];
 	}}
-
-	public ADL()
-	{
-	    make_built_ins();
-	}
 
 	private	Scanner	scanner;
 	public ADLObject    parse(string io, string filename, ADLObject scope = null)
@@ -511,7 +518,6 @@ namespace ADL
 	{
 	}
 
-	public	ADLObject   top;
 	private	ADLObject   _object;
 	private	ADLObject   regexp;
 	// private	ADLObject   syntax;
@@ -542,21 +548,33 @@ namespace ADL
 
     class Scanner
     {
-	private	ADL	    adl;	// The ADL context we're building
+	private	Context	    context;	// The ADL context we're building
 	private	string	    input;	// The input string
 	private	string	    filename;	// Name of file being processed, for error messages
 	private int	    offset;	// Character offset in input
 	private	string	    current;    // Name of the current token
 	private	string	    value;	// Value of the current token
 
-	public Scanner(ADL _adl, string _io, string _filename)
+	public Scanner(Context _context, string _io, string _filename)
 	{
-	    adl = _adl;
+	    context = _context;
 	    input = _io;
 	    filename = _filename;
 	    offset = 0;
 	    current = null;
 	    value = null;
+	}
+
+	public string location()
+	{
+	    string  to_here = input.Remove(offset);
+	    int line_number = to_here.Count(c => c == '\n') + 1;
+	    int column_number = to_here.LastIndexOf('\n');
+	    column_number = column_number == -1 ? to_here.Length-1 : offset-column_number-1;
+	    string line_text = input.Substring((offset - column_number));
+	    if (line_text.IndexOf("\n") > 0)
+		line_text = line_text.Remove(line_text.IndexOf("\n"));
+	    return "line "+line_number+" column "+column_number+" of "+filename+":\n"+line_text+"\n";
 	}
 
 	public ADLObject parse()
@@ -596,7 +614,7 @@ namespace ADL
 		return null;
 
 	    if (expect("semi") != null)
-		return adl.stacktop;  // Empty definition
+		return context.stacktop;  // Empty definition
 	    List<string>    object_name = path_name();
 	    return body(object_name);
 	}
@@ -629,7 +647,7 @@ namespace ADL
 
 	private ADLObject	body(List<string> object_name)
 	{
-	    List<ADLObject> save = new List<ADLObject>(adl.stack);  // Save the stack
+	    List<ADLObject> save = new List<ADLObject>(context.stack);  // Save the stack
 	    ADLObject	    defining = null;
 
 	    if ((defining = reference(object_name)) != null)
@@ -650,19 +668,19 @@ namespace ADL
 
 		if (inheriting || supertype_name != null || peek("lbrack"))
 		{
-		    defining = adl.start_object(object_name, supertype_name);
+		    defining = context.start_object(object_name, supertype_name);
 		    has_block = block(object_name);
 		    is_array = array_indicator();
 		    defining.is_array = is_array;
-		    adl.end_object();
+		    context.end_object();
 		    is_assignment = assignment(defining) != null;
 		}
 		else if (peek("open"))
 		{
-		    defining = adl.resolve_name(object_name, 0);
-		    // if (defining.ancestry is not a prefix of adl.stack)
+		    defining = context.resolve_name(object_name, 0);
+		    // if (defining.ancestry is not a prefix of context.stack)
 			// REVISIT: This is contextual extension
-		    adl.stack = defining.ancestry;
+		    context.stack = defining.ancestry;
 		    has_block = block(object_name);
 		}
 		else if (object_name != null && (peek("equals") || peek("approx")))
@@ -671,21 +689,21 @@ namespace ADL
 		    name_prefix = new List<string>(object_name);
 		    name_prefix.RemoveAt(object_name.Count-1);
 
-		    ADLObject	reopen = adl.resolve_name(name_prefix, 0);
-		    adl.stack = reopen.ancestry;
+		    ADLObject	reopen = context.resolve_name(name_prefix, 0);
+		    context.stack = reopen.ancestry;
 		    ADLObject	variable;
-		    variable = adl.resolve_name(new List<string>{object_name[object_name.Count-1]}, 0);
+		    variable = context.resolve_name(new List<string>{object_name[object_name.Count-1]}, 0);
 		    defining = assignment(variable);
 		    is_assignment = defining != null;
 		}
 		else if (object_name != null)
-		    defining = adl.resolve_name(object_name, 0);
+		    defining = context.resolve_name(object_name, 0);
 
 		if (!has_block || is_array || is_assignment)
 		    if (!peek("close"))
 			require("semi");
 	    }
-	    adl.stack = save;
+	    context.stack = save;
 	    opt_white();
 
 	    return defining;
@@ -744,23 +762,23 @@ namespace ADL
 		    error("expected path name for Reference");
 
 		// Find what this is a reference to
-		ADLObject   reference_object = adl.resolve_name(reference_to, 0);
+		ADLObject   reference_object = context.resolve_name(reference_to, 0);
 
 		// An eponymous reference uses reference_to for object_name. It better not be local.
-		if (object_name == null && reference_object.parent == adl.stacktop)
-		    error("Reference to " + adl.joined_name(reference_to) + ' ' + " in " + reference_object.parent.pathname() + " cannot have the same name");
+		if (object_name == null && reference_object.parent == context.stacktop)
+		    error("Reference to " + context.joined_name(reference_to) + ' ' + " in " + reference_object.parent.pathname() + " cannot have the same name");
 
 		List<string>	def_name = object_name;
 		if (def_name == null)
 		    def_name = new List<string>{reference_to[reference_to.Count-1]};
-		defining = adl.start_object(def_name, new List<string>{"Reference"});
+		defining = context.start_object(def_name, new List<string>{"Reference"});
 
 		defining.is_array = op == "=>";
 
 		defining.assign(defining, new Value(reference_object), true);
 
 		bool	has_block = block(object_name);
-		adl.end_object();
+		context.end_object();
 		bool	has_assignment = assignment(defining) != null;
 
 		if (!has_block || has_assignment)
@@ -780,9 +798,9 @@ namespace ADL
 	    throw new System.NotImplementedException("REVISIT: Aliases");
 /*
 	    ADLObject	defining = null;
-	    defining = adl.start_object(object_name, ['Alias']);
+	    defining = context.start_object(object_name, ['Alias']);
 	    defining.assign(defining, m_alias_for, false);
-	    adl.end_object();
+	    context.end_object();
 	    return defining;
 */
 	}
@@ -795,7 +813,7 @@ namespace ADL
 		bool	is_final = op == "=";
 		opt_white();
 
-		ADLObject   parent = adl.stacktop;
+		ADLObject   parent = context.stacktop;
 
 		Tuple<Value, ADLObject, bool>	existing = parent.assigned(variable);
 		if (existing != null)
@@ -864,10 +882,10 @@ namespace ADL
 		ADLObject	o;
 		if (supertype_name != null)
 		{	// Literal object
-		    o = adl.start_object(null, supertype_name, true);
+		    o = context.start_object(null, supertype_name, true);
 		    block(null);
 		    assignment(o);
-		    adl.end_object();
+		    context.end_object();
 		    val = new Value(o);
 		}
 		else
@@ -875,7 +893,7 @@ namespace ADL
 		    List<string>	p = path_name();
 		    if (p == null)
 			error("Assignment to " + variable.name + " must name an ADL object");
-		    o = adl.resolve_name(p);
+		    o = context.resolve_name(p);
 		    val = new Value(o);
 		    // If the variable is a reference and refine_from is set, the object must be a subtype
 		}
@@ -951,18 +969,6 @@ namespace ADL
 	    return _ParseRE;
 	}
 
-	public string location()
-	{
-	    string  to_here = input.Remove(offset);
-	    int line_number = to_here.Count(c => c == '\n') + 1;
-	    int column_number = to_here.LastIndexOf('\n');
-	    column_number = column_number == -1 ? to_here.Length-1 : offset-column_number-1;
-	    string line_text = input.Substring((offset - column_number));
-	    if (line_text.IndexOf("\n") > 0)
-		line_text = line_text.Remove(line_text.IndexOf("\n"));
-	    return "line "+line_number+" column "+column_number+" of "+filename+":\n"+line_text+"\n";
-	}
-
 	// Match a token to use as our lookahead token, disregarding any existing one.
 	// Use the token rule if provided, otherwise use the standard one
 	private string next_token(Regex rule = null)
@@ -999,7 +1005,7 @@ namespace ADL
 	// Report a parse failure
 	public void error(string message)
 	{
-	    adl.error(message);
+	    context.error(message);
 	}
 
 	// Consume the current token, returning the value
@@ -1031,6 +1037,14 @@ namespace ADL
 	    return v;
 	}
 
+	private string require(string token)
+	{
+	    string    t = expect(token);
+	    if (t == null)
+		  error("Expected "+token);
+	    return t;
+	}
+
 	private bool expect(Regex rule)
 	{
 	    value = next_token(rule);
@@ -1038,14 +1052,6 @@ namespace ADL
 		return false;
 	    offset += value.Length;
 	    return true;
-	}
-
-	private string require(string token)
-	{
-	    string    t = expect(token);
-	    if (t == null)
-		  error("Expected "+token);
-	    return t;
 	}
 
 	private void	require(Regex rule, string context)
@@ -1165,7 +1171,7 @@ namespace ADL
     class Test {
 	static  void Main(string[] args)
 	{
-	    ADL		adl = new ADL();
+	    Context	context = new Context();
 	    ADLObject   scope = null;
 	    bool	show_all = false;
 	    foreach (string arg in args)
@@ -1173,10 +1179,10 @@ namespace ADL
 		if (arg == "-a")
 		    show_all = true;
 		else
-		    scope = adl.parse(File.ReadAllText(arg), arg, scope);
+		    scope = context.parse(File.ReadAllText(arg), arg, scope);
 	    }
 	    if (show_all)
-		adl.top.emit();
+		context.top.emit();
 	    else if (scope != null)
 	     	scope.emit();
 	}

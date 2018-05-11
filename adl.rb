@@ -1,18 +1,46 @@
-class ADL
-  attr_reader :stack
+#
+# Aspect Definition Language.
+#
+# Instantiate the ADL::Context and ask it to parse some ADL text.
+# The Context will use an ADL::Scanner to parse the input.
+#
+# The ADL text will be compiled into a tree of ADLObjects, including Assignments,
+# which your code can then traverse to produce output. Start traversing the
+# tree at context.top(), or at the last open namespace returned from parse().
+#
+module ADL
 
   class ADLObject
     attr_reader :parent, :name, :zuper, :aspect, :syntax
     attr_accessor :is_array, :is_sterile, :is_complete
 
-    def children
-      @children ||= []
-    end
-
     def initialize parent, name, zuper, aspect = nil
       @parent, @name, @zuper, @aspect = parent, name, zuper, aspect || parent
 
       @parent.adopt(self) if @parent
+    end
+
+    # Manage naming
+    def pathname
+      # Return a string with all ancestor names from the top.
+      (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name || '<anonymous>')
+    end
+
+    def pathname_relative_to object
+      pathname
+=begin
+      # REVISIT: Implement emitting relative names properly
+      s = ancestry
+      o = object.ancestry
+      c = s & o
+      c.pop if (s-c).empty?
+      '.'*(o-c).size + (s-c).map(&:name)*'.'
+=end
+    end
+
+    # Manage children
+    def children
+      @children ||= []
     end
 
     def adopt child
@@ -22,6 +50,18 @@ class ADL
       children << child
     end
 
+    def child? name
+      name && children.detect{|m| m.name == name}
+    end
+
+    # Search this object and its supertypes for an object of the given name
+    # REVISIT: This is where we need to implement aliases
+    def child_transitive? name
+      children.detect{|m| m.name == name} or
+        (@zuper and @zuper.child_transitive?(name))
+    end
+
+    # Manage inheritance
     def ancestry
       @ancestry ||= begin
         ((@parent ? @parent.ancestry : []) + [self]).freeze
@@ -34,6 +74,7 @@ class ADL
       end
     end
 
+    # Search assignments
     def assigned variable
       if variable.parent == (o = supertypes[-1])  # supertypes[-1] is always Object
         result =
@@ -60,15 +101,19 @@ class ADL
       assigned(variable) or @zuper && @zuper.assigned_transitive(variable)
     end
 
-    def child? name
-      name && children.detect{|m| m.name == name}
+    def assign variable, value, is_final
+      a, p, f = assigned(variable)
+      if a and a != value and variable != self   # Reference variable Super allows self-assignment
+        raise "#{inspect} cannot have two assignments to #{variable.inspect}"
+      end
+      if variable.is_syntax
+        @syntax = Regexp.new('\A'+value[1..-2])
+      else
+        Assignment.new(self, variable, value, is_final)
+      end
     end
 
-    def child_transitive? name
-      children.detect{|m| m.name == name} or
-        (@zuper and @zuper.child_transitive?(name))
-    end
-
+    # Manage built-ins
     def is_reference
       supertypes[-1].name == 'Object' && supertypes[-2].name == 'Reference'
     end
@@ -85,24 +130,13 @@ class ADL
       @syntax || (@zuper && @zuper.syntax_transitive)
     end
 
-    def pathname
-      (@parent && !@parent.top? ? @parent.pathname+'.' : '')+(@name || '<anonymous>')
-    end
-
-    def pathname_relative_to object
-      pathname
-=begin
-      # REVISIT: Implement emitting relative names properly
-      s = ancestry
-      o = object.ancestry
-      c = s & o
-      c.pop if (s-c).empty?
-      '.'*(o-c).size + (s-c).map(&:name)*'.'
-=end
-    end
-
     def top?
       !@parent
+    end
+
+    # Manage generation of textual output
+    def inspect
+      "#{pathname}#{zuper_name}"
     end
 
     def zuper_name
@@ -116,24 +150,8 @@ class ADL
       end
     end
 
-    def inspect
-      "#{pathname}#{zuper_name}"
-    end
-
-    def assign variable, value, is_final
-      a, p, f = assigned(variable)
-      if a and a != value and variable != self   # Reference variable Super allows self-assignment
-        raise "#{inspect} cannot have two assignments to #{variable.inspect}"
-      end
-      if variable.is_syntax
-        @syntax = Regexp.new('\A'+value[1..-2])
-      else
-        Assignment.new(self, variable, value, is_final)
-      end
-    end
-
-    # This is used for object literals
     def as_inline
+      # This is used for object literals
       self_assignment = children.detect{|m| m.variable == self}
       others = children-[self_assignment]
       ":#{@zuper.name}#{
@@ -211,106 +229,380 @@ class ADL
     end
   end
 
-  def initialize
-    make_built_in
-  end
+  class Context
+    def initialize
+      make_built_ins
+    end
 
-  def make_built_in
-    @top = ADLObject.new(nil, 'TOP', nil, nil)
-    @object = ADLObject.new(@top, 'Object', nil, nil)
-    @regexp = ADLObject.new(@top, 'Regular Expression', @object, nil)
-    @syntax = ADLObject.new(@object, 'Syntax', @regexp, nil)
-    @reference = ADLObject.new(@top, 'Reference', @object, nil)
-    @assignment = ADLObject.new(@top, 'Assignment', @object, nil)
-    @alias = ADLObject.new(@top, 'Alias', @object, nil)
-    @alias_for = ADLObject.new(@alias, 'For', @reference, nil)
-  end
+    attr_reader :top
 
-  def parse io, filename, top = nil
-    @scanner = Scanner.new(self, io, filename)
-    @stack = (top || @top).ancestry+[]
-    @scanner.parse
-  end
+    attr_reader :stack
+    def stacktop
+      @stack.last
+    end
 
-  def emit
-    @top.emit
-  end
+    def parse io, filename, top = nil
+      @scanner = Scanner.new(self, io, filename)
+      @stack = (top || @top).ancestry+[]
+      @scanner.parse
+    end
 
-  # Report a parse failure
-  def error message
-    puts "#{message} at #{@scanner.location}"
-    exit 1
-  end
+    # Report a parse failure
+    def error message
+      puts "#{message} at #{@scanner.location}"
+      exit 1
+    end
 
-  def resolve_name path_name, levels_up = 1
-    o = @stack.last
-    levels_up.times { o = o.parent }
-    return o if path_name.empty?
-    path_name = []+path_name
-    if path_name[0] == '.'      # Do not implicitly ascend
-      no_ascend = true
-      path_name.shift
-      while path_name[0] == '.' # just ascend explicitly
+    def resolve_name path_name, levels_up = 1
+      o = stacktop
+      levels_up.times { o = o.parent }
+      return o if path_name.empty?
+      path_name = []+path_name
+      if path_name[0] == '.'      # Do not implicitly ascend
+        no_ascend = true
         path_name.shift
-        o = o.parent
-      end
-    end
-    return o if path_name.empty?
-
-    start_parent = o
-    # Ascend the parent chain until we fail or find our first name:
-    unless no_ascend
-      until path_name.empty? or path_name[0] == (m = o).name or m = o.child_transitive?(path_name[0])
-        unless o.parent
-          error("Failed to find #{path_name[0].inspect} from #{@stack.last.name}")
+        while path_name[0] == '.' # just ascend explicitly
+          path_name.shift
+          o = o.parent
         end
-        o = o.parent    # Ascend
       end
-      o = m
-      path_name.shift
-    end
-    error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
-    return o if path_name.empty?
+      return o if path_name.empty?
 
-    # Now descend from the current position down the named children
-    # REVISIT: If we descend a supertype's child, this becomes contextual!
-    path_name.each do |n|
-      m = o.child?(n)
-      error("Failed to find #{n.inspect} in #{o.pathname}") unless m
-      o = m   # Descend
-    end
-    o
-  end
+      start_parent = o
+      # Ascend the parent chain until we fail or find our first name:
+      unless no_ascend
+        until path_name.empty? or path_name[0] == (m = o).name or m = o.child_transitive?(path_name[0])
+          unless o.parent
+            error("Failed to find #{path_name[0].inspect} from #{stacktop.name}")
+          end
+          o = o.parent    # Ascend
+        end
+        o = m
+        path_name.shift
+      end
+      error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
+      return o if path_name.empty?
 
-  # Called when the name and supertype have been parsed
-  def start_object(object_name, supertype_name, orphan = false)
-    # Resolve the object_name prefix to find the parent and local name:
-    if object_name
-      parent = resolve_name(object_name[0..-2], 0)
-      @stack.replace(parent.ancestry)
-    else
-      parent = @stack.last
-    end
-
-    # Resolve the supertype_name to find the zuper:
-    zuper = supertype_name ? resolve_name(supertype_name, 0) : @object
-
-    local_name = object_name ? object_name[-1] : nil
-    if local_name and o = parent.child?(local_name)
-      error("Cannot change supertype of #{local_name} from #{o.zuper.name} to #{supertype_name*' '}") if supertype_name && o.zuper.name != supertype_name*' '
-    else
-      o = ADLObject.new(orphan ? nil : parent, local_name, zuper)
+      # Now descend from the current position down the named children
+      # REVISIT: If we descend a supertype's child, this becomes contextual!
+      path_name.each do |n|
+        m = o.child?(n)
+        error("Failed to find #{n.inspect} in #{o.pathname}") unless m
+        o = m   # Descend
+      end
+      o
     end
 
-    @stack.push o
-    o
-  end
+    # Called when the name and supertype have been parsed
+    def start_object(object_name, supertype_name, orphan = false)
+      # Resolve the object_name prefix to find the parent and local name:
+      if object_name
+        parent = resolve_name(object_name[0..-2], 0)
+        @stack.replace(parent.ancestry)
+      else
+        parent = stacktop
+      end
 
-  def end_object
-    @stack.pop
+      # Resolve the supertype_name to find the zuper:
+      zuper = supertype_name ? resolve_name(supertype_name, 0) : @object
+
+      local_name = object_name ? object_name[-1] : nil
+      if local_name and o = parent.child?(local_name)
+        error("Cannot change supertype of #{local_name} from #{o.zuper.name} to #{supertype_name*' '}") if supertype_name && o.zuper.name != supertype_name*' '
+      else
+        o = ADLObject.new(orphan ? nil : parent, local_name, zuper)
+      end
+
+      @stack.push o
+      o
+    end
+
+    def end_object
+      @stack.pop
+    end
+
+    def make_built_ins
+      @top = ADLObject.new(nil, 'TOP', nil, nil)
+      @object = ADLObject.new(@top, 'Object', nil, nil)
+      @regexp = ADLObject.new(@top, 'Regular Expression', @object, nil)
+      @syntax = ADLObject.new(@object, 'Syntax', @regexp, nil)
+      @reference = ADLObject.new(@top, 'Reference', @object, nil)
+      @assignment = ADLObject.new(@top, 'Assignment', @object, nil)
+      @alias = ADLObject.new(@top, 'Alias', @object, nil)
+      @alias_for = ADLObject.new(@alias, 'For', @reference, nil)
+    end
   end
 
   class Scanner
+    def initialize context, io, filename
+      @context = context
+      @input = io.to_s
+      @filename = filename
+      @offset = 0
+      @current = nil    # The kind of token at @offset (if it has been scanned)
+      @value = nil      # The text associated with the current token
+    end
+
+    def location
+      line_number = @input[0, @offset].count("\n")+1
+      column_number = @offset-(@input[0, @offset].rindex("\n") || 1)-1
+      line_text = @input[(@offset-column_number)..-1].sub(/\n.*/m,'')
+      "line #{line_number} column #{column_number} of #{@filename}:\n#{line_text}\n"
+    end
+
+    def parse
+      # Any rule that consumes a token that may be followed by white space should skip it before returning
+      opt_white
+      while o = definition
+        last = o
+      end
+      error "Parse terminated at #{peek.inspect}" if peek
+      last
+    end
+
+  private
+    def definition
+      return nil if peek('close') or !peek
+      return @context.stacktop if expect('semi')   # Empty definition
+      object_name = path_name
+      body(object_name)
+    end
+
+    def path_name
+      names = []
+      while expect('scope')
+        opt_white
+        names << '.'
+      end
+      while n = (expect('symbol') or expect('integer'))
+        opt_white
+        names << [n]
+        while n = (expect('symbol') or expect('integer'))
+          opt_white
+          names[-1] << n  # Compound name - this is a following word
+        end
+        # Make the name array into a multi-word string:
+        names[-1] = names[-1]*' '
+        if expect('scope')
+          opt_white
+        else
+          break
+        end
+      end
+      names.empty? ? nil : names
+    end
+
+    def body(object_name)
+      # print "In #{@context.stacktop.inspect} defining #{object_name} and looking at "; p peek; debugger
+      save = @context.stack.dup
+      unless defining = reference(object_name) || alias_from(object_name)
+        inheriting = peek('inherits')
+        supertype_name = supertype
+
+        # We only want to start a new object if there's a supertype, or a block, or an array indicator
+        if inheriting || supertype_name || peek('lbrack')
+          defining = @context.start_object(object_name, supertype_name)
+          has_block = block object_name
+          defining.is_array = is_array = !!array_indicator
+          @context.end_object
+          is_assignment = assignment(defining)
+        elsif peek('open')
+          defining = @context.resolve_name(object_name, 0)
+          if (@context.stack & defining.ancestry) != @context.stack
+            # puts "REVISIT: Contextual extension"
+          end
+          @context.stack.replace defining.ancestry
+          has_block = block object_name
+        elsif object_name and peek('equals') || peek('approx')
+          reopen = @context.resolve_name(object_name[0..-2], 0)
+          @context.stack.replace reopen.ancestry
+          variable = @context.resolve_name([object_name[-1]], 0)
+          is_assignment = defining = assignment(variable)
+        elsif object_name
+          # This may be the trailing namespace to use for a following file.
+          defining = @context.resolve_name(object_name, 0)
+        end
+        if !has_block || is_array || is_assignment
+          peek 'close' or require 'semi'
+        end
+      end
+      @context.stack.replace(save)
+      opt_white
+      defining || true
+    end
+
+    def supertype
+      if expect('inherits')
+        opt_white
+        supertype_name = path_name
+        error('Expected supertype, body or ;') unless supertype_name or peek('semi') or peek('open') or peek('approx') or peek('equals')
+        supertype_name || ['Object']
+      end
+    end
+
+    def block object_name
+      if has_block = expect('open')
+        opt_white
+        while definition
+        end
+        require 'close'
+        opt_white
+        true
+      end
+    end
+
+    def array_indicator
+      if expect 'lbrack'
+        opt_white
+        require 'rbrack'
+        opt_white
+        true
+      end
+    end
+
+    def reference object_name
+      if operator = (expect('arrow') or expect('darrow'))
+        opt_white
+        reference_to = path_name
+        error('expected path name for Reference') unless reference_to
+
+        # Find what this is a reference to
+        reference_object = @context.resolve_name(reference_to, 0)
+
+        # An eponymous reference uses reference_to for object_name. It better not be local.
+        if !object_name && reference_object.parent == @context.stacktop
+          error("Reference to #{reference_to*' '} in #{reference_object.parent.pathname} cannot have the same name")
+        end
+
+        # Create the reference
+        defining = @context.start_object(object_name||[reference_to.last], ['Reference'])
+        defining.is_array = operator == '=>'
+
+        # Add a final assignment (to itself) for its type:
+        defining.assign(defining, reference_object, true)
+
+        has_block = block object_name
+        @context.end_object
+
+        # The following assignment has the same parent as the Reference itself
+        has_assignment = assignment(defining)
+
+        peek('rbrack') or require 'semi' if !has_block || has_assignment
+        opt_white
+        defining
+      end
+    end
+
+    def alias_from object_name
+      return nil unless expect('rename')
+      defining = @context.start_object(object_name, ['Alias'])
+      defining.assign(defining, @alias_for, false)
+      @context.end_object
+      defining
+    end
+
+    def assignment variable
+      if operator = ((is_final = !!expect('equals')) || expect('approx'))
+        opt_white
+        parent = @context.stacktop
+
+        # Re-assignment is illegal
+        local_value, = parent.assigned(variable)
+        error("Cannot reassign #{parent.name}.#{variable.name} from #{local_value.inspect}") if local_value
+
+        # Detect the required value type from the variable, including arrays, and deal with it
+        controlling_syntax = variable
+        if variable.is_syntax
+          val = expect('regexp')
+        else
+          if variable.is_reference
+            existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
+            refine_from = (final && existing) || parent.supertypes[-1] # Use Object as a default
+            refine_from = Array(refine_from)[0] # In case of an array Reference
+          else
+            # If this variable is a parameter of the same type as its parent, and this parent is also a subtype,
+            # allow any value that the subtype would allow. This special case supports e.g. Number.Minimum
+            if variable.supertypes.include?(variable.parent) && parent.supertypes.include?(variable.parent)
+              controlling_syntax = parent
+            end
+            # Find an existing assignment, including inherited, to check for Is Final
+            existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
+            error("Cannot override final assignment #{parent.name}.#{variable.name} = #{existing.inspect}") if final
+          end
+
+          val = parse_value(controlling_syntax, refine_from)
+        end
+
+        parent.assign variable, val, is_final
+      end
+    end
+
+    def parse_value variable, refine_from
+      if variable.is_array and peek('lbrack')
+        val = parse_array(variable, refine_from)
+      else
+        a = atomic_value(variable, refine_from)
+        a = [a] if variable.is_array
+        a
+      end
+    end
+
+    def atomic_value variable, refine_from
+      # puts "Looking for value of #{variable.name}#{refine_from ? " refining #{refine_from.name}" : ''}"
+      if refine_from
+        if supertype_name = supertype
+          # Literal object. What should the parent of such objects be?
+          defining = @context.start_object(nil, supertype_name, true)
+          block(nil)
+          assignment(defining)
+          @context.end_object
+          val = defining
+        else
+          p = path_name
+          error("Assignment to #{variable.name} must name an ADL object") unless p
+          val = @context.resolve_name(p)
+          # If the variable is a reference and refine_from is set, the object must be a subtype
+        end
+        if refine_from && !val.supertypes.include?(refine_from)
+          error("Assignment of #{val.inspect} to #{variable.name} must refine the existing final assignment of #{refine_from.name}")
+        end
+        val
+      else
+        syntax = variable.syntax_transitive
+        error("#{variable.inspect} has no Syntax so cannot be assigned") unless syntax
+        # Get the Syntax for the variable and accept a value of that type
+        val = next_token syntax
+        error("Expected a value matching the syntax for an #{variable.name}") unless val
+        consume
+        opt_white
+        val
+      end
+    end
+
+    def parse_array variable, refine_from
+      return nil unless expect('lbrack')
+      array_value = []
+      while val = atomic_value(variable, refine_from)
+        array_value << val
+        break unless expect('comma')
+      end
+      error("Array elements must separated by , and end in ]") unless expect('rbrack')
+      array_value
+    end
+
+    def integer
+      # REVISIT: Not sure we should eval() here:
+      s = expect('integer') and eval(s)
+    end
+
+    def opt_white
+      white or true
+    end
+
+    def white
+      expect('white')
+    end
+
     Tokens = {
       white: %r{(\s|//.*)+},
       symbol: %r{[_\p{L}][_\p{L}\p{N}\p{Mn}]*},
@@ -378,287 +670,6 @@ class ADL
       }x
     }
 
-    def initialize adl, io, filename
-      @adl = adl
-      @input = io.to_s
-      @filename = filename
-      @offset = 0
-      @current = nil    # The kind of token at @offset (if it has been scanned)
-      @value = nil      # The text associated with the current token
-    end
-
-    def location
-      line_number = @input[0, @offset].count("\n")+1
-      column_number = @offset-(@input[0, @offset].rindex("\n") || 1)-1
-      line_text = @input[(@offset-column_number)..-1].sub(/\n.*/m,'')
-      "line #{line_number} column #{column_number} of #{@filename}:\n#{line_text}\n"
-    end
-
-    def next_token rule = nil
-      match = (rule || parse_re).match(@input[@offset..-1])
-      if !match
-        @current = @value = nil
-      elsif !rule
-        @current, @value = match.names.map{|n| match[n] ? [n, match[n]] : nil}.compact[0]
-      else
-        @current = match ? rule : nil
-        @value = match ? match.to_s : ''
-      end
-    end
-
-    def parse
-      # Any rule that consumes a token that may be followed by white space should skip it before returning
-      opt_white
-      while o = definition
-        last = o
-      end
-      error "Parse terminated at #{peek.inspect}" if peek
-      last
-    end
-
-    def definition
-      return nil if peek('close') or !peek
-      return @adl.stack.last if expect('semi')   # Empty definition
-      object_name = path_name
-      body(object_name)
-    end
-
-    def path_name
-      names = []
-      while expect('scope')
-        opt_white
-        names << '.'
-      end
-      while n = (expect('symbol') or expect('integer'))
-        opt_white
-        names << [n]
-        while n = (expect('symbol') or expect('integer'))
-          opt_white
-          names[-1] << n  # Compound name - this is a following word
-        end
-        # Make the name array into a multi-word string:
-        names[-1] = names[-1]*' '
-        if expect('scope')
-          opt_white
-        else
-          break
-        end
-      end
-      names.empty? ? nil : names
-    end
-
-    def body(object_name)
-      # print "In #{@adl.stack.last.inspect} defining #{object_name} and looking at "; p peek; debugger
-      save = @adl.stack.dup
-      unless defining = reference(object_name) || alias_from(object_name)
-        inheriting = peek('inherits')
-        supertype_name = supertype
-
-        # We only want to start a new object if there's a supertype, or a block, or an array indicator
-        if inheriting || supertype_name || peek('lbrack')
-          defining = @adl.start_object(object_name, supertype_name)
-          has_block = block object_name
-          defining.is_array = is_array = !!array_indicator
-          @adl.end_object
-          is_assignment = assignment(defining)
-        elsif peek('open')
-          defining = @adl.resolve_name(object_name, 0)
-          if (@adl.stack & defining.ancestry) != @adl.stack
-            # puts "REVISIT: Contextual extension"
-          end
-          @adl.stack.replace defining.ancestry
-          has_block = block object_name
-        elsif object_name and peek('equals') || peek('approx')
-          reopen = @adl.resolve_name(object_name[0..-2], 0)
-          @adl.stack.replace reopen.ancestry
-          variable = @adl.resolve_name([object_name[-1]], 0)
-          is_assignment = defining = assignment(variable)
-        elsif object_name
-          # This may be the trailing namespace to use for a following file.
-          defining = @adl.resolve_name(object_name, 0)
-        end
-        if !has_block || is_array || is_assignment
-          peek 'close' or require 'semi'
-        end
-      end
-      @adl.stack.replace(save)
-      opt_white
-      defining || true
-    end
-
-    def supertype
-      if expect('inherits')
-        opt_white
-        supertype_name = path_name
-        error('Expected supertype, body or ;') unless supertype_name or peek('semi') or peek('open') or peek('approx') or peek('equals')
-        supertype_name || ['Object']
-      end
-    end
-
-    def block object_name
-      if has_block = expect('open')
-        opt_white
-        while definition
-        end
-        require 'close'
-        opt_white
-        true
-      end
-    end
-
-    def array_indicator
-      if expect 'lbrack'
-        opt_white
-        require 'rbrack'
-        opt_white
-        true
-      end
-    end
-
-    def reference object_name
-      if operator = (expect('arrow') or expect('darrow'))
-        opt_white
-        reference_to = path_name
-        error('expected path name for Reference') unless reference_to
-
-        # Find what this is a reference to
-        reference_object = @adl.resolve_name(reference_to, 0)
-
-        # An eponymous reference uses reference_to for object_name. It better not be local.
-        if !object_name && reference_object.parent == @adl.stack.last
-          error("Reference to #{reference_to*' '} in #{reference_object.parent.pathname} cannot have the same name")
-        end
-
-        # Create the reference
-        defining = @adl.start_object(object_name||[reference_to.last], ['Reference'])
-        defining.is_array = operator == '=>'
-
-        # Add a final assignment (to itself) for its type:
-        defining.assign(defining, reference_object, true)
-
-        has_block = block object_name
-        @adl.end_object
-
-        # The following assignment has the same parent as the Reference itself
-        has_assignment = assignment(defining)
-
-        peek('rbrack') or require 'semi' if !has_block || has_assignment
-        opt_white
-        defining
-      end
-    end
-
-    def alias_from object_name
-      return nil unless expect('rename')
-      defining = @adl.start_object(object_name, ['Alias'])
-      defining.assign(defining, @alias_for, false)
-      @adl.end_object
-      defining
-    end
-
-    def assignment variable
-      if operator = ((is_final = !!expect('equals')) || expect('approx'))
-        opt_white
-        parent = @adl.stack.last
-
-        # Re-assignment is illegal
-        local_value, = parent.assigned(variable)
-        error("Cannot reassign #{parent.name}.#{variable.name} from #{local_value.inspect}") if local_value
-
-        # Detect the required value type from the variable, including arrays, and deal with it
-        controlling_syntax = variable
-        if variable.is_syntax
-          val = expect('regexp')
-        else
-          if variable.is_reference
-            existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
-            refine_from = (final && existing) || parent.supertypes[-1] # Use Object as a default
-            refine_from = Array(refine_from)[0] # In case of an array Reference
-          else
-            # If this variable is a parameter of the same type as its parent, and this parent is also a subtype,
-            # allow any value that the subtype would allow. This special case supports e.g. Number.Minimum
-            if variable.supertypes.include?(variable.parent) && parent.supertypes.include?(variable.parent)
-              controlling_syntax = parent
-            end
-            # Find an existing assignment, including inherited, to check for Is Final
-            existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
-            error("Cannot override final assignment #{parent.name}.#{variable.name} = #{existing.inspect}") if final
-          end
-
-          val = parse_value(controlling_syntax, refine_from)
-        end
-
-        parent.assign variable, val, is_final
-      end
-    end
-
-    def parse_value variable, refine_from
-      if variable.is_array and peek('lbrack')
-        val = parse_array(variable, refine_from)
-      else
-        a = atomic_value(variable, refine_from)
-        a = [a] if variable.is_array
-        a
-      end
-    end
-
-    def atomic_value variable, refine_from
-      # puts "Looking for value of #{variable.name}#{refine_from ? " refining #{refine_from.name}" : ''}"
-      if refine_from
-        if supertype_name = supertype
-          # Literal object. What should the parent of such objects be?
-          defining = @adl.start_object(nil, supertype_name, true)
-          block(nil)
-          assignment(defining)
-          @adl.end_object
-          val = defining
-        else
-          p = path_name
-          error("Assignment to #{variable.name} must name an ADL object") unless p
-          val = @adl.resolve_name(p)
-          # If the variable is a reference and refine_from is set, the object must be a subtype
-        end
-        if refine_from && !val.supertypes.include?(refine_from)
-          error("Assignment of #{val.inspect} to #{variable.name} must refine the existing final assignment of #{refine_from.name}")
-        end
-        val
-      else
-        syntax = variable.syntax_transitive
-        error("#{variable.inspect} has no Syntax so cannot be assigned") unless syntax
-        # Get the Syntax for the variable and accept a value of that type
-        val = next_token syntax
-        error("Expected a value matching the syntax for an #{variable.name}") unless val
-        consume
-        opt_white
-        val
-      end
-    end
-
-    def parse_array variable, refine_from
-      return nil unless expect('lbrack')
-      array_value = []
-      while val = atomic_value(variable, refine_from)
-        array_value << val
-        break unless expect('comma')
-      end
-      error("Array elements must separated by , and end in ]") unless expect('rbrack')
-      array_value
-    end
-
-    def integer
-      # REVISIT: Not sure we should eval() here:
-      s = expect('integer') and eval(s)
-    end
-
-    def opt_white
-      white or true
-    end
-
-    def white
-      expect('white')
-    end
-
-  private
     def parse_re
       @parse_re ||=
       Regexp.new(
@@ -677,9 +688,21 @@ class ADL
       )
     end
 
+    def next_token rule = nil
+      match = (rule || parse_re).match(@input[@offset..-1])
+      if !match
+        @current = @value = nil
+      elsif !rule
+        @current, @value = match.names.map{|n| match[n] ? [n, match[n]] : nil}.compact[0]
+      else
+        @current = match ? rule : nil
+        @value = match ? match.to_s : ''
+      end
+    end
+
     # Report a parse failure
     def error message
-      @adl.error message
+      @context.error message
     end
 
     # Consume the current token, returning the value
@@ -711,16 +734,18 @@ class ADL
   end
 end
 
-adl = ADL.new
-if emit_all = (ARGV[0] == '-a')
-  ARGV.shift
-end
-top = nil
-ARGV.each do |filename|
-  top = adl.parse(File.read(filename), filename, top)
-end
-if emit_all || !top
-  adl.emit
-else
-  top.emit ''
+if $0 == __FILE__
+  context = ADL::Context.new
+  if emit_all = (ARGV[0] == '-a')
+    ARGV.shift
+  end
+  top = nil
+  ARGV.each do |filename|
+    top = context.parse(File.read(filename), filename, top)
+  end
+  if emit_all || !top
+    context.top.emit
+  else
+    top.emit ''
+  end
 end
