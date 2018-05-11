@@ -451,7 +451,7 @@ namespace ADL
 		    if ((m = o.member_transitive(remaining[0])) != null)
 			break;	    // Found!
 		    if (o.parent == null)
-		        error("Failed to find "+remaining[0]+" from "+stacktop.name);
+		        error("Failed to find "+remaining[0]+" from "+stacktop.pathname());
 		    o = o.parent;    // Ascend
 		}
 
@@ -1167,11 +1167,18 @@ namespace ADL
 	{
 	    ADL		adl = new ADL();
 	    ADLObject   scope = null;
+	    bool	show_all = false;
 	    foreach (string arg in args)
-		scope = adl.parse(File.ReadAllText(arg), arg, scope);
-	    if (scope != null)
+	    {
+		if (arg == "-a")
+		    show_all = true;
+		else
+		    scope = adl.parse(File.ReadAllText(arg), arg, scope);
+	    }
+	    if (show_all)
+		adl.top.emit();
+	    else if (scope != null)
 	     	scope.emit();
-//		adl.top.emit();
 	}
     }
 }
