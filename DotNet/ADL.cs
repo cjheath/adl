@@ -492,9 +492,9 @@ namespace ADL
 	    // Resolve the supertype_name to find the zuper:
 	    ADLObject	zuper = supertype_name != null ? resolve_name(supertype_name, 0) : _object;
 
-	    string	local_name = object_name[object_name.Count-1];
-	    ADLObject	o = parent.member(local_name);
-	    if (o != null)
+	    string	local_name = object_name != null ? object_name[object_name.Count-1] : null;
+	    ADLObject	o;
+	    if (local_name != null && (o = parent.member(local_name)) != null)
 	    {
 		if (supertype_name != null && o.zuper.name != joined_name(supertype_name))
 		    error("Cannot change supertype of "+local_name+" from "+o.zuper.name+" to "+joined_name(supertype_name));
@@ -564,11 +564,18 @@ namespace ADL
 	    ADLObject	o;
 	    ADLObject	last = null;	// REVISIT: Should this be stack.last?
 
-	    opt_white();
-	    while ((o = definition()) != null)
-		last = o;
-	    if (peek() != null)
-		error("Parse terminated at " + peek());
+	    try {
+		opt_white();
+		while ((o = definition()) != null)
+		    last = o;
+		if (peek() != null)
+		    error("Parse terminated at " + peek());
+	    } catch (Exception e) {
+		error(
+		    e.Message+" at "+location()
+		    + e.StackTrace
+		);
+	    }
 
 	    return last;
 	}

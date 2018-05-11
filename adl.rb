@@ -291,11 +291,12 @@ class ADL
     else
       parent = @stack.last
     end
-    local_name = object_name ? object_name[-1] : nil
 
     # Resolve the supertype_name to find the zuper:
     zuper = supertype_name ? resolve_name(supertype_name, 0) : @object
-    if o = parent.member?(local_name)
+
+    local_name = object_name ? object_name[-1] : nil
+    if local_name and o = parent.member?(local_name)
       error("Cannot change supertype of #{local_name} from #{o.zuper.name} to #{supertype_name*' '}") if supertype_name && o.zuper.name != supertype_name*' '
     else
       o = ADLObject.new(orphan ? nil : parent, local_name, zuper)
