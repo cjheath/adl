@@ -4,13 +4,13 @@
 # Instantiate the ADL::Context and ask it to parse some ADL text.
 # The Context will use an ADL::Scanner to parse the input.
 #
-# The ADL text will be compiled into a tree of ADLObjects, including Assignments,
+# The ADL text will be compiled into a tree of Objects, including Assignments,
 # which your code can then traverse to produce output. Start traversing the
 # tree at context.top(), or at the last open namespace returned from parse().
 #
 module ADL
 
-  class ADLObject
+  class Object
     attr_reader :parent, :name, :zuper, :aspect, :syntax
     attr_accessor :is_array, :is_sterile, :is_complete
 
@@ -183,7 +183,7 @@ module ADL
     end
   end
 
-  class Assignment < ADLObject
+  class Assignment < Object
     attr_reader :variable, :value, :is_final
 
     def initialize parent, variable, value, is_final
@@ -197,7 +197,7 @@ module ADL
 
     def as_inline level = ''
       %Q{#{@is_final ? ' =' : ' ~='} #{
-        if ADLObject === @value
+        if Object === @value
           if @value.is_object_literal
             @value.as_inline
           else
@@ -208,7 +208,7 @@ module ADL
           "[\n" +
           @value.map do |v|
             level+"\t"+
-              if ADLObject === v
+              if Object === v
                 if v.is_object_literal
                   v.as_inline
                 else
@@ -311,7 +311,7 @@ module ADL
       if local_name and o = parent.child?(local_name)
         error("Cannot change supertype of #{local_name} from #{o.zuper.name} to #{supertype_name*' '}") if supertype_name && o.zuper.name != supertype_name*' '
       else
-        o = ADLObject.new(orphan ? nil : parent, local_name, zuper)
+        o = Object.new(orphan ? nil : parent, local_name, zuper)
       end
 
       @stack.push o
@@ -323,14 +323,14 @@ module ADL
     end
 
     def make_built_ins
-      @top = ADLObject.new(nil, 'TOP', nil, nil)
-      @object = ADLObject.new(@top, 'Object', nil, nil)
-      @regexp = ADLObject.new(@top, 'Regular Expression', @object, nil)
-      @syntax = ADLObject.new(@object, 'Syntax', @regexp, nil)
-      @reference = ADLObject.new(@top, 'Reference', @object, nil)
-      @assignment = ADLObject.new(@top, 'Assignment', @object, nil)
-      @alias = ADLObject.new(@top, 'Alias', @object, nil)
-      @alias_for = ADLObject.new(@alias, 'For', @reference, nil)
+      @top = Object.new(nil, 'TOP', nil, nil)
+      @object = Object.new(@top, 'Object', nil, nil)
+      @regexp = Object.new(@top, 'Regular Expression', @object, nil)
+      @syntax = Object.new(@object, 'Syntax', @regexp, nil)
+      @reference = Object.new(@top, 'Reference', @object, nil)
+      @assignment = Object.new(@top, 'Assignment', @object, nil)
+      # @alias = Object.new(@top, 'Alias', @object, nil)
+      # @alias_for = Object.new(@alias, 'For', @reference, nil)
     end
   end
 
