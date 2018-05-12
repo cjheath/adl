@@ -525,6 +525,7 @@ namespace ADL
 
 	public virtual void	end_object()
 	{
+	    stack.RemoveAt(stack.Count-1);
 	}
 
 	private	ADLObject   _object;
