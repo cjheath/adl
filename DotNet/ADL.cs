@@ -74,7 +74,7 @@ namespace ADL
 	// Return a string with all ancestor names from the top.
 	public virtual string pathname()
 	{
-	    return (parent != null ? parent.pathname() + "." : "") +
+	    return (parent != null && !parent.is_top ? parent.pathname() + "." : "") +
 		(name != null ? name : "<anonymous>");
 	}
 
