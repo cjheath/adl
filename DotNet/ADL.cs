@@ -283,11 +283,14 @@ namespace ADL
 		(!others.Any()
 		    ? ""
 		    :	"{" +
-			others.Select(
-			    m =>
-				m is Assignment
-				? (m as Assignment).variable.name + "; " + (m as Assignment).as_inline()
-				: ""
+			String.Join(
+			    "; ",
+			    others.Select(
+				m =>
+				    m is Assignment
+				    ? (m as Assignment).variable.name + (m as Assignment).as_inline()
+				    : ""
+			    )
 			) +
 			"}"
 		) +
@@ -382,7 +385,7 @@ namespace ADL
 				:   v.ToString()
 			    ).ToArray()
 			) +
-		        "\n" + level
+		        "\n" + level + "]"
 		    :	value.ToString()
 		    )
 		);
@@ -390,7 +393,7 @@ namespace ADL
 
 	public override void emit(string level = "")
 	{
-	    Console.WriteLine(level + variable.name + as_inline(level));
+	    Console.WriteLine(level + variable.name + as_inline(level) + ";");
 	}
     }
 

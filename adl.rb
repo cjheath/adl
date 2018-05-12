@@ -583,7 +583,6 @@ module ADL
     def parse_array variable, refine_from
       return nil unless expect('lbrack')
       array_value = []
-puts "Array value for #{variable.pathname} refine_from #{refine_from.pathname} with top #{@context.stacktop.pathname}"
       while val = atomic_value(variable, refine_from)
         array_value << val
         break unless expect('comma')
