@@ -33,7 +33,7 @@ namespace ADL
 	    if (m_s_val != null)
 		return m_s_val;
 	    else if (m_o_val != null)
-		return m_o_val.inspect();
+		return m_o_val.pathname()+m_o_val.zuper_name();
 	    else if (m_r_val != null)
 		return m_r_val.ToString();
 	    else if (m_a_val != null)
@@ -199,7 +199,7 @@ namespace ADL
 	    //bool    	f = t != null ? t.Item3 : false;
 
 	    if (a != null && a != value && variable != this)
-		throw new System.ArgumentException("#{inspect} cannot have two assignments to #{variable.inspect}");
+		throw new System.ArgumentException(pathname()+zuper_name()+" cannot have two assignments to "+variable.pathname());
 
 	    if (variable.is_syntax)
 	    {
@@ -257,11 +257,6 @@ namespace ADL
 	}}
 
 	// Manage generation of textual output
-	public virtual string inspect()
-	{
-	    return pathname() + zuper_name();
-	}
-
 	public string	zuper_name()
 	{
 	    if (zuper != null)
@@ -348,11 +343,6 @@ namespace ADL
 
 	// Return a string with all ancestor names from the top.
 	public override string pathname()
-	{
-	    return inspect();
-	}
-
-	public override string inspect()
 	{
 	    return
 		(parent != null ? parent.pathname() : "-") +
@@ -920,7 +910,7 @@ namespace ADL
 	    {
 		Regex   syntax = variable.syntax_transitive();
 		if (syntax == null)
-		    error(variable.inspect() + " has no Syntax so cannot be assigned");
+		    error(variable.pathname()+variable.zuper_name() + " has no Syntax so cannot be assigned");
 		string	s = next_token(syntax);
 		if (s == null)
 		    error("Expected a value matching the syntax for an " + variable.name);
