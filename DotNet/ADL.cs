@@ -80,6 +80,9 @@ namespace ADL
 
 	public string pathname_relative_to(ADLObject them)
 	{
+	    return pathname();
+	/*
+        // REVISIT: Implement emitting relative names properly
 	    // Trim a common prefix off the pathnames and concatenate the residual
 	    List<ADLObject> mine = new List<ADLObject>(ancestry);
 	    List<ADLObject> theirs = new List<ADLObject>(them.ancestry);
@@ -91,6 +94,7 @@ namespace ADL
 	    }
 	    // REVISIT: If any residual object is anonymous, we need to use an ascending scope to get to the start point
 	    return new String('.', common) + String.Join(".", mine.Select(m => m.name));
+	*/
 	}
 
 	// Adopt this child
@@ -366,14 +370,19 @@ namespace ADL
 		    :	value.o_val.pathname_relative_to(parent)
 		    )
 		:   (value.a_val != null
-		    ?	String.Join(
-			    ",\n",
+		    ?	"[\n" + level + "\t" +
+			String.Join(
+			    ",\n" + level + "\t",
 			    value.a_val.Select(v =>
-				v.o_val != null && v.o_val.is_object_literal
-				?   v.o_val.as_inline()
-				:   v.o_val.pathname_relative_to(parent)
+				v.o_val != null
+				?   (v.o_val.is_object_literal
+				    ?   v.o_val.as_inline()
+				    :   v.o_val.pathname_relative_to(parent)
+				    )
+				:   v.ToString()
 			    ).ToArray()
-			)
+			) +
+		        "\n" + level
 		    :	value.ToString()
 		    )
 		);
