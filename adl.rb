@@ -14,12 +14,6 @@ module ADL
   # Implementations may define additional subclasses.
   # Some value subclasses may also create a semantic implementation.
   class Value
-    def representation
-      raise "Define this please"
-    end
-  end
-
-  class StringValue < Value
     def initialize lexical
       @lexical = lexical
     end
@@ -28,13 +22,30 @@ module ADL
       @lexical
     end
 
+    def self.inherited(subtype)
+      Value.subtypes << subtype
+    end
+
+    def self.subtypes
+      @subtypes ||= []
+    end
+  end
+
+  class StringValue < Value
     def value
-      @value ||= eval(representation)
+      @value ||= eval(@lexical)
+    end
+  end
+
+  class IntegerValue < StringValue
+    def value
+      @value ||= eval(@lexical)
     end
   end
 
   class ObjectValue < Value
     def initialize reference
+      super(nil)  # We don't use a lexical representation here
       @reference = reference
     end
 
@@ -52,14 +63,6 @@ module ADL
   end
 
   class RegexValue < Value
-    def initialize lexical
-      @lexical = lexical
-    end
-
-    def representation
-      @lexical
-    end
-
     def regex
       @regex ||= Regexp.new('\A'+@lexical)
     end
@@ -67,6 +70,7 @@ module ADL
 
   class ArrayValue < Value
     def initialize array
+      super(nil)  # We don't use a lexical representation here
       @array = array
     end
 
@@ -637,8 +641,19 @@ module ADL
         error("Expected a value matching the syntax for an #{variable.name}") unless val
         consume
         opt_white
-        # REVISIT: Use the Value subtype defined for this variable
-        StringValue.new(val)
+        # Use the Value subtype defined for this variable
+        value_type = nil
+        variable.supertypes.detect do |t|
+          next unless t.name
+          compressed = t.name.gsub(/ /,'')
+          value_type = Value.subtypes.detect do |k|
+            subtype_name = k.name.sub(/ADL::(.*)Value/,'\1')
+            subtype_name == compressed
+          end
+        end
+        value_type = StringValue if value_type == ObjectValue
+
+        value_type.new(val)
       end
     end
 
