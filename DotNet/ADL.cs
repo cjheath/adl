@@ -1,4 +1,14 @@
-﻿using System;
+﻿/*
+ * Aspect Definition Language.
+ *
+ * Instantiate the ADL::Context and ask it to parse some ADL text.
+ * The Context will use an ADL::Scanner to parse the input.
+ *
+ * The ADL text will be compiled into a tree of Objects, including Assignments,
+ * which your code can then traverse to produce output. Start traversing the
+ * tree at context.top(), or at the last open namespace returned from parse().
+ */
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,39 +18,91 @@ using System.Collections;
 
 namespace ADL
 {
-    // An assigned value is either a bool, a string, an Object, a Regex or an Array of those:
-    class Value
+    // A builtin value is either a string, an Object, a Regex or an Array of those.
+    // All value subclasses retain the original text of the assignment.
+    // Implementations may define additional subclasses.
+    // Some value subclasses may also create a semantic implementation.
+    abstract class Value
     {
-	private	bool?	    m_b_val;
-	private	string	    m_s_val;
-	private	Object      m_o_val;
-	private	Regex	    m_r_val;
-	private	List<Value> m_a_val;
+	protected		    Value() {}
+	public abstract string	    representation();
+    }
 
-	public	bool?	    b_val{get{return m_b_val;} private set{m_b_val = value;}}
-	public	string	    s_val{get{return m_s_val;} private set{m_s_val = value;}}
-	public	Object      o_val{get{return m_o_val;} private set{m_o_val = value;}}
-	public	Regex	    r_val{get{return m_r_val;} private set{m_r_val = value;}}
-	public	List<Value> a_val{get{return m_a_val;} private set{m_a_val = value;}}
+    class StringValue : Value
+    {
+	private	string	    lexical;
+	public		    StringValue(string _lexical) { lexical = _lexical; }
+	public override string	    representation() { return lexical; }
 
-	public	    Value(bool _b_val) { b_val = _b_val; }
-	public	    Value(string _s_val) { s_val = _s_val; }
-	public	    Value(Object _o_val) { o_val = _o_val; }
-	public	    Value(Regex _r_val) { r_val = _r_val; }
-	public	    Value(List<Value> _a_val) { a_val = _a_val; }
-	public override string ToString()
+	string		    _value;
+	public string	    value{get{
+	    if (_value == null)
+		_value = lexical;    // REVISIT: store and return the composed form after processing escapes
+	    return lexical;
+	}}
+    };
+
+    class ObjectValue : Value
+    {
+	private Object	    reference;
+	public		    ObjectValue(Object _reference) { reference = _reference; }
+	public override string	    representation()
 	{
-	    if (m_s_val != null)
-		return m_s_val;
-	    else if (m_o_val != null)
-		return m_o_val.pathname()+m_o_val.zuper_name();
-	    else if (m_r_val != null)
-		return m_r_val.ToString();
-	    else if (m_a_val != null)
-		throw new System.ArgumentException("REVISIT: Array value ToString Not Implemented");
+	    if (reference.is_object_literal)
+		return reference.as_inline();
 	    else
-		return m_b_val.ToString();
+		return reference.pathname();
 	}
+
+	public	Object	    obj{get{ return reference; }}
+    };
+
+    class RegexValue : Value
+    {
+	private string	    lexical;
+	public		    RegexValue(string _lexical) { lexical = _lexical; }
+	public override string	    representation() { return lexical; }
+
+	// Semantics:
+	private	Regex	    _regex;
+	public Regex	    regex{
+	    get{
+		if (_regex == null)
+		    _regex = new Regex(@"\G(?:"+lexical+")");
+		return _regex;
+	    }
+	}
+    };
+
+    class ArrayValue : Value
+    {
+	private List<Value> array;
+	public		    ArrayValue(List<Value> _array) { array = _array; }
+	public override string	    representation() {
+	    // REVISIT: Include newlines and indentation here, and let the caller further indent it.
+	    return "["+
+		String.Join(", ", array.Select(v => v.representation()).ToArray()) +
+		"]";
+	}
+
+	// Semantics:
+	public	int	    size() { return array.Count; }
+	public	Value	    element(int i) { return array[i]; }
+	public	void	    Add(Value element) { array.Add(element); }
+    }
+
+    class   Assigned
+    {
+	Value		v;
+	Object		o;
+	bool		f;
+	public		Assigned(Value _v, Object _o, bool _f)
+	{
+	    v = _v; o = _o; f = _f;
+	}
+	public	Value	value{get{return v;}}
+	public	Object	obj{get{return o;}}
+	public	bool	final{get{return f;}}
     }
 
     class Object
@@ -49,7 +111,7 @@ namespace ADL
 	public	string		name{get; private set;}
 	public	Object		zuper{get; private set;}
 	public	Object		aspect{get; private set;}
-	public	Regex		syntax{get; private set;}
+	public	RegexValue	syntax{get; private set;}
 	public	bool		is_array{get; set;}
 	public	bool		is_sterile{get; private set;}
 	public	bool		is_complete{get; private set;}
@@ -154,7 +216,7 @@ namespace ADL
 	}
 
 	// Search assignments
-	public Tuple<Value, Object, bool> assigned(Object variable)
+	public Assigned	assigned(Object variable)
 	{
 	    Object  outermost = supertypes.Last();	// This will always be "Object"
 
@@ -162,15 +224,15 @@ namespace ADL
 	    {	    // Check for an assignment to the special built-in variables
 		switch (variable.name)
 		{
-		case "Name":	    return name == null ? null : Tuple.Create(new Value(name), outermost, true);
-		case "Parent":	    return parent == null ? null : Tuple.Create(new Value(parent), outermost, true);
-		case "Super":	    return zuper == null ? null : Tuple.Create(new Value(zuper), outermost, true);
-		case "Aspect":	    return aspect == null ? null : Tuple.Create(new Value(aspect), outermost, aspect != null);
-		case "Syntax":	    return syntax == null ? null : Tuple.Create(new Value(syntax), outermost, true);
+		case "Name":	    return name == null ? null : new Assigned(new StringValue(name), outermost, true);
+		case "Parent":	    return parent == null ? null : new Assigned(new ObjectValue(parent), outermost, true);
+		case "Super":	    return zuper == null ? null : new Assigned(new ObjectValue(zuper), outermost, true);
+		case "Aspect":	    return aspect == null ? null : new Assigned(new ObjectValue(aspect), outermost, aspect != null);
+		case "Syntax":	    return syntax == null ? null : new Assigned(syntax, outermost, true);
 		// REVISIT: These should be True or False (subtype of Boolean)
-		case "Is Array":    return null; // return Tuple.Create(new Value(is_array), outermost, true);
-		case "Is Sterile":  return null; // return Tuple.Create(new Value(is_sterile), outermost, true);
-		case "Is Complete": return null; // return Tuple.Create(new Value(is_complete), outermost, true);
+		case "Is Array":    return null; // return new Assigned(new Value(is_array), outermost, true);
+		case "Is Sterile":  return null; // return new Assigned(new Value(is_sterile), outermost, true);
+		case "Is Complete": return null; // return new Assigned(new Value(is_complete), outermost, true);
 		}
 	    }
 
@@ -178,12 +240,12 @@ namespace ADL
 	    Assignment	existing = children.Find(m => m is Assignment && (m as Assignment).variable == variable) as Assignment;
 	    if (existing == null)
 		return null;
-	    return Tuple.Create(existing.value, existing.parent, existing.is_final);
+	    return new Assigned(existing.value, existing.parent, existing.is_final);
 	}
 
-	public Tuple<Value, Object, bool> assigned_transitive(Object variable)
+	public Assigned assigned_transitive(Object variable)
 	{
-	    Tuple<Value, Object, bool>	a = assigned(variable);
+	    Assigned	a = assigned(variable);
 	    if (a != null)
 		return a;
 	    if (zuper != null)
@@ -193,20 +255,15 @@ namespace ADL
 
 	public Object    assign(Object variable, Value value, bool is_final)
 	{
-	    Tuple<Value, Object, bool> t = assigned(variable);
-	    Value	a = t != null ? t.Item1 : null;	    // Existing value
-	    //Object	p = t != null ? t.Item2 : null;	    // Location of existing assignment
-	    //bool    	f = t != null ? t.Item3 : false;
+	    Assigned	t = assigned(variable);
+	    Value	a = t != null ? t.value : null;	    // Existing value
 
 	    if (a != null && a != value && variable != this)
 		throw new System.ArgumentException(pathname()+zuper_name()+" cannot have two assignments to "+variable.pathname());
 
 	    if (variable.is_syntax)
 	    {
-		string	s = value.s_val;
-		if (s == null)	// REVISIT: This should have already been checked
-		    throw new System.ArgumentException("Assignment to Syntax requires a Regexp string");
-		syntax = new Regex(@"\G" + s);
+		syntax = value as RegexValue;
 		return variable;    // Not used, but flags that we succeeded
 	    }
 	    else
@@ -237,7 +294,7 @@ namespace ADL
 	public Regex syntax_transitive()
 	{
 	    if (syntax != null)
-		return syntax;
+		return syntax.regex;
 	    if (zuper != null)
 		return zuper.syntax_transitive();
 	    return null;
@@ -284,7 +341,7 @@ namespace ADL
 				m =>
 				    m is Assignment
 				    ? (m as Assignment).variable.name + (m as Assignment).as_inline()
-				    : ""
+				    : ""    // An object literal may not have new variables
 			    )
 			) +
 			"}"
@@ -313,7 +370,7 @@ namespace ADL
 		Console.WriteLine(zn != null ? " {" : "{");
 
 	    if (syntax != null)
-		Console.WriteLine(level+"\tSyntax = /"+syntax.ToString()+"/;");
+		Console.WriteLine(level+"\tSyntax = /"+syntax.representation()+"/;");
 
 	    foreach (Object m in others)
 		m.emit(level+"\t");
@@ -354,31 +411,7 @@ namespace ADL
 
 	public override string as_inline(string level = "")
 	{
-	    return
-		(is_final ? " = " : " ~= ") +
-		(value.o_val != null
-		?
-		    (value.o_val.is_object_literal
-		    ?	value.o_val.as_inline()
-		    :	value.o_val.pathname_relative_to(parent)
-		    )
-		:   (value.a_val != null
-		    ?	"[\n" + level + "\t" +
-			String.Join(
-			    ",\n" + level + "\t",
-			    value.a_val.Select(v =>
-				v.o_val != null
-				?   (v.o_val.is_object_literal
-				    ?   v.o_val.as_inline()
-				    :   v.o_val.pathname_relative_to(parent)
-				    )
-				:   v.ToString()
-			    ).ToArray()
-			) +
-		        "\n" + level + "]"
-		    :	value.ToString()
-		    )
-		);
+	    return (is_final ? " = " : " ~= ") + value.representation();
 	}
 
 	public override void emit(string level = "")
@@ -778,7 +811,7 @@ namespace ADL
 
 		defining.is_array = op == "=>";
 
-		defining.assign(defining, new Value(reference_object), true);
+		defining.assign(defining, new ObjectValue(reference_object), true);
 
 		bool	has_block = block(object_name);
 		context.end_object();
@@ -818,7 +851,7 @@ namespace ADL
 
 		Object	parent = context.stacktop;
 
-		Tuple<Value, Object, bool>	existing = parent.assigned(variable);
+		Assigned	existing = parent.assigned(variable);
 		if (existing != null)
 		    error("Cannot reassign " + parent.name + "." + variable.name+" from "+existing.ToString());
 
@@ -828,20 +861,20 @@ namespace ADL
 
 		if (variable.is_syntax)
 		{	    // Parse a Regular Expression
-		    val = new Value(require("regexp"));
+		    val = new RegexValue(require("regexp"));
 		}
 		else
 		{
 		    if (variable.is_reference)
 		    {
-			Tuple<Value, Object, bool>	overriding = parent.assigned_transitive(variable);
+			Assigned	overriding = parent.assigned_transitive(variable);
 			if (overriding == null)
 			    overriding = variable.assigned(variable);
-			if (overriding != null && overriding.Item3)	// Final
-			    if (overriding.Item1.a_val != null)	// the Value is an array
-				refine_from = overriding.Item1.a_val[0].o_val;
+			if (overriding != null && overriding.final)	// Final
+			    if (overriding.value is ArrayValue)	// the Value is an array
+				refine_from = ((overriding.value as ArrayValue).element(0) as ObjectValue).obj;
 			    else
-				refine_from = overriding.Item1.o_val;
+				refine_from = (overriding.value as ObjectValue).obj;
 			// Otherwise just refine_from Object
 			if (refine_from == null)
 			{
@@ -856,7 +889,7 @@ namespace ADL
 			existing = parent.assigned_transitive(variable);
 			if (existing == null)
 			    existing = variable.assigned(variable);
-			if (existing != null && existing.Item3)	// Is Final
+			if (existing != null && existing.final)	// Is Final
 			    error("Cannot override final assignment " + parent.name + "." + variable.name + "=" + existing.ToString());
 		    }
 		    val = parse_value(controlling_syntax, refine_from);
@@ -872,7 +905,7 @@ namespace ADL
 		return parse_array(variable, refine_from);
 	    Value   val = atomic_value(variable, refine_from);
 	    if (variable.is_array)
-		return new Value(new List<Value>{val});
+		return new ArrayValue(new List<Value>{val});
 	    return val;
 	}
 
@@ -882,25 +915,24 @@ namespace ADL
 	    if (refine_from != null)
 	    {
 		List<string>	supertype_name = supertype();
-		Object		o;
+		Object		defining;
 		if (supertype_name != null)
 		{	// Literal object
-		    o = context.start_object(null, supertype_name, true);
+		    defining = context.start_object(null, supertype_name, true);
 		    block(null);
-		    assignment(o);
+		    assignment(defining);
 		    context.end_object();
-		    val = new Value(o);
+		    val = new ObjectValue(defining);
 		}
 		else
 		{
 		    List<string>	p = path_name();
 		    if (p == null)
 			error("Assignment to " + variable.name + " must name an ADL object");
-		    o = context.resolve_name(p);
-		    val = new Value(o);
+		    val = new ObjectValue(defining = context.resolve_name(p));
 		    // If the variable is a reference and refine_from is set, the object must be a subtype
 		}
-		if (refine_from != null && !o.supertypes.Contains(refine_from))
+		if (refine_from != null && !defining.supertypes.Contains(refine_from))
 		{
 		    error("Assignment of " + val.ToString() + " to " + variable.name + " must refine the existing final assignment of " + refine_from.name);
 		}
@@ -916,7 +948,8 @@ namespace ADL
 		    error("Expected a value matching the syntax for an " + variable.name);
 		consume();
 		opt_white();
-		return new Value(s);
+		// REVISIT: Use the Value subtype defined for this variable
+		return new StringValue(s);
 	    }
 	}
 
@@ -935,13 +968,13 @@ namespace ADL
 	    }
 	    if (expect("rbrack") == null)
 		error("Array elements must separated by , and end in ]");
-	    return new Value(array_value);
+	    return new ArrayValue(array_value);
 	}
 
 	private Value integer()
 	{
 	    string  s = expect("integer");
-	    return new Value(s);
+	    return new StringValue(s);
 	}
 
 	private static string Tokens =

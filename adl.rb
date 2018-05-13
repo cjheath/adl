@@ -9,6 +9,84 @@
 # tree at context.top(), or at the last open namespace returned from parse().
 #
 module ADL
+  # A builtin value is either a string, an Object, a Regex or an Array of those.
+  # All value subclasses retain the original text of the assignment.
+  # Implementations may define additional subclasses.
+  # Some value subclasses may also create a semantic implementation.
+  class Value
+    def representation
+      raise "Define this please"
+    end
+  end
+
+  class StringValue < Value
+    def initialize lexical
+      @lexical = lexical
+    end
+
+    def representation
+      @lexical
+    end
+
+    def value
+      @value ||= eval(representation)
+    end
+  end
+
+  class ObjectValue < Value
+    def initialize reference
+      @reference = reference
+    end
+
+    def representation
+      if @reference.is_object_literal
+        @reference.as_inline
+      else
+        @reference.pathname
+      end
+    end
+
+    def obj
+      @reference
+    end
+  end
+
+  class RegexValue < Value
+    def initialize lexical
+      @lexical = lexical
+    end
+
+    def representation
+      @lexical
+    end
+
+    def regex
+      @regex ||= Regexp.new('\A'+@lexical)
+    end
+  end
+
+  class ArrayValue < Value
+    def initialize array
+      @array = array
+    end
+
+    def representation
+      # REVISIT: Include newlines and indentation here, and let the caller further indent it.
+      "["+@array.map(&:representation)*", "+"]"
+    end
+
+    def size
+      @array.size
+    end
+
+    def [](i)
+      @array[i]
+    end
+
+    def add element
+      @array << element
+    end
+  end
 
   class Object
     attr_reader :parent, :name, :zuper, :aspect, :syntax
@@ -80,10 +158,10 @@ module ADL
       if variable.parent == (o = supertypes[-1])  # supertypes[-1] is always Object
         result =
           case variable.name
-          when 'Name'; [@name, o, true]
-          when 'Parent'; [@parent, o, true]
-          when 'Super'; [@zuper, o, true]
-          when 'Aspect'; [@aspect, o, true]
+          when 'Name'; [StringValue.new(@name), o, true]
+          when 'Parent'; [ObjectValue.new(@parent), o, true]
+          when 'Super'; [ObjectValue.new(@zuper), o, true]
+          when 'Aspect'; [ObjectValue.new(@aspect), o, true]
           when 'Syntax'; [@syntax, o, true]
           when 'Is Array'; [@is_array, o, true]
           when 'Is Sterile'; [@is_sterile, o, true]
@@ -103,12 +181,12 @@ module ADL
     end
 
     def assign variable, value, is_final
-      a, p, f = assigned(variable)
+      a, = assigned(variable)
       if a and a != value and variable != self   # Reference variable Super allows self-assignment
         raise "#{inspect} cannot have two assignments to #{variable.inspect}"
       end
       if variable.is_syntax
-        @syntax = Regexp.new('\A'+value[1..-2])
+        @syntax = value   # Will be a RegexValue
       else
         Assignment.new(self, variable, value, is_final)
       end
@@ -128,7 +206,7 @@ module ADL
     end
 
     def syntax_transitive
-      @syntax || (@zuper && @zuper.syntax_transitive)
+      (@syntax && @syntax.regex) || (@zuper && @zuper.syntax_transitive)
     end
 
     def top?
@@ -173,7 +251,7 @@ module ADL
       has_attrs = !others.empty? || @syntax
 
       print "#{level}#{@name}#{zuper_name}#{has_attrs ? (zuper_name ? ' ' : '')+"{\n" : ''}"
-      puts "#{level}\tSyntax = /#{@syntax.to_s.sub(/\?-mix:/,'')}/;" if @syntax
+      puts "#{level}\tSyntax = /#{@syntax.representation}/;" if @syntax
       others.each do |m|
         m.emit(level+"\t")
       end
@@ -188,6 +266,7 @@ module ADL
 
     def initialize parent, variable, value, is_final
       super parent, nil, @assignment
+      raise("REVISIT: Null value assigned") unless value
       @variable, @value, @is_final = variable, value, is_final
     end
 
@@ -196,33 +275,7 @@ module ADL
     end
 
     def as_inline level = ''
-      %Q{#{@is_final ? ' =' : ' ~='} #{
-        if Object === @value
-          if @value.is_object_literal
-            @value.as_inline
-          else
-            # REVISIT: Problem is, it's not always relative to our parent (c.f. self_assignment?):
-            @value.pathname_relative_to(@parent)
-          end
-        elsif Array === @value
-          "[\n" +
-          @value.map do |v|
-            level+"\t"+
-              if Object === v
-                if v.is_object_literal
-                  v.as_inline
-                else
-                  v.pathname_relative_to(@parent)
-                end
-              else
-                v
-              end
-          end* ",\n" +
-          "\n#{level}]"
-        else
-          @value
-        end
-      }}
+      (@is_final ? " = " : " ~= ") + value.representation
     end
 
     def emit level = ''
@@ -480,7 +533,7 @@ module ADL
         defining.is_array = operator == '=>'
 
         # Add a final assignment (to itself) for its type:
-        defining.assign(defining, reference_object, true)
+        defining.assign(defining, ObjectValue.new(reference_object), true)
 
         has_block = block object_name
         @context.end_object
@@ -514,12 +567,20 @@ module ADL
         # Detect the required value type from the variable, including arrays, and deal with it
         controlling_syntax = variable
         if variable.is_syntax
-          val = expect('regexp')
+          val = RegexValue.new(require('regexp')[1..-2])
         else
           if variable.is_reference
-            existing, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
-            refine_from = (final && existing) || parent.supertypes[-1] # Use Object as a default
-            refine_from = Array(refine_from)[0] # In case of an array Reference
+            overriding, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)
+            refine_from = (final && overriding) || parent.supertypes[-1] # Use Object as a default
+            refine_from =
+              if overriding && final
+                if ArrayValue === overriding
+                  overriding[0].obj
+                else
+                  overriding.obj
+                end
+              end
+            refine_from ||= parent.supertypes[-1] # Use Object as a default
           else
             # If this variable is a parameter of the same type as its parent, and this parent is also a subtype,
             # allow any value that the subtype would allow. This special case supports e.g. Number.Minimum
@@ -542,9 +603,9 @@ module ADL
       if variable.is_array and peek('lbrack')
         val = parse_array(variable, refine_from)
       else
-        a = atomic_value(variable, refine_from)
-        a = [a] if variable.is_array
-        a
+        val = atomic_value(variable, refine_from)
+        val = ArrayValue.new([val]) if variable.is_array
+        val
       end
     end
 
@@ -557,14 +618,14 @@ module ADL
           block(nil)
           assignment(defining)
           @context.end_object
-          val = defining
+          val = ObjectValue.new(defining);
         else
           p = path_name
           error("Assignment to #{variable.name} must name an ADL object") unless p
-          val = @context.resolve_name(p)
+          val = ObjectValue.new(defining = @context.resolve_name(p));
           # If the variable is a reference and refine_from is set, the object must be a subtype
         end
-        if refine_from && !val.supertypes.include?(refine_from)
+        if refine_from && !defining.supertypes.include?(refine_from)
           error("Assignment of #{val.inspect} to #{variable.name} must refine the existing final assignment of #{refine_from.name}")
         end
         val
@@ -576,7 +637,8 @@ module ADL
         error("Expected a value matching the syntax for an #{variable.name}") unless val
         consume
         opt_white
-        val
+        # REVISIT: Use the Value subtype defined for this variable
+        StringValue.new(val)
       end
     end
 
@@ -588,12 +650,11 @@ module ADL
         break unless expect('comma')
       end
       error("Array elements must separated by , and end in ]") unless expect('rbrack')
-      array_value
+      ArrayValue.new(array_value)
     end
 
     def integer
-      # REVISIT: Not sure we should eval() here:
-      s = expect('integer') and eval(s)
+      s = expect('integer') and StringValue.new(s)
     end
 
     def opt_white
