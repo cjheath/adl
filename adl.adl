@@ -34,16 +34,16 @@ TOP {
 	}
 
 	Number: {
-		Minimum : .;
-		Maximum : .;
+		Minimum: .;
+		Maximum: .;
 	};
 	Integer: Number {
 		Syntax = /0|[-+]?[1-9][0-9]*/;
 	}
 	Decimal: Number {
 		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?/;
-		Digits: Integer;
-		Precision: Integer;
+		Digits: Integer{Minimum = 1};
+		Precision: Integer{Minimum = 0};
 	}
 	Real: Decimal {
 		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?([Ee][-+]?[0-9]+)?/;
@@ -54,8 +54,8 @@ TOP {
 	}
 
 	String {
-		Min Length: Integer;
-		Max Length: Integer;
+		Min Length: Integer{Minimum = 0};
+		Max Length: Integer{Minimum = 0};
 	}
 
 	Temporal:;
