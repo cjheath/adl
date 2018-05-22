@@ -38,7 +38,7 @@ tentative_assignment = '~=' value
 
 value           = atomic_value | array
 
-array           = '[' (atomic_value (',' atomic_value)? ']'
+array           = '[' atomic_value (',' atomic_value)* ']'
 
 // If the Variable is a Regular Expression the value is a regexp.
 // If the Variable is a Reference, the value is a path_name or object literal.
