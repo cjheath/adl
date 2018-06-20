@@ -5,16 +5,15 @@ Data Types: {
 	Money: Data Type;
 
 	Integer Value: Data Value {
-		// REVISIT: ADL should be able to copy the Syntax from the built-in Integer object.
-		Syntax = /0|[-+]?[1-9][0-9]*/;
+		Syntax = ....Integer;	// Need to navigate precisely to avoid our own Integer
 		Data Type = Integer;
 	}
 	String Value: Data Value {
-		Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
+		Syntax = String;
 		Data Type = Text;
 	}
 	Money Value: Data Value {
-		Syntax = /[-+]?[0-9]*.[0-9]*/;
+		Syntax = Decimal;
 		Data Type = Money;
 	}
 

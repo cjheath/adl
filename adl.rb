@@ -293,6 +293,7 @@ module ADL
     end
 
     attr_reader :top
+    attr_reader :syntax   # Expose the Syntax Variable so we can copy Syntax values
 
     attr_reader :stack
     def stacktop
@@ -571,7 +572,15 @@ module ADL
         # Detect the required value type from the variable, including arrays, and deal with it
         controlling_syntax = variable
         if variable.is_syntax
-          val = RegexValue.new(require('regexp')[1..-2])
+          if regexp_string = expect('regexp')
+            val = RegexValue.new(regexp_string[1..-2])  # Strip off leading and trailing /
+          elsif p = path_name and
+            existing_syntax = @context.resolve_name(p) and
+            val = existing_syntax.assigned(@context.syntax) and
+            val = val[0]
+          else
+            error("Assignment to Syntax variable requires a regular expression")
+          end
         else
           if variable.is_reference
             overriding, p, final = parent.assigned_transitive(variable) || variable.assigned(variable)

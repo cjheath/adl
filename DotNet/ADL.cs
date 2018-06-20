@@ -554,7 +554,7 @@ namespace ADL
 
 	private	Object   _object;
 	private	Object   regexp;
-	// private	Object   syntax;
+	public	Object   syntax;
 	// private	Object   reference;
 	// private	Object   assignment;	// We find this by name
 	// private	Object   alias;
@@ -564,7 +564,7 @@ namespace ADL
 	    top = new Object(null, "TOP", null, null);
 	    _object = new Object(top, "Object", null, null);
 	    regexp = new Object(top, "Regular Expression", _object, null);
-	    // syntax =
+	    syntax =
 		new Object(_object, "Syntax", regexp, null);
 	    // reference =
 		new Object(top, "Reference", _object, null);
@@ -859,7 +859,21 @@ namespace ADL
 
 		if (variable.is_syntax)
 		{	    // Parse a Regular Expression
-		    val = new RegexValue(require("regexp"));
+		    string	    regexp_string = expect("regexp");
+		    List<string>    path_with_syntax;
+		    Object	    existing_object;
+		    Assigned	    assigned_syntax;
+		    if (regexp_string != null)
+			val = new RegexValue(regexp_string);
+		    else if ((path_with_syntax = path_name()) != null &&
+			     (existing_object = @context.resolve_name(path_with_syntax)) != null &&
+			     (assigned_syntax = existing_object.assigned(@context.syntax)) != null
+			 )
+			val = assigned_syntax.value as RegexValue;
+		    else {
+			error("Assignment to Syntax variable requires a regular expression");
+			val = null; // Will not be reached, but prevents compile error
+		    }
 		}
 		else
 		{
