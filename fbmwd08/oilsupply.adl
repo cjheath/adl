@@ -45,8 +45,8 @@ Oil Supply : Fact Based Model {
 	: Fact Type {
 		Objectified As = Acceptable Substitution;
 		Product: Role { Host = Oil Supply.Product }
-		Alternate Product: Role { Host = ..Product }
-		Season: Role { Host = ..Season }
+		Alternate Product: Role { Host = ...Product }
+		Season: Role { Host = ...Season }
 		// Product may be substituted by alternate-Product in Season:
 		: Reading {
 			1 : Reading Role { Role = Product; Following = 'may be substituted by' }
@@ -70,17 +70,17 @@ Oil Supply : Fact Based Model {
 	// Transport Route:
 	: Fact Type {
 		Objectified As = Transport Route;
-		Transport Mode: Role { Host = ..Transport Mode; }
-		Refinery: Role { Host = ..Refinery; }
-		Region: Role { Host = ..Region; }
+		Transport Mode: Role { Host = ...Transport Mode; }
+		Refinery: Role { Host = ...Refinery; }
+		Region: Role { Host = ...Region; }
 		// ADD: Transport Mode transportation is available from Refinery to Region
 		// ADD: Transport Mode transportation is available to Region from Refinery
 	}
 
 	// Transport Route incurs at most one Cost per kl;
 	: Fact Type {
-		Transport Route: Role { Host = ..Transport Route; }
-		Cost: Role { Host = ..Cost; }
+		Transport Route: Role { Host = ...Transport Route; }
+		Cost: Role { Host = ...Cost; }
 		: Uniqueness Constraint { Roles = [Transport Route] }
 		: Reading {
 			// ADD: Transport Reading incurs Cost per kL

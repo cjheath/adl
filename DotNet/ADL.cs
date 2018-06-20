@@ -460,11 +460,9 @@ namespace ADL
 	    System.Environment.Exit(1);
 	}
 
-	public	Object	    resolve_name(List<string> path_name, int levels_up = 1)
+	public	Object	    resolve_name(List<string> path_name)
 	{
 	    Object	    o = stacktop;
-	    for (int i = 0; i < levels_up; i++)
-		o = o.parent;
 	    if (path_name.Count == 0)
 		return o;
 	    List<string>	remaining = new List<string>(path_name);
@@ -526,13 +524,13 @@ namespace ADL
 	    {
 		List<string>	parent_name = new List<string>(object_name);
 		parent_name.RemoveAt(parent_name.Count-1);
-		parent = resolve_name(parent_name, 0);
+		parent = resolve_name(parent_name);
 	    }
 	    else
 		parent = stacktop;
 
 	    // Resolve the supertype_name to find the zuper:
-	    Object	zuper = supertype_name != null ? resolve_name(supertype_name, 0) : _object;
+	    Object	zuper = supertype_name != null ? resolve_name(supertype_name) : _object;
 
 	    string	local_name = object_name != null ? object_name[object_name.Count-1] : null;
 	    Object	o;
@@ -713,7 +711,7 @@ namespace ADL
 		}
 		else if (peek("open"))
 		{
-		    defining = context.resolve_name(object_name, 0);
+		    defining = context.resolve_name(object_name);
 		    // if (defining.ancestry is not a prefix of context.stack)
 			// REVISIT: This is contextual extension
 		    context.stack = defining.ancestry;
@@ -725,15 +723,15 @@ namespace ADL
 		    name_prefix = new List<string>(object_name);
 		    name_prefix.RemoveAt(object_name.Count-1);
 
-		    Object	reopen = context.resolve_name(name_prefix, 0);
+		    Object	reopen = context.resolve_name(name_prefix);
 		    context.stack = reopen.ancestry;
 		    Object	variable;
-		    variable = context.resolve_name(new List<string>{object_name[object_name.Count-1]}, 0);
+		    variable = context.resolve_name(new List<string>{object_name[object_name.Count-1]});
 		    defining = assignment(variable);
 		    is_assignment = defining != null;
 		}
 		else if (object_name != null)
-		    defining = context.resolve_name(object_name, 0);
+		    defining = context.resolve_name(object_name);
 
 		if (!has_block || is_array || is_assignment)
 		    if (!peek("close"))
@@ -798,7 +796,7 @@ namespace ADL
 		    error("expected path name for Reference");
 
 		// Find what this is a reference to
-		Object		reference_object = context.resolve_name(reference_to, 0);
+		Object		reference_object = context.resolve_name(reference_to);
 
 		// An eponymous reference uses reference_to for object_name. It better not be local.
 		if (object_name == null && reference_object.parent == context.stacktop)
