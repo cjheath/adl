@@ -460,9 +460,11 @@ namespace ADL
 	    System.Environment.Exit(1);
 	}
 
-	public	Object	    resolve_name(List<string> path_name)
+	public	Object	    resolve_name(List<string> path_name, int levels_up = 0)
 	{
 	    Object	    o = stacktop;
+	    for (int i = 0; i < levels_up; i++)
+                o = o.parent;
 	    if (path_name.Count == 0)
 		return o;
 	    List<string>	remaining = new List<string>(path_name);
@@ -934,18 +936,18 @@ namespace ADL
 		    block(null);
 		    assignment(defining);
 		    context.end_object();
-		    val = new ObjectValue(defining);
 		}
 		else
 		{
 		    List<string>	p = path_name();
 		    if (p == null)
 			error("Assignment to " + variable.name + " must name an ADL object");
-		    val = new ObjectValue(defining = context.resolve_name(p));
-		    // If the variable is a reference and refine_from is set, the object must be a subtype
+		    bool is_self_assignment = variable == context.stacktop;
+		    defining = context.resolve_name(p, is_self_assignment ? 1 : 0);
 		}
+		val = new ObjectValue(defining);
 		if (refine_from != null && !defining.supertypes.Contains(refine_from))
-		{
+		{   // If the variable is a reference and refine_from is set, the object must be a subtype
 		    error("Assignment of " + val.ToString() + " to " + variable.name + " must refine the existing final assignment of " + refine_from.name);
 		}
 		return val;

@@ -312,9 +312,9 @@ module ADL
       exit 1
     end
 
-    def resolve_name path_name
+    def resolve_name path_name, levels_up = 0
       o = stacktop
-      # levels_up.times { o = o.parent }
+      levels_up.times { o = o.parent }
       return o if path_name.empty?
       path_name = []+path_name
       if path_name[0] == '.'      # Do not implicitly ascend
@@ -631,14 +631,15 @@ module ADL
           block(nil)
           assignment(defining)
           @context.end_object
-          val = ObjectValue.new(defining);
         else
           p = path_name
           error("Assignment to #{variable.name} must name an ADL object") unless p
-          val = ObjectValue.new(defining = @context.resolve_name(p));
-          # If the variable is a reference and refine_from is set, the object must be a subtype
+          is_self_assignment = variable == @context.stacktop
+          defining = @context.resolve_name(p, is_self_assignment ? 1 : 0)
         end
+        val = ObjectValue.new(defining)
         if refine_from && !defining.supertypes.include?(refine_from)
+          # If the variable is a reference and refine_from is set, the object must be a subtype
           error("Assignment of #{val.inspect} to #{variable.name} must refine the existing final assignment of #{refine_from.name}")
         end
         val
