@@ -706,8 +706,8 @@ namespace ADL
 		    has_block = block(object_name);
 		    is_array = array_indicator();
 		    defining.is_array = is_array;
-		    context.end_object();
 		    is_assignment = assignment(defining) != null;
+		    context.end_object();
 		}
 		else if (peek("open"))
 		{

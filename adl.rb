@@ -463,8 +463,8 @@ module ADL
           defining = @context.start_object(object_name, supertype_name)
           has_block = block object_name
           defining.is_array = is_array = !!array_indicator
-          @context.end_object
           is_assignment = assignment(defining)
+          @context.end_object
         elsif peek('open')
           defining = @context.resolve_name(object_name)
           if (@context.stack & defining.ancestry) != @context.stack
