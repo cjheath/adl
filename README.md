@@ -315,7 +315,7 @@ set of features.
 <li> repetitions and optionality using <strong>*</strong>, <strong>+</strong> and <strong>?</strong>, </li>
 <li> character classes </li>
 <li> octal <strong>\0NNN</strong>, hexadecimal <strong>\xXXX</strong> and Unicode characters <strong>\uXXXX</strong> </li>
-<li> negative lookahead <strong>(?!regexp)</strong> and capture groups <strong>(?<someName>regexp)</strong> </li>
+<li> negative lookahead <strong>(?!regexp)</strong> and capture groups <strong>(?&lt;someName&gt;regexp)</strong> </li>
 <li> <strong>\s</strong> to skip whitespace. Note that literal whitespace is not allowed.
 </ul>
 </p>
@@ -333,6 +333,7 @@ Many languages (not ADL) define identifier names like this:
 <pre>
 /[a-zA-Z_][a-zA-Z0-9_]*/
 </pre>
+or following <a href="http://unicode.org/reports/tr31/">http://unicode.org/reports/tr31/</a>
 </td>
 </tr>
 

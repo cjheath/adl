@@ -7,7 +7,7 @@ TOP {
 	True: Boolean;
 
 	String: {
-		Syntax = /'(\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
+		Syntax = /'(\\[0befntr\\']|\\[0-3][0-7][0-7]|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])*'/;
 	}
 	Object {
 		Parent -> Object;		// The container of this object
@@ -38,15 +38,15 @@ TOP {
 		Maximum: .;
 	};
 	Integer: Number {
-		Syntax = /0|[-+]?[1-9][0-9]*/;
+		Syntax = /0|[-+]?[1-9]\d*/;
 	}
 	Decimal: Number {
-		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?/;
+		Syntax = /[-+]?(0|[1-9]\d*)(\.\d*)?/;
 		Digits: Integer{Minimum = 1};
 		Precision: Integer{Minimum = 0};
 	}
 	Real: Decimal {
-		Syntax = /[-+]?(0|[1-9][0-9]*)(\.[0-9]*)?([Ee][-+]?[0-9]+)?/;
+		Syntax = /[-+]?(0|[1-9]\d*)(\.\d*)?([Ee][-+]?\d+)?/;
 	}
 	Float: Real {
 		Exponent: Integer ~= 11;
@@ -60,14 +60,14 @@ TOP {
 
 	Temporal:;
 	Date: Temporal {
-		Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?/;
+		Syntax = /\d\d\d\d[-/]\d\d?[-/]\d\d?/;
 	}
 	Time: Temporal {
-		Syntax = /[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
+		Syntax = /\d\d:\d\d?:\d\d?(.\d+)?/;
 		Resolution: Integer{Minimum = 0} ~= 6;
 	}
 	Date Time: Temporal {
-		Syntax = /[0-9][0-9][0-9][0-9][-/][0-9][0-9]?[-/][0-9][0-9]?T[0-9][0-9]:[0-9][0-9]?:[0-9][0-9]?(.[0-9]+)?/;
+		Syntax = /\d\d\d\d[-/]\d\d?[-/]\d\d?T\d\d:\d\d?:\d\d?(.\d+)?/;
 		Resolution: Integer{Minimum = 0} ~= 0;
 	}
 }

@@ -198,7 +198,9 @@ module ADL
 
     # Manage built-ins
     def is_reference
-      supertypes[-1].name == 'Object' && supertypes[-2].name == 'Reference'
+      supertypes.size >= 2 &&
+      supertypes[-1].name == 'Object' &&
+      supertypes[-2].name == 'Reference'
     end
 
     def is_syntax
@@ -693,7 +695,7 @@ module ADL
     Tokens = {
       white: %r{(\s|//.*)+},
       symbol: %r{[_\p{L}][_\p{L}\p{N}\p{Mn}]*},
-      integer: %r{-?([1-9][0-9]*|0)},
+      integer: %r{0|[-+]?([1-9]\d*)},
       string: %r{
         '
           (
@@ -732,13 +734,14 @@ module ADL
                   | \\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F] # A Unicode character
                   | \\[pP]{[A-Za-z_]+}          # Unicode category or block
                   | \\[0befntr\\*+?()|/\[]      # A control character or escaped regexp char
+                  | \\[sd]                      # space, digit REVISIT: add hexdigit
                   | [^*+?()/|\[ ]               # Anything else except these
                 )
               | \(                              # A parenthesised group
                   (\?(<[_\p{L}\p{Mn}\p{N}]*>|!))?      # Optional capture name or negative lookahead
                   \g<sequence>*
                 \)
-              | \[                              # Regexp range starts with [
+              | \[                              # Character class starts with [
                   ^?                            # Optional character class negation
                   -?                            # Optional initial hyphen
                   ( (?![-\]])                   # Not a closing ] or hyphen

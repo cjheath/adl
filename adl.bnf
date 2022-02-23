@@ -60,9 +60,10 @@ regexp_alternate = regexp_atom*
 regexp_atom     = ( regexp_char | regexp_class | regexp_group) ( '*' | '+' | '?' )?
 
 regexp_char     = '\\s'
-                | '\\' [0-3] [0-7] [0-7]
-                | '\\x' [0-9A-F] [0-9A-F]
-                | '\\u' [0-9A-F] [0-9A-F] [0-9A-F] [0-9A-F]
+		| '\\d'
+                | '\\' [0-3]? [0-7]? [0-7]
+                | '\\x' [0-9A-F] [0-9A-F]?
+                | '\\u' [0-1]? [0-9A-F] [0-9A-F]? [0-9A-F]? [0-9A-F]?
                 | '\\' [pP] '{' [A-Za-z_]+ '}'
                 | '\\' [0befntr\\*+?()|/\[]
                 | [^*+?()|/\[ ]
@@ -73,7 +74,7 @@ regexp_class_part = !']' regexp_class_char '-' !']' regexp_class_char
                 | !']' regexp_class_char
 
 regexp_class_char = !'-' regexp_char
-                | [+*?()/|]
+                | [*+?()|/]
 
 regexp_group    = '(' regexp_group_type? regexp_sequence ')'
 

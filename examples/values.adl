@@ -1,0 +1,14 @@
+Values: {
+	s : String = '\0\b\e\f\n\t\r\\\'\061\377\xA0\u00A0(abc';
+	z : Integer = 0;
+	i : Integer = +1234567890;
+	n : Integer = -1234567890;
+	d : Decimal = +12345678901234567890.12345678901234567890;
+	di : Decimal = -12345678901234567890;
+	r : Real = -12345678901234567890.1234567890123456789E-234;
+	b : Date = 2020-04-23;
+	b2 : Date = 2020/4/3;
+	t : Time = 13:14:15.678;
+	dt : Date Time = 2022-12-23T13:14:15.678;
+	// REVISIT: Add tests for Syntax values here
+}
