@@ -42,16 +42,18 @@ Oil Supply : Fact Based Model {
 	Acceptable Substitution: Entity Type;
 
 	// Product may be substituted by alternate-Product in Season:
-	: Fact Type {
+	xxx : Fact Type {
 		Objectified As = Acceptable Substitution;
 		Product: Role { Host = Oil Supply.Product }
 		Alternate Product: Role { Host = ...Product }
 		Season: Role { Host = ...Season }
 		// Product may be substituted by alternate-Product in Season:
 		: Reading {
-			1 : Reading Role { Role = Product; Following = 'may be substituted by' }
-			2 : Reading Role { Role = Alternate Product; Prebound = 'alternate'; Following = 'in' }
-			3 : Reading Role { Role = Season; }
+			Reading Roles = [
+				:Reading Role{ Role = Product; Following = 'may be substituted by' },
+				:Reading Role{ Role = Alternate Product; Prebound = 'alternate'; Following = 'in' },
+				:Reading Role{ Role = Season; }
+			];
 		}
 		// ADD: alternate-Product is an acceptable substitute for Product in Season;
 
@@ -65,6 +67,17 @@ Oil Supply : Fact Based Model {
 			Roles = [Product, Alternate Product, Season];
 			Preferred Identifier For -> Acceptable Substitution;
 		}
+	}
+
+	: Ring Constraint {
+		First -> xxx.Product;
+		Second -> xxx.Alternate Product;
+		Is Strongly Intransitive = True;
+		Is Acyclic = True;
+	}
+	: Uniqueness Constraint {
+		Roles = [xxx.Product, xxx.Alternate Product, xxx.Season];
+		Preferred Identifier For -> Acceptable Substitution;
 	}
 
 	// Transport Route:
