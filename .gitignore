@@ -1,0 +1,9 @@
+examples
+fbmwd08
+hocon
+norma
+*.swp
+python
+db_schema.txt
+*.diff
+*.patch

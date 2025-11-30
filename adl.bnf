@@ -18,7 +18,7 @@ descend         = '.'
 name            = symbol | integer
 
 // Unicode categories here: \p{L} = any letter, \p{N} = any digit, \p{Mn} = non-spacing mark (accent)
-symbol          = [_\p{L}] [_\p{L}\p{N}\p{Mn}]*
+symbol          = [_\p{L}] [_\p{L}\p{N}]*
 
 integer         = [1-9] [0-9]*
 
@@ -59,22 +59,24 @@ regexp_alternate = regexp_atom*
 
 regexp_atom     = ( regexp_char | regexp_class | regexp_group) ( '*' | '+' | '?' )?
 
-regexp_char     = '\\s'
-		| '\\d'
+regexp_char     = '\\s'		// whitespace
+		| '\\d'		// digit
+		// REVISIT: alpha, hex, alphanum, Lowercase, Uppercase
                 | '\\' [0-3]? [0-7]? [0-7]
                 | '\\x' [0-9A-F] [0-9A-F]?
-                | '\\u' [0-1]? [0-9A-F] [0-9A-F]? [0-9A-F]? [0-9A-F]?
-                | '\\' [pP] '{' [A-Za-z_]+ '}'
-                | '\\' [0befntr\\*+?()|/\[]
-                | [^*+?()|/\[ ]
+                | '\\x{' [0-9A-F]+ '}'
+                | '\\u' [0-9A-F] [0-9A-F]? [0-9A-F]? [0-9A-F]?
+                | '\\u{' [0-9A-F]+ '}'
+                | '\\' [pP] '{' [A-Za-z_]+ '}'		// Unicode character properties
+                | '\\' [0befntr\\*+?()|/\[]		// Special escapes
+                | [^*+?()|/\[ ]				// Exclude unescaped operator characters, but include .
 
 regexp_class    = '[' '^'? '-'? regexp_class_part+ ']'
 
-regexp_class_part = !']' regexp_class_char '-' !']' regexp_class_char
-                | !']' regexp_class_char
+regexp_class_part = !']' ( regexp_class_char ( '-' !']' regexp_class_char )?
 
-regexp_class_char = !'-' regexp_char
-                | [*+?()|/]
+regexp_class_char = !'-' regexp_char			// Any regexp_char except -
+                | [*+?()|/]				// but allow these operator characters
 
 regexp_group    = '(' regexp_group_type? regexp_sequence ')'
 
