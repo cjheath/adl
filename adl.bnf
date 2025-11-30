@@ -51,9 +51,9 @@ object_literal  = supertype block? assignment?
 // Above here, white-space is free. Below here, no implicit white-space is allowed.
 
 // The syntax for a Regular Expression is not regular, so it must be built-in.
-regexp          = '/' regexp_sequence '/'
+regexp          = '/' regexp_choice '/'
 
-regexp_sequence = regexp_alternate ('|' regexp_alternate)*
+regexp_choice	= regexp_alternate ('|' regexp_alternate)*
 
 regexp_alternate = regexp_atom*
 
@@ -78,10 +78,12 @@ regexp_class_part = !']' ( regexp_class_char ( '-' !']' regexp_class_char )?
 regexp_class_char = !'-' regexp_char			// Any regexp_char except -
                 | [*+?()|/]				// but allow these operator characters
 
-regexp_group    = '(' regexp_group_type? regexp_sequence ')'
+regexp_group    = '(' regexp_group_type? regexp_choice ')'
 
-regexp_group_type = regexp_group_capture | regexp_negative_lookahead
+regexp_group_type = regexp_group_capture | regexp_negative_lookahead | regexp_group_call
 
 regexp_negative_lookahead '?!'
 
 regexp_group_capture = '?<' [_\p{L}\p{D}]+ '>'
+
+regexp_group_call = '?{' [_\p{L}\p{D}]+ '}'

@@ -1133,7 +1133,7 @@ namespace ADL
 	    opt_white();
 	    if (!expect(slash))
 		return null;
-	    string  regex = regexp_sequence();
+	    string  regex = regexp_choice();
 	    if (regex != null)
 		if (!expect(slash))
 		    regex = null;
@@ -1146,7 +1146,7 @@ namespace ADL
 	    return regex;
 	}
 
-	private string regexp_sequence()
+	private string regexp_choice()
 	{
 	    int start = offset;
 	    regexp_alternate();
@@ -1212,7 +1212,7 @@ namespace ADL
 	    if (!expect(new Regex(@"\G\(")))		// parenthesis opens the group
 		return false;
 	    expect(new Regex(@"\G\?<[_\p{L}\p{N}]+>|\?!")); // regexp_group_type (capture or negative lookahead)
-	    regexp_sequence();
+	    regexp_choice();
 	    require(new Regex(@"\G\)"), "regexp group");	// The group must be closed
 	    return true;
 	}
