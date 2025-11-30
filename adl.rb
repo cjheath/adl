@@ -1,3 +1,4 @@
+require 'tracing'
 #
 # Aspect Definition Language.
 #
@@ -18,7 +19,7 @@ module ADL
       @lexical = lexical
     end
 
-    def representation
+    def representation(relative_to = nil)
       @lexical
     end
 
@@ -49,16 +50,21 @@ module ADL
       @reference = reference
     end
 
-    def representation
+    def representation(relative_to = nil)
+      return '<nil>' unless @reference  # This would be a bug.
       if @reference.is_object_literal
         @reference.as_inline
       else
-        @reference.pathname
+        @reference.pathname_relative_to(relative_to)
       end
     end
 
     def obj
       @reference
+    end
+
+    def inspect
+      "ObjectValue(#{representation})"
     end
   end
 
@@ -74,9 +80,9 @@ module ADL
       @array = array
     end
 
-    def representation
+    def representation(relative_to = nil)
       # REVISIT: Include newlines and indentation here, and let the caller further indent it.
-      "["+@array.map(&:representation)*", "+"]"
+      "["+@array.map{|e| e.representation(relative_to)}*", "+"]"
     end
 
     def size
@@ -102,6 +108,10 @@ module ADL
       @parent.adopt(self) if @parent
     end
 
+    def path
+      (@parent ? @parent.path : [])+[self]
+    end
+
     # Manage naming
     def pathname
       # Return a string with all ancestor names from the top.
@@ -110,15 +120,47 @@ module ADL
     end
 
     def pathname_relative_to object
-      pathname
-=begin
-      # REVISIT: Implement emitting relative names properly
-      s = ancestry
-      o = object.ancestry
-      c = s & o
-      c.pop if (s-c).empty?
-      '.'*(o-c).size + (s-c).map(&:name)*'.'
-=end
+      if object == self
+        return name
+      end
+
+      return pathname if object == nil
+
+      # Find the common ancestor
+      # REVISIT: This may find a common ancestor too far up. Our path might include a subtype in place of
+      # the other path's element, and the name search would find it correctly.
+      # This code works correctly, but doesn't always produce the shortest possible pathname.
+      o_path = object.path
+      ancestor_path = path & o_path
+      common_ancestor = ancestor_path[-1]
+      if common_ancestor == object
+        # Object is our ancestor; use relative traversal if there's no name
+        return name || '.'*(path.size - o_path.size)
+      end
+
+      # Which names descend to object from our common ancestor?
+      descent_path = path-ancestor_path
+      descent = descent_path.map{|o| o.name}
+
+      # Find whether the first descent is the one that will be resolved:
+      scope = object
+      while scope && scope != common_ancestor && descent[0]
+        blocker = scope.child_transitive?(descent[0])
+        if blocker
+          if blocker != descent_path[0]
+            # puts "\nTraverse for name of #{self.pathname} seen from #{object.pathname} common #{common_ancestor.pathname} to avoid #{blocker.pathname}"
+            # There is a child of the right name but which is the wrong object
+            # We must use "up" traversals to reach the common ancestor.
+            return '.'*(o_path.size - ancestor_path.size + 1) + descent*'.'
+          else
+            break
+          end
+        end
+        scope = scope.parent
+      end
+
+      # The first descent will be matched correctly (if there is one)
+      descent.empty? ? name : descent*'.'
     end
 
     # Manage children
@@ -221,15 +263,16 @@ module ADL
 
     # Manage generation of textual output
     def inspect
-      "#{pathname}#{zuper_name}"
+      "#{pathname}#{zuper_path}"
     end
 
-    def zuper_name
-      case
-      when @zuper && @zuper.parent.parent == nil && @zuper.name == 'Object'
-        ':'
-      when @zuper
-        ': '+@zuper.name
+    def zuper_path
+      if @zuper
+        if @zuper.parent.parent == nil && @zuper.name == 'Object'
+          ':'
+        else
+          ': ' + @zuper.pathname_relative_to(self)
+        end
       else
         nil
       end
@@ -256,14 +299,30 @@ module ADL
       others = children-[self_assignment]
       has_attrs = !others.empty? || @syntax
 
-      print "#{level}#{@name}#{zuper_name}#{has_attrs ? (zuper_name ? ' ' : '')+"{\n" : ''}"
+      # Sort out the self-assignments to be handled inline:
+      assignments, others = *others.partition{|m| Assignment === m && others.detect{|r| r.zuper && r.zuper.is_reference && m.variable == r}}
+
+      print "#{level}#{@name}#{zuper_path}#{has_attrs ? (@zuper ? ' ' : '')+"{\n" : ''}"
       puts "#{level}\tSyntax = /#{@syntax.representation}/;" if @syntax
       others.each do |m|
-        m.emit(level+"\t")
+        if m.zuper && m.zuper.is_reference
+          m.emit_reference(level+"\t", assignments.detect{|a| m == a.variable})
+        else
+          m.emit(level+"\t")
+        end
       end
       print "#{level}}" if has_attrs
       print "#{self_assignment && self_assignment.as_inline}" unless children.empty?
+      print '[]' if is_array
       puts((!has_attrs || self_assignment) ? ';' : '')
+    end
+
+    # Emit the reference shorthand for this object
+    def emit_reference level, assignment
+      arrow = is_array ? '=>' : '->'
+      self_assignment = children.detect{|c| Assignment === c && c.variable == self}
+      puts "#{level}#{@name} #{arrow} #{self_assignment && self_assignment.value.representation || 'Object'}" +
+        (assignment ? ' ' + (assignment.is_final ? '' : '~')+'= ' + assignment.value.representation : '') +';'
     end
   end
 
@@ -277,11 +336,18 @@ module ADL
     end
 
     def inspect
-      "#{@parent ? @parent.pathname : '-'}.#{@variable.name}#{@is_final ? '=' : '~='} #{@value.inspect}"
+      "#{pathname} #{@value.inspect}"
+    end
+
+    def pathname
+      "#{@parent ? @parent.pathname : '-'}.#{@variable.name}#{@is_final ? '=' : '~='}"
     end
 
     def as_inline level = ''
-      (@is_final ? " = " : " ~= ") + value.representation
+      # Self-assignment values are searched from the parent of the object being assigned.
+      # Others are searched from the parent of the assignment
+      relative_to = @variable == @parent ? parent.parent : parent
+      (@is_final ? " = " : " ~= ") + value.representation(relative_to)
     end
 
     def emit level = ''
@@ -371,7 +437,9 @@ module ADL
       if local_name and o = parent.child?(local_name)
         error("Cannot change supertype of #{local_name} from #{o.zuper.name} to #{supertype_name*' '}") if supertype_name && o.zuper.name != supertype_name*' '
       else
-        o = Object.new(orphan ? nil : parent, local_name, zuper)
+        o = Object.new(parent, local_name, zuper)
+        # This parent doesn't acknowledge this child, but the child searches its namespace anyhow:
+        parent.children.delete(o) if orphan
       end
 
       @stack.push o
@@ -454,7 +522,7 @@ module ADL
     end
 
     def body(object_name)
-      # print "In #{@context.stacktop.inspect} defining #{object_name} and looking at "; p peek; debugger
+      # print "In #{@context.stacktop.inspect} defining #{object_name} and looking at "; p peek
       save = @context.stack.dup
       unless defining = reference(object_name) || alias_from(object_name)
         inheriting = peek('inherits')
@@ -567,10 +635,6 @@ module ADL
         opt_white
         parent = @context.stacktop
 
-        # Re-assignment is illegal
-        local_value, = parent.assigned(variable)
-        error("Cannot reassign #{parent.name}.#{variable.name} from #{local_value.inspect}") if local_value
-
         # Detect the required value type from the variable, including arrays, and deal with it
         controlling_syntax = variable
         if variable.is_syntax
@@ -607,8 +671,20 @@ module ADL
             error("Cannot override final assignment #{parent.name}.#{variable.name} = #{existing.inspect}") if final
           end
 
+#if parent == variable # Self-assignment - start search from parent
+#          debugger
+#          pp = @context.stack.pop
+#          val = parse_value(controlling_syntax, refine_from)
+#          @context.stack.push(pp)
+#else
           val = parse_value(controlling_syntax, refine_from)
+#end
         end
+
+        # Re-assignment to a different value is illegal
+        local_value, = parent.assigned(variable)
+        #debugger if local_value
+        error("Cannot reassign #{parent.name}.#{variable.name} from #{local_value.inspect}") if local_value && local_value != val
 
         parent.assign variable, val, is_final
       end
@@ -628,7 +704,8 @@ module ADL
       # puts "Looking for value of #{variable.name}#{refine_from ? " refining #{refine_from.name}" : ''}"
       if refine_from
         if supertype_name = supertype
-          # Literal object. What should the parent of such objects be?
+          # Literal object
+          # REVISIT: What should the parent of such objects be? Hint: nil is not the right answer (namespace lookup problems!)
           defining = @context.start_object(nil, supertype_name, true)
           block(nil)
           assignment(defining)
@@ -782,11 +859,11 @@ module ADL
       match = (rule || parse_re).match(@input[@offset..-1])
       if !match
         @current = @value = nil
-      elsif !rule
+      elsif rule        # the specified rule matched
+        @current = rule
+        @value = match.to_s
+      else              # We're using the omnibus regexp. Find which token matched
         @current, @value = match.names.map{|n| match[n] ? [n, match[n]] : nil}.compact[0]
-      else
-        @current = match ? rule : nil
-        @value = match ? match.to_s : ''
       end
     end
 
@@ -808,7 +885,9 @@ module ADL
     def expect token
       next_token unless @current
       return nil unless @current && @current == token
-      [consume, opt_white][0]
+      result = consume
+      opt_white
+      result
     end
 
     def require token
