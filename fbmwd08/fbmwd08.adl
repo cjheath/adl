@@ -26,11 +26,13 @@ Fact Based Model: {
 	Modality: Enumeration;
 	Alethic Modality: Modality;
 	Deontic Modality: Modality;
+	Modality.Is Sterile = True;
 
 	World Assumption: Enumeration;
 	Open World Assumption: World Assumption;
 	Open World With Negation Assumption: World Assumption;
-	Close World Assumption: World Assumption;
+	Closed World Assumption: World Assumption;
+	World Assumption.Is Sterile = True;
 
 	// Comparator is an extensible enumeration. Here are the standard values.
 	Comparator: Enumeration;
@@ -40,21 +42,23 @@ Fact Based Model: {
 	LessThanOrEqual Comparator: Comparator;
 	GreaterThanOrEqual Comparator: Comparator;
 	GreaterThan Comparator: Comparator;
+	// Non-exhaustive list; extensions may add new Comparators
 
 	// Instantiation Method is an extensible enumeration. Here are the standard values.
 	Instantiation Method: Enumeration;
 	Asserted: Instantiation Method;
 	Derived: Instantiation Method;
 	Semiderived: Instantiation Method;
+	// Non-exhaustive list; extensions may add new Instantiation Methods
 
 	Rule: {
 		// NOTE: WD08 allows a rule to be in more than one Formal Language. I think this is wrong
 		Is Expressed In => Formal Language;
 	}
 
-	Derivation Evaluation: Enumeration;		// open enumeration of Derivation Evaluation approaches:
+	Derivation Evaluation: Enumeration;		// open enumeration of Derivation Evaluation approaches
 
-	// NOTE: The FBMWG standard allows a Derivation Rule to derive more than one subtype or fact type. This model restricts that.
+	// NOTE: The FBMWG standard allows a Derivation Rule to derive more than one subtype or fact type. This is nonsensical and this model restricts it.
 	Derivation Text: String;
 	Derivation Rule: Rule {
 		Immediate: Derivation Evaluation;	// Standard Derivation Evaluation
@@ -64,13 +68,14 @@ Fact Based Model: {
 		Description: Derivation Text;
 	}
 
-	Identity Fact Type: Fact Type;
+	Identity Fact Type: Fact Type;			// Additional members below
 	Object Type: {
 		// In this representation, the Subtyping object should be a child of the Subtype
 		Subtyping: {
 			Supertype -> Object Type;
-			-> Identity Fact Type;
-			Provides Identification Path -> Boolean;
+
+			-> Identity Fact Type;		// Every Subtyping has an Identity Fact Type
+			Provides Identification Path -> Boolean;	// At most one per subtype
 		}
 		Supertypes => Subtyping;
 		-> Instantiation Method;
@@ -92,15 +97,17 @@ Fact Based Model: {
 		Maximum Is Included -> Boolean;
 	}
 
-	Data Type {
+	Data Type: Object Type {
 		Alternate Names: Name[];
 
-		// NOTE: I would rather call it Data Type.Parameter, not Facet
 		// These are the Facet Restriction Styles
 		Facet Restriction Style: Enumeration;
 		FixedValue: Facet Restriction Style;	// Value may not be overridden
 		AscendingRestriction: Facet Restriction Style;	// Ascending means larger is more restrictive
 		DescendingRestriction: Facet Restriction Style;	// Descending means smaller is more restrictive
+		Facet Restriction Style.Is Sterile = True;
+
+		// NOTE: I would rather call it Data Type.Parameter, not Facet
 		Facet: {
 			-> Data Type;	// A Facet Restriction value must be of this Data Type
 			-> Facet Restriction Style;
@@ -109,6 +116,7 @@ Fact Based Model: {
 			Requires Restriction -> Boolean;
 		}
 	}
+
 	Domain Object Type: Object Type {
 		Is Independent -> Boolean;
 		Alternate Names: Name[];
@@ -150,6 +158,7 @@ Fact Based Model: {
 				Postbound: Reading Text;
 				Prebound: Reading Text;
 			}
+			Reading Roles => Reading Role;
 		}
 		-> Derivation Rule;
 		-> Instantiation Method;	// How is the derived population managed?
@@ -201,7 +210,7 @@ Fact Based Model: {
 	}
 	Frequency Constraint: Constraint {
 		// NOTE: WD08 allows a Frequency Constraint to apply to a list of Roles. It's not obvious that this is useful.
-		=> Fact Type.Role;
+		Roles => Fact Type.Role;
 		Frequency => Frequency Range;
 		Bound: Integer;
 		-> Join Path;
@@ -214,7 +223,7 @@ Fact Based Model: {
 		=> Formal Language;	// General Constraint Is Expressed In Formal Language
 	}
 	Mandatory Constraint: Constraint {
-		=> Fact Type.Role;		// Mandatory Constrained Role
+		Roles => Fact Type.Role;	// Mandatory Constrained Role
 		// -> Exclusion Constraint;	// Do this from the other end
 	}
 	Ring Constraint: Constraint {
@@ -233,7 +242,7 @@ Fact Based Model: {
 	}
 	Set Comparison Constraint: Constraint {
 		Set Comparison Argument: {
-			=> Fact Type.Role;	// Comparison Constrained Role
+			Roles => Fact Type.Role;	// Comparison Constrained Role
 		}
 		-> Join Path;
 	}
@@ -249,7 +258,7 @@ Fact Based Model: {
 		Superset -> Set Comparison Argument;
 	}
 	Uniqueness Constraint: Constraint {
-		=> Fact Type.Role;
+		Roles => Fact Type.Role;
 		-> Join Path;
 	}
 	Value Comparison Constraint: Constraint {
