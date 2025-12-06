@@ -9,6 +9,7 @@
 #include	<array.h>
 #include	<strval.h>
 #include	<adl.h>
+#include	<adlapi.h>
 
 struct	ADLPathName
 {
@@ -68,7 +69,7 @@ class	ADLStack
 /*
  * If Syntax lookup is required, you need to save enough data to implement it.
  */
-class ADLDebugSink
+class ADLAPISink
 {
 	// Current path name being built (with ascent - outer scope levels to rise before searching)
 	ADLPathName	current_path;
@@ -90,7 +91,7 @@ class ADLDebugSink
 public:
 	using	Source = ADLSourcePtr;
 
-	ADLDebugSink()
+	ADLAPISink()
 	{
 	}
 
@@ -316,7 +317,8 @@ int main(int argc, const char** argv)
 	const char*		filename = argv[1];
 	off_t			file_size;
 	char*			text = slurp_file(filename, &file_size);
-	ADLParser<ADLDebugSink>	adl;
+	ADLAPISink		sink;
+	ADLParser<ADLAPISink>	adl(sink);
 	ADLSourcePtr		source(text);
 
 	bool			ok = adl.parse(source);

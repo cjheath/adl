@@ -102,7 +102,7 @@ public:
 	typedef	Source	Type;
 
 	~ADLParser() {}
-	ADLParser() {}
+	ADLParser(Sink& s): sink(s) {}
 
 	bool	parse(Source&);			// ?BOM *definition
 
@@ -148,7 +148,7 @@ protected:
 	bool	string_literal(Source&);
 	bool	numeric_literal(Source&);
 
-	Sink	sink;
+	Sink&	sink;
 };
 
 // ?BOM *definition

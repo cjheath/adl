@@ -32,7 +32,8 @@ int main(int argc, const char** argv)
 	const char*		filename = argv[1];
 	off_t			file_size;
 	char*			text = slurp_file(filename, &file_size);
-	ADLParser<ADLSink<>>	adl;
+	ADLSink<>		sink;
+	ADLParser<>		adl(sink);
 	ADLSourcePtr		source(text);
 
 	bool			ok = adl.parse(source);

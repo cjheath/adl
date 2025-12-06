@@ -6,7 +6,7 @@ CXX	=	g++
 CXXFLAGS =	-std=c++17 $(COPT)
 
 STRPP	=	../../strpp
-PX	=	../../strpp/px
+PX	=	../../px
 
 COPT	=	-I. -I$(STRPP)/include -DHAVE_PTHREADS
 
@@ -41,7 +41,6 @@ vpath	%.a	..
 all:	strpp px lib bins doc
 
 bins:	$(BINS)
-	echo $BINS
 
 lib:
 
