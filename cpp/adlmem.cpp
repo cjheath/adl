@@ -1,12 +1,16 @@
 /*
- * Test stub for just the ADL Parser, with a null Sink
+ * Test driver for parsing ADL to an ADL::MemStore
  */
 #include	<cstdio>
 #include	<cctype>
 #include	<sys/stat.h>
 #include	<unistd.h>
 
+#include	<array.h>
+#include	<strval.h>
 #include	<adlparser.h>
+#include	<adlstore.h>
+#include	<adlmem.h>
 
 char* slurp_file(const char* filename, off_t* size_p)
 {
@@ -32,15 +36,20 @@ char* slurp_file(const char* filename, off_t* size_p)
 
 int main(int argc, const char** argv)
 {
-	const char*		filename = argv[1];
-	off_t			file_size;
-	char*			text = slurp_file(filename, &file_size);
-	ADLSinkStub<>		sink;
-	ADLParser<>		adl(sink);
-	ADLSourceUTF8Ptr	source(text);
+	const char*			filename = argv[1];
+	off_t				file_size;
+	char*				text = slurp_file(filename, &file_size);
 
-	bool			ok = adl.parse(source);
-	off_t			bytes_parsed = source - text;
+	ADLSourceUTF8Ptr		source(text);		// Some input for the parser
+	ADL::MemStore			store;			// Use the memory store
+	typedef	ADLStoreSink<ADL::MemStore>	ADLMemStoreSink;
+	ADLMemStoreSink			sink(store);		// Use the adapter
+	ADLParser<ADLMemStoreSink>	adl(sink);		// With a Parser to feed it
+
+	bool				ok = adl.parse(source);
+	off_t				bytes_parsed = source - text;
+
+	ADL::MemStore::Handle		top = store.top();
 
 	printf("%s, parsed %lld of %lld bytes\n", ok ? "Success" : "Failed", bytes_parsed, file_size);
 	exit(ok ? 0 : 1);

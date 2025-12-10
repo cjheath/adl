@@ -1,12 +1,17 @@
-#include	<stdio.h>
 /*
- * Aspect Definition Language optimised parser
+ * Aspect Definition Language.
+ * An optimised parser, agnostic about its Source and Sink.
  */
+#if	!defined(ADLPARSER_H)
+#define	ADLPARSER_H
+
 #include	<char_encoding.h>
 #include	<error.h>
 #include	<fcntl.h>
 
-class	ADLSourcePtr
+#include	<stdio.h>	// Only used for the stub Source and Sink
+
+class	ADLSourceUTF8Ptr
 {
 	const UTF8*	data;
 	int		peeked_bytes;
@@ -14,8 +19,10 @@ class	ADLSourcePtr
 	int		_column;
 
 public:
-	ADLSourcePtr(const UTF8* _data) : data(_data), peeked_bytes(0), _line_number(1), _column(1) {}
-	ADLSourcePtr(const ADLSourcePtr& c) : data(c.data), peeked_bytes(0), _line_number(c._line_number), _column(c._column) {}
+	ADLSourceUTF8Ptr(const UTF8* _data)
+		: data(_data), peeked_bytes(0), _line_number(1), _column(1) {}
+	ADLSourceUTF8Ptr(const ADLSourceUTF8Ptr& c)
+		: data(c.data), peeked_bytes(0), _line_number(c._line_number), _column(c._column) {}
 	UCS4	peek_char()
 		{
 			const UTF8*	tp = data;
@@ -34,30 +41,31 @@ public:
 			data += peeked_bytes;
 			peeked_bytes = 0;
 		}
-	off_t	operator-(const ADLSourcePtr start) const { return data - start.data; }
-	int	line_number() const { return _line_number; }
-	int	column() const { return _column; }
-	const char*	peek() const { return data; }
-
-	void	print_from(const ADLSourcePtr& start) const {
-			printf("%.*s", (int)(*this - start), start.data);
-		}
-	void	print_ahead() const {
-			printf("`%.*s`...\n", 20, data);
-		}
+	off_t	operator-(const ADLSourceUTF8Ptr start) const
+		{ return data - start.data; }
+	int	line_number() const
+		{ return _line_number; }
+	int	column() const
+		{ return _column; }
+	const char*	peek() const
+		{ return data; }
+	void	print_from(const ADLSourceUTF8Ptr& start) const
+		{ printf("%.*s", (int)(*this - start), start.data); }
+	void	print_ahead() const
+		{ printf("`%.*s`...\n", 20, data); }
 };
 
 /*
  * This is an API stub. During parsing, these methods get called.
  * If Syntax lookup is required, you need to save enough data to implement it.
  */
-template<typename _Source = ADLSourcePtr>
-class ADLSink
+template<typename _Source = ADLSourceUTF8Ptr>
+class ADLSinkStub
 {
 public:
 	using	Source = _Source;
 
-	ADLSink() {}
+	ADLSinkStub() {}
 
 	void	error(const char* why, const char* what, const Source& where)
 		{
@@ -92,7 +100,7 @@ public:
 };
 
 template<
-	typename _Sink = ADLSink<>
+	typename _Sink = ADLSinkStub<>
 >
 class	ADLParser
 {
@@ -996,3 +1004,5 @@ template<typename Source> bool ADLParser<Source>::pegexp_class_char(Source& sour
 	source = probe;
 	return true;
 }
+
+#endif	// ADLPARSER_H

@@ -1,18 +1,18 @@
 /*
- * Test implementation of the ADL API
+ * In-memory (objects) implementation of the ADL Store API
  */
+#if !defined(ADLMEM_H)
+#define	ADLMEM_H
 
-// #include	<adl.h>
-#include	<adlapi.h>
+#include	<adlstore.h>
 #include	<array.h>
-#include	<stdio.h>
 
 namespace ADL {
 
 class	Object;
 class	Handle;
 class	Value;
-class	API;
+class	MemStore;
 
 class	Handle
 {
@@ -101,19 +101,33 @@ protected:
 	int		flags;
 	Array<Handle>	children;
 
-	friend	class	API;	// Required for bootstrap
+	friend	class	MemStore;	// Required for bootstrap
 };
 
-class	API
+class	MemStore
 {
 public:
-	API() : _top(0) {}
+	using	Handle = Handle;
+	using	Value = Value;
+
+	MemStore() : _top(0) {}
 	Handle		top()
 			{
 				if (!_top)
 					bootstrap();
 				return _top;
 			}
+
+	// Make new objects:
+	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0);	// New Object
+
+	// Make new Values:
+	static	Value	pegexp_literal(StrVal);			// contents of a pegexp excluding the '/'s
+	static	Value	reference_literal(StrVal);		// just a pathname
+	static	Value	object_literal(Handle);			// an inline object
+	static	Value	matched_literal(StrVal);		// Value matching a Syntax
+	static	Value	string_literal(StrVal);			// placeholder in the absence of Syntax
+	static	Value	numeric_literal(StrVal);		// placeholder in the absence of Syntax
 
 protected:
 	void		bootstrap();
@@ -122,7 +136,7 @@ protected:
 };
 
 void
-API::bootstrap()
+MemStore::bootstrap()
 {
 	Object*	top = new Object(0, "TOP", 0);
 	_top = top;
@@ -261,10 +275,4 @@ Object::each(std::function<void (Handle child)> operation) const	// Children ite
 
 }
 
-int main(int argc, const char** argv)
-{
-	ADL::API	api;
-	ADL::Handle	top = api.top();
-	return 0;
-}
-
+#endif	// ADLMEM_H
