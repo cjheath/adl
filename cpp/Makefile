@@ -16,17 +16,15 @@ DEBUG	=	-O2 $(COPT)
 # DEBUG	=	-g -DTRACK_RESULTS $(COPT)
 
 HDRS	=	\
-		adl.h \
-		adlapi.h \
-		adlobjects.h
+		adlparser.h \
+		adlstore.h \
+		adlmem.h
 
-SRCS	=	\
-		adlapi.cpp \
-		adlobjects.cpp
+SRCS	=	
 
 BINSRC	=	\
 		adl_scan.cpp \
-		adl.cpp
+		adlmem.cpp
 
 OBJS	=	$(patsubst %,%,$(SRCS:.cpp=.o))
 BINS	=	$(patsubst %,%,$(BINSRC:.cpp=))
@@ -46,6 +44,9 @@ lib:
 
 %:	%.cpp $(LIB) 
 	$(CXX) $(DEBUG) $(CXXFLAGS) -Iinclude -Itest -o $@ $< $(LIB) $(LIBS)
+
+adlmem:		adlparser.h adlstore.h adlmem.h
+adl_scan:	adlparser.h
 
 doc:	adl-rr.html
 adl-rr.html: px adl.px
