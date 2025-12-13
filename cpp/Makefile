@@ -42,7 +42,7 @@ bins:	$(BINS)
 
 lib:
 
-%:	%.cpp $(LIB) 
+%:	%.cpp $(LIB) Makefile
 	$(CXX) $(DEBUG) $(CXXFLAGS) -Iinclude -Itest -o $@ $< $(LIB) $(LIBS)
 
 adlmem:		adlparser.h adlstore.h adlmem.h

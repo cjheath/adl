@@ -450,7 +450,8 @@ public:
 		}
 		else
 		{
-			parent = frame().handle;
+			Frame&		parent_frame = stack.elem_mut(stack.length()-2);
+			parent = parent_frame.handle;
 			if (supertype_present())
 			{		// a new definition - check that the name is not duplicated
 				supertype = resolve_name(super_path);
@@ -476,6 +477,8 @@ public:
 				supertype = frame().handle;
 			}
 
+//			assert(!!parent);
+			printf("Making %s.%s:%s\n", parent.name().asUTF8(), new_path.path.last().asUTF8(), supertype ? supertype.name().asUTF8() : "");
 			frame().handle = store.object(
 					parent,
 					new_path.path.last(),
@@ -508,61 +511,38 @@ public:
 			return parent;
 
 		Handle	start_parent = parent;
-		if (!no_implicit_ascent)
+		StrVal	name;
+		for (int i = 0; parent && i < path.path.length(); i++)
 		{
-			for (int i = 0; i < path.path.length(); i++)
+			name = path.path[i];
+
+			// Search all children lists in the supertype chain
+			Handle	child;
+			for (Handle node = parent; parent && node; node = node.super())
 			{
-				if (!parent)
+				child = node.lookup(name);
+				printf("Looking up %s in %s %s\n", name.asUTF8(), node.name().asUTF8(), child ? "succeeded" : "failed");
+				if (child)
 				{
-					error("Can't find name", path.path[i].asUTF8());
-					return Handle();
+					parent = child.for_() ? child.for_() : child;
+					break;
 				}
 			}
+			if (child)
+				continue;	// Found, descend again?
+
+			if (!no_implicit_ascent && i == 0)
+			{		// We can ascend to look in a parent
+				parent = parent.parent();
+				i--;	// Look for the same name again
+				continue;
+			}
+
+			error("Can't find name", name.asUTF8());
+			return Handle();	// Not found
 		}
 
-		return Handle();	// Not found
-
-#if 0
-    def resolve_name path_name, levels_up = 0
-      o = stacktop
-      levels_up.times { o = o.parent }
-      return o if path_name.empty?
-      path_name = []+path_name
-      if path_name[0] == '.'      # Do not implicitly ascend
-        no_ascend = true
-        path_name.shift
-        while path_name[0] == '.' # just ascend explicitly
-          path_name.shift
-          o = o.parent
-        end
-      end
-      return o if path_name.empty?
-    
-      start_parent = o
-      # Ascend the parent chain until we fail or find our first name:
-      unless no_ascend
-        until path_name.empty? or path_name[0] == (m = o).name or m = o.child_transitive?(path_name[0])
-          unless o.parent
-            error("Failed to find #{path_name[0].inspect} from #{stacktop.name}")
-          end
-          o = o.parent    # Ascend
-        end
-        o = m
-        path_name.shift
-      end
-      error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
-      return o if path_name.empty?
-  
-      # Now descend from the current position down the named children
-      # REVISIT: If we descend a supertype's child, this becomes contextual!
-      path_name.each do |n|
-        m = o.child?(n)
-        error("Failed to find #{n.inspect} in #{o.pathname}") unless m
-        o = m   # Descend
-      end
-      o 
-    end 
-#endif
+		return parent;
 	}
 };
 
