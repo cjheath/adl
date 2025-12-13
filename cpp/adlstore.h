@@ -115,6 +115,9 @@ public:
 template<typename _Store = ADLStoreStub<>>
 class ADLStoreSink
 {
+public:
+	using	Source = ADLSourceUTF8Ptr;		// REVISIT: This must work with other Sources also
+private:
 	using	Store = _Store;
 	using	Handle = typename Store::Handle;
 	using	Value = typename Store::Value;
@@ -176,6 +179,7 @@ class ADLStoreSink
 	};
 
 	Store&		store;
+	Source		last_source;
 
 	// Current path name being built (with ascent - outer scope levels to rise before searching)
 	PathName	current_path;
@@ -186,37 +190,55 @@ class ADLStoreSink
 	Frame&		frame() { return stack.last_mut(); }
 
 	// Read/write access to members of the current frame:
-	PathName&	object_path() { return frame().object_path; }
-	PathName&	supertype_path() { return frame().supertype_path; }
-	bool&		supertype_present() { return frame().supertype_present; }
-	bool&		object_started() { return frame().object_started; }
-	bool&		obj_array() { return frame().obj_array; }
-	ValueType&	value_type() { return frame().value_type; }
-	StrVal&		value() { return frame().value; }
+	PathName&	object_path()
+			{ return frame().object_path; }
+	PathName&	supertype_path()
+			{ return frame().supertype_path; }
+	bool&		supertype_present()
+			{ return frame().supertype_present; }
+	bool&		object_started()
+			{ return frame().object_started; }
+	bool&		obj_array()
+			{ return frame().obj_array; }
+	ValueType&	value_type()
+			{ return frame().value_type; }
+	StrVal&		value()
+			{ return frame().value; }
 
 public:
-	using	Source = ADLSourceUTF8Ptr;
 
 	ADLStoreSink(Store& a)
 	: store(a)
+	, last_source()
 	{
 	}
 
-	void	error(const char* why, const char* what, const Source& where)
+	void	error(const char* why, const char* what = 0, const Source& where = Source())
 	{
-		printf("At line %d:%d, %s MISSING %s: ", where.line_number(), where.column(), why, what);
-		where.print_ahead();
+		printf("At line %d:%d, %s", where.line_number(), where.column(), why);
+		if (what)
+		{
+			printf(", looking for %s", what);
+			const char*	cp = where.peek();
+			if (*cp != '\0')
+			{
+				printf(": ");
+				where.print_ahead();
+				return;
+			}
+		}
+		printf("\n");
 	}
 
 	void	definition_starts()			// A declaration just started
 	{
-		stack.push(Frame());
+		stack.push(Frame());			// Start with an empty Frame
 	}
 
 	void	definition_ends()
 	{
 		start_object();
-		printf("--------------------- Definition Ends\n");
+		printf("-------- Definition Ends\n");
 		(void)stack.pull();
 		current_path.clear();
 	}
@@ -228,6 +250,7 @@ public:
 
 	void	name(Source start, Source end)		// A name exists between start and end
 	{
+		last_source = end;
 		StrVal	n(start.peek(), (int)(end-start));
 
 		if (current_path.sep != " ")			// "" or ".", start new name in pathname
@@ -309,7 +332,7 @@ public:
 	{
 		start_object();
 		obj_array() = true;
-		printf("--------------------- %s.Is Array = true;\n",
+		printf("-------- %s.Is Array = true;\n",
 			object_pathname().asUTF8()
 		);
 	}
@@ -317,7 +340,7 @@ public:
 	void	assignment(bool is_final)		// The value(s) are assigned to the current definition
 	{
 		start_object();
-		printf("--------------------- new Assignment '%s' %s %s;\n",
+		printf("-------- new Assignment '%s' %s %s;\n",
 			object_pathname().asUTF8(),
 			is_final ? "=" : "~=",
 			value().asUTF8()
@@ -326,6 +349,7 @@ public:
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
 	{
+		last_source = end;
 		StrVal	string(start.peek(), (int)(end-start));
 		value_type() = ValueType::String;
 		value() = string;
@@ -333,6 +357,7 @@ public:
 
 	void	numeric_literal(Source start, Source end)	// Contents of a number between start and end
 	{
+		last_source = end;
 		StrVal	number(start.peek(), (int)(end-start));
 		value_type() = ValueType::Number;
 		value() = number;
@@ -340,6 +365,7 @@ public:
 
 	void	matched_literal(Source start, Source end)	// Contents of a matched value between start and end
 	{
+		last_source = end;
 		StrVal	match(start.peek(), (int)(end-start));
 		value_type() = ValueType::Match;
 		value() = match;
@@ -361,6 +387,7 @@ public:
 
 	void	pegexp_literal(Source start, Source end)	// Contents of a pegexp between start and end
 	{
+		last_source = end;
 		StrVal	pegexp(start.peek(), (int)(end-start));
 		value_type() = ValueType::Pegexp;
 		value() = StrVal("/")+pegexp+"/";
@@ -385,17 +412,157 @@ public:
 		if (object_started())
 			return;
 
-		Handle	parent = stack.length() == 1 ? store.top() : stack[stack.length()-1].handle;
+		PathName&	new_path = object_path();
+		PathName&	super_path = supertype_path();
 
-		printf("--------------------- %s Object '%s'", supertype_present() ? "new" : "access", object_pathname().asUTF8());
+		printf("-------- %s Object '%s'", supertype_present() ? "new" : "access", object_pathname().asUTF8());
 		if (supertype_present())
 		{
 			printf(" : ");
-			if (!supertype_path().is_empty())
-				printf("'%s'", supertype_path().display().asUTF8());
+			if (!super_path.is_empty())
+				printf("'%s'", super_path.display().asUTF8());
 		}
 		printf(";\n");
+
+		Handle		parent;
+		Handle		supertype;
+		bool		must_be_top = stack.length() == 1;
+		if (must_be_top)
+		{
+			if (new_path.ascent
+			 || new_path.path.length() < 1
+			 || new_path.path[0] != "TOP")
+			{
+			 	error("Top object must be called TOP");
+				return;
+			}
+
+			if (supertype_present()
+			 && (super_path.path.length() != 1 && super_path.path[0] != "Object"))
+			{
+			 	error("TOP must be Object");
+				return;
+			}
+
+			// new_path.path.shift();
+			parent = frame().handle = store.top();
+			supertype = store.object();
+		}
+		else
+		{
+			parent = frame().handle;
+			if (supertype_present())
+			{		// a new definition - check that the name is not duplicated
+				supertype = resolve_name(super_path);
+				if (!supertype)
+				{
+					error("Supertype name not found", super_path.display().asUTF8());
+					return;
+				}
+			}
+			else
+			{		// If name is present in this parent, access it.
+				frame().handle = resolve_name(new_path);
+				if (!frame().handle)
+				{
+					error("Object name not found", object_pathname().asUTF8());
+					return;
+				}
+
+				if (frame().handle.parent() == parent)
+					return;		// Found existing, just access it.
+
+				// Otherwise it was found elsewhere. Use eponymous naming
+				supertype = frame().handle;
+			}
+
+			frame().handle = store.object(
+					parent,
+					new_path.path.last(),
+					supertype,
+					parent			// REVISIT: Set Aspect correctly where necessary
+				);
+		}
+
 		object_started() = true;
+	}
+
+	Handle	resolve_name(PathName path, int levels_up = 0)
+	{
+		Handle	parent = frame().handle;
+		if (!parent)
+			parent = store.top();
+		while (parent && levels_up-- > 0)
+			parent = parent.parent();
+		if (path.is_empty())
+			return parent;
+		bool	no_implicit_ascent = path.ascent > 0;
+		if (path.ascent)
+		{
+			while (parent && path.ascent-- > 0)
+				parent = parent.parent();
+			// Should we complain if parent is null?
+		}
+
+		if (path.path.length() == 0)
+			return parent;
+
+		Handle	start_parent = parent;
+		if (!no_implicit_ascent)
+		{
+			for (int i = 0; i < path.path.length(); i++)
+			{
+				if (!parent)
+				{
+					error("Can't find name", path.path[i].asUTF8());
+					return Handle();
+				}
+			}
+		}
+
+		return Handle();	// Not found
+
+#if 0
+    def resolve_name path_name, levels_up = 0
+      o = stacktop
+      levels_up.times { o = o.parent }
+      return o if path_name.empty?
+      path_name = []+path_name
+      if path_name[0] == '.'      # Do not implicitly ascend
+        no_ascend = true
+        path_name.shift
+        while path_name[0] == '.' # just ascend explicitly
+          path_name.shift
+          o = o.parent
+        end
+      end
+      return o if path_name.empty?
+    
+      start_parent = o
+      # Ascend the parent chain until we fail or find our first name:
+      unless no_ascend
+        until path_name.empty? or path_name[0] == (m = o).name or m = o.child_transitive?(path_name[0])
+          unless o.parent
+            error("Failed to find #{path_name[0].inspect} from #{stacktop.name}")
+          end
+          o = o.parent    # Ascend
+        end
+        o = m
+        path_name.shift
+      end
+      error("Failed to find #{path_name[0].inspect} in #{start_parent.pathname}") unless o
+      return o if path_name.empty?
+  
+      # Now descend from the current position down the named children
+      # REVISIT: If we descend a supertype's child, this becomes contextual!
+      path_name.each do |n|
+        m = o.child?(n)
+        error("Failed to find #{n.inspect} in #{o.pathname}") unless m
+        o = m   # Descend
+      end
+      o 
+    end 
+#endif
 	}
 };
 

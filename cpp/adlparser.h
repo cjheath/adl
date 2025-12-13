@@ -19,6 +19,8 @@ class	ADLSourceUTF8Ptr
 	int		_column;
 
 public:
+	ADLSourceUTF8Ptr()
+		: data(""), peeked_bytes(0), _line_number(1), _column(1) {}
 	ADLSourceUTF8Ptr(const UTF8* _data)
 		: data(_data), peeked_bytes(0), _line_number(1), _column(1) {}
 	ADLSourceUTF8Ptr(const ADLSourceUTF8Ptr& c)

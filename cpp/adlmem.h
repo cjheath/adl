@@ -31,6 +31,7 @@ public:
 	bool		is_complete();
 	StrVal		syntax();
 	bool		is_array();
+	Array<Handle>&	children();
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Children iterator?
@@ -102,7 +103,13 @@ protected:
 	Array<Handle>	children;
 
 	friend	class	MemStore;	// Required for bootstrap
+	friend	class	Handle;
 };
+
+inline Array<Handle>&	Handle::children()
+{
+	return object->children;
+}
 
 class	MemStore
 {
@@ -112,14 +119,18 @@ public:
 
 	MemStore() : _top(0) {}
 	Handle		top()
-			{
-				if (!_top)
-					bootstrap();
-				return _top;
-			}
+			{ if (!_top) bootstrap(); return _top; }
+	Handle		object()
+			{ if (!_object) bootstrap(); return _object; }
 
 	// Make new objects:
-	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0);	// New Object
+	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0)	// New Object
+			{
+				Object*	o = new Object(parent, name, supertype, aspect);
+				if (parent)		// Add this object to the parent
+					parent.children().push(o);
+				return o;
+			}
 
 	// Make new Values:
 	static	Value	pegexp_literal(StrVal);			// contents of a pegexp excluding the '/'s
