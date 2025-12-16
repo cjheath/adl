@@ -20,7 +20,7 @@ public:
 	Handle() : object(0) {}
 	Handle(Object* o) : object(o) {}
 	~Handle() {}
-			operator bool() const 
+			operator bool() const
 			{ return (bool)object; }
 
 	Handle		parent();

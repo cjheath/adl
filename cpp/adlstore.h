@@ -218,7 +218,7 @@ public:
 		printf("At line %d:%d, %s", where.line_number(), where.column(), why);
 		if (what)
 		{
-			printf(", looking for %s", what);
+			printf(" looking for %s", what);
 			const char*	cp = where.peek();
 			if (*cp != '\0')
 			{
@@ -415,7 +415,7 @@ public:
 		PathName&	new_path = object_path();
 		PathName&	super_path = supertype_path();
 
-		printf("-------- %s Object '%s'", supertype_present() ? "new" : "access", object_pathname().asUTF8());
+		printf("-------- %s Object '%s'", supertype_present() ? "new" : "access", new_path.display().asUTF8());
 		if (supertype_present())
 		{
 			printf(" : ");
@@ -460,13 +460,17 @@ public:
 					supertype = resolve_name(super_path);
 				if (!supertype)
 				{
-					error("Supertype name not found", super_path.display().asUTF8());
-					return;
+					supertype = resolve_name(super_path, 1);
+					if (!supertype)
+					{
+						error("Supertype name not found", super_path.display().asUTF8());
+						return;
+					}
 				}
 			}
 			else
 			{		// If name is present in this parent, access it.
-				frame().handle = resolve_name(new_path);
+				frame().handle = resolve_name(new_path, 1);
 				if (!frame().handle)
 				{
 					error("Object name not found", object_pathname().asUTF8());
