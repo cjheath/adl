@@ -59,7 +59,7 @@ class	Value
 public:
 	Value(StrVal s) : string(s), handle(0) {}
 	Value(Handle h) : handle(h) {}
-protected:
+// protected:					// REVISIT: Make this visible until I decide an API
 	StrVal		string;
 	Handle		handle;
 };
@@ -153,6 +153,7 @@ MemStore::bootstrap()
 	_top = top;
 	_object = new Object(0, "Object", 0);
 	top->_super = _object;
+	_top.children().push(_object);
 
 	Handle regexp = new Object(_object, "Regular Expression", _object, 0);
 	_top.children().push(regexp);

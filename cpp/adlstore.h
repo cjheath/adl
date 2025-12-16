@@ -454,11 +454,11 @@ public:
 			parent = parent_frame.handle;
 			if (supertype_present())
 			{		// a new definition - check that the name is not duplicated
-			 	if (super_path.path.length() == 0)
-				{		// Colon but no name, defaults to Object
+				if (super_path.ascent == 0 && super_path.path.length() == 0)
 					supertype = store.object();
-				}
 				else
+					supertype = resolve_name(super_path);
+				if (!supertype)
 				{
 					supertype = resolve_name(super_path, 1);
 					if (!supertype)
