@@ -454,7 +454,10 @@ public:
 			parent = parent_frame.handle;
 			if (supertype_present())
 			{		// a new definition - check that the name is not duplicated
-				supertype = resolve_name(super_path);
+				if (super_path.ascent == 0 && super_path.path.length() == 0)
+					supertype = store.object();
+				else
+					supertype = resolve_name(super_path);
 				if (!supertype)
 				{
 					error("Supertype name not found", super_path.display().asUTF8());
