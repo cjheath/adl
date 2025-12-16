@@ -453,6 +453,12 @@ public:
 		{
 			Frame&		parent_frame = stack.elem_mut(stack.length()-2);
 			parent = parent_frame.handle;
+			if (!parent)
+			{
+				error("Child skipped because parent is missing");
+				return;
+			}
+
 			frame().handle = resolve_name(new_path, 1);
 			if (supertype_present())
 			{
@@ -489,17 +495,18 @@ public:
 				supertype = frame().handle;
 			}
 
+			StrVal	last_name = new_path.path.length() > 0 ? new_path.path.last() : "";
 			printf("%s %s.%s : %s\n",
 				frame().handle ? "Redeclaring existing" : "Making",
 				parent.name().asUTF8(),
-				new_path.path.last().asUTF8(),
+				last_name.asUTF8(),
 				supertype ? supertype.name().asUTF8() : ""
 			);
 			if (!frame().handle)
 			{
 				frame().handle = store.object(
 						parent,
-						new_path.path.last(),
+						last_name,
 						supertype,
 						parent			// REVISIT: Set Aspect correctly where necessary
 					);
@@ -527,7 +534,7 @@ public:
 		printf("Resolving %s from %s\n", path.display().asUTF8(), parent.name().asUTF8());
 
 		if (path.is_empty())
-			return parent;
+			return 0;	// No ascent, no path.
 		bool	no_implicit_ascent = path.ascent > 0;
 		if (path.ascent)
 			while (parent && path.ascent-- > 0)
