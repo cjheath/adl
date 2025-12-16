@@ -496,22 +496,24 @@ public:
 		object_started() = true;
 	}
 
-	Handle	resolve_name(PathName path, int levels_up = 0)
+	Handle	resolve_name(PathName path, int frames_up = 0)
 	{
-		Handle	parent = frame().handle;
+		Handle	parent;
+		if (stack.length()-1-frames_up >= 0)
+			parent = stack[stack.length()-1-frames_up].handle;
 		if (!parent)
 			parent = store.top();
-		while (parent && levels_up-- > 0)
-			parent = parent.parent();
+
+		printf("Resolving %s from %s\n", path.display().asUTF8(), parent.name().asUTF8());
+
 		if (path.is_empty())
 			return parent;
 		bool	no_implicit_ascent = path.ascent > 0;
 		if (path.ascent)
-		{
 			while (parent && path.ascent-- > 0)
 				parent = parent.parent();
-			// Should we complain if parent is null?
-		}
+		if (!parent)
+			return parent;
 
 		if (path.path.length() == 0)
 			return parent;

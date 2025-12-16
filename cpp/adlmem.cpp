@@ -86,10 +86,10 @@ void p(ADL::Handle h)
 	Array<ADL::Handle>&	c = h.children();
 	if (c.length() > 0)
 	{
-		printf("{\n");
+		printf(" {\n");
 		for (int i = 0; i < c.length(); i++)
 			p(c[i]);
-		printf("}\n");
+		printf("}");
 	}
 	else
 		printf(";");
