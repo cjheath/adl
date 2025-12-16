@@ -22,6 +22,8 @@ public:
 	~Handle() {}
 			operator bool() const
 			{ return (bool)object; }
+	bool		operator==(const Handle& other)
+			{ return object == other; }
 
 	Handle		parent();
 	StrVal		name();

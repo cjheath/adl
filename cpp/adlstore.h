@@ -233,6 +233,7 @@ public:
 
 	void	definition_starts()			// A declaration just started
 	{
+		printf("-------- Definition Starts\n");
 		stack.push(Frame());			// Start with an empty Frame
 	}
 
@@ -452,8 +453,10 @@ public:
 		{
 			Frame&		parent_frame = stack.elem_mut(stack.length()-2);
 			parent = parent_frame.handle;
+			frame().handle = resolve_name(new_path, 1);
 			if (supertype_present())
-			{		// a new definition - check that the name is not duplicated
+			{
+				// Find the supertype:
 				if (super_path.ascent == 0 && super_path.path.length() == 0)
 					supertype = store.object();
 				else
@@ -470,7 +473,6 @@ public:
 			}
 			else
 			{		// If name is present in this parent, access it.
-				frame().handle = resolve_name(new_path, 1);
 				if (!frame().handle)
 				{
 					error("Object name not found", object_pathname().asUTF8());
@@ -478,19 +480,37 @@ public:
 				}
 
 				if (frame().handle.parent() == parent)
+				{
+					printf("Found existing %s\n", new_path.path.last().asUTF8());
 					return;		// Found existing, just access it.
+				}
 
 				// Otherwise it was found elsewhere. Use eponymous naming
 				supertype = frame().handle;
 			}
 
-			printf("Making %s.%s:%s\n", parent.name().asUTF8(), new_path.path.last().asUTF8(), supertype ? supertype.name().asUTF8() : "");
-			frame().handle = store.object(
-					parent,
-					new_path.path.last(),
-					supertype,
-					parent			// REVISIT: Set Aspect correctly where necessary
-				);
+			printf("%s %s.%s : %s\n",
+				frame().handle ? "Redeclaring existing" : "Making",
+				parent.name().asUTF8(),
+				new_path.path.last().asUTF8(),
+				supertype ? supertype.name().asUTF8() : ""
+			);
+			if (!frame().handle)
+			{
+				frame().handle = store.object(
+						parent,
+						new_path.path.last(),
+						supertype,
+						parent			// REVISIT: Set Aspect correctly where necessary
+					);
+			}
+			else if (frame().handle != store.object())	// Only object has no supertype
+			{
+				Handle	existing_super = frame().handle.super();
+				if (supertype && !existing_super
+				 || supertype && existing_super != supertype)
+					error("Cannot change supertype", super_path.display().asUTF8());
+			}
 		}
 
 		object_started() = true;
@@ -529,7 +549,7 @@ public:
 			for (Handle node = parent; parent && node; node = node.super())
 			{
 				child = node.lookup(name);
-				printf("Looking up %s in %s %s\n", name.asUTF8(), node.name().asUTF8(), child ? "succeeded" : "failed");
+				printf("\tLooking up %s in %s %s\n", name.asUTF8(), node.name().asUTF8(), child ? "succeeded" : "failed");
 				if (child)
 				{
 					parent = child.for_() ? child.for_() : child;
