@@ -64,6 +64,7 @@ public:
 
 	// Make new objects:
 	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0);	// New Object
+	Handle		assign(Handle object, Handle variable, Value value, bool is_final);	// New Assignment
 
 	// Make new Values:
 	static	Value	pegexp_literal(StrVal);			// contents of a pegexp excluding the '/'s
@@ -101,7 +102,6 @@ public:
 	static	Handle	Alias();		// aka top.Alias
 	static	Handle	For();			// aka Alias.For
 
-	Handle		assign(Handle object, Handle variable, Value value, bool is_final);	// New Assignment
 	Handle		reference(Handle parent, StrVal name, Handle target, bool is_multi);	// New Reference
 	Handle		alias(Handle parent, StrVal name, Handle target);			// New Alias
 	void		is_array(Handle);	// Set IsArray
@@ -179,7 +179,8 @@ private:
 	};
 
 	Store&		store;
-	Source		last_source;
+	Source		last_source;		// Where were we up to in the ADL input?
+	Handle		last_closed;		// Handle to the last definition that finished
 
 	// Current path name being built (with ascent - outer scope levels to rise before searching)
 	PathName	current_path;
@@ -239,7 +240,7 @@ public:
 	{
 		start_object();
 		printf("-------- Definition Ends\n");
-		(void)stack.pull();
+		last_closed = stack.pull().handle;	// This can be used as a starting point for the next input file
 		current_path.clear();
 	}
 
@@ -429,22 +430,21 @@ public:
 		bool		must_be_top = stack.length() == 1;
 		if (must_be_top)
 		{
-			if (new_path.ascent
-			 || new_path.path.length() < 1
-			 || new_path.path[0] != "TOP")
+			if (new_path.ascent		// Can't ascend to TOP
+			 || new_path.path.length() < 1	// Cannot be anonymous
+			 || new_path.path[0] != "TOP")	// Must be called "TOP"
 			{
 			 	error("Top object must be called TOP");
 				return;
 			}
 
-			if (supertype_present()
+			if (supertype_present()		// If you provide a supertype
 			 && (super_path.path.length() != 1 && super_path.path[0] != "Object"))
 			{
 			 	error("TOP must be Object");
 				return;
 			}
 
-			// new_path.path.shift();
 			parent = frame().handle = store.top();
 			supertype = store.object();
 		}
@@ -484,7 +484,6 @@ public:
 				supertype = frame().handle;
 			}
 
-//			assert(!!parent);
 			printf("Making %s.%s:%s\n", parent.name().asUTF8(), new_path.path.last().asUTF8(), supertype ? supertype.name().asUTF8() : "");
 			frame().handle = store.object(
 					parent,
