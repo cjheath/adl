@@ -155,13 +155,16 @@ MemStore::bootstrap()
 	top->_super = _object;
 	_top.children().push(_object);
 
-	Handle regexp = new Object(_object, "Regular Expression", _object, 0);
+	Handle	regexp = new Object(_top, "Regular Expression", _object, 0);
 	_top.children().push(regexp);
-	Handle syntax = new Object(regexp, "Syntax", _object, 0);
-	_object.children().push(regexp);
-	Handle reference = new Object(_top, "Reference", _object, 0);
+
+	Handle	syntax = new Object(regexp, "Syntax", regexp, 0);
+	_object.children().push(syntax);
+
+	Handle	reference = new Object(_top, "Reference", _object, 0);
 	_top.children().push(reference);
-	Handle assignment = new Object(_top, "Assignment", _object, 0);
+
+	Handle	assignment = new Object(_top, "Assignment", _object, 0);
 	_top.children().push(assignment);
 	// _alias = new Object(_top, "Alias", _object, 0);
 	// _is_for = new ADL::Object(_alias, "For", _object, 0);
