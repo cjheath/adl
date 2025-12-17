@@ -100,3 +100,24 @@ void p(ADL::MemStore m)
 {
 	p(m.top());
 }
+
+void p(const ADLStoreSink<ADL::MemStore>::Frame& f)
+{
+	printf(	"Frame {\n"
+		"  object_path='%s';\n"
+		"  supertype_path='%s';\n"
+		"  object_started=%s;\n"
+		"  obj_array=%s;\n"
+		"  value_type=%d;\n"
+		"  value='%s';\n"
+	//	"  handle->%p;\n"
+		"}\n",
+		f.object_path.display().asUTF8(),
+		f.supertype_path.display().asUTF8(),
+		f.object_started ? "true" : "false",
+		f.obj_array ? "true" : "false",
+		f.value_type,
+		((StrVal)f.value).asUTF8()
+	//	&f.handle._object()
+	);
+}

@@ -347,6 +347,10 @@ public:
 			is_final ? "=" : "~=",
 			value().asUTF8()
 		);
+		// The top object on the stack is the variable.
+		// Next top is the object from which it's being assigned (the context)
+		// We don't have easy access to the parent for the assignment -
+		// it's not the parent of the variable as that is probably a superclass
 	}
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
@@ -579,6 +583,8 @@ public:
 
 		return parent;
 	}
+
+	friend void p(const ADLStoreSink<Store>::Frame& f);	// Allow a debugger to poke around
 };
 
 #endif /* ADLSTORE_H */
