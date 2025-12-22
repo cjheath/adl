@@ -7,10 +7,11 @@ on JSON, XML and YAML, while being fully extensible and type-safe.
 
 ### Free-form
 
-The syntax is free-form, except inside value literals.  Whitespace
-and newlines are considered as equivalent to a single space and are
-ignored. A comment (beginning with //) continues to the end of line
-and is considered as white-space.
+ADL uses Unicode3 characters encoded using UTF-8. The syntax is
+free-form, except inside value literals.  Whitespace and newlines
+are considered as equivalent to a single space and are ignored. A
+comment (beginning with //) continues to the end of line and is
+considered as white-space.
 
 Read the [Px grammar for ADL](adl-rr.html)
 
