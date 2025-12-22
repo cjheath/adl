@@ -65,18 +65,18 @@ int main(int argc, const char** argv)
 void p(ADL::Handle h)
 {
 	printf("%s", h.name().asUTF8());
-	if (h.super())
+	if (!h.super().is_null())
 	{
 		printf(" : %s", h.super().name().asUTF8());
 		auto sp = h.super().parent();
-		if (sp
-		 && !sp.parent())
+		if (!sp.is_null()
+		 && sp.parent().is_null())
 		{
 			if (h.super().name() == "Assignment")
 			{
 				printf(" %s ", h.is_final() ? "=" : "~");
 				auto v = h.value();
-				if (v.handle)
+				if (!v.handle.is_null())
 					p(v.handle);
 				else
 					p(v.string);

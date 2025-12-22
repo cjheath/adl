@@ -50,6 +50,11 @@ public:
 
 	// when Handle is an Alias:
 	Handle		for_();
+
+	// Derived behaviour
+	StrVal		pathname()
+			{
+			}
 };
 
 template<typename _Handle = ADLHandleStub<ADLValueStub>, typename _Value = ADLValueStub>
@@ -457,7 +462,7 @@ public:
 		{
 			Frame&		parent_frame = stack.elem_mut(stack.length()-2);
 			parent = parent_frame.handle;
-			if (!parent)
+			if (parent.is_null())
 			{
 				error("Child skipped because parent is missing");
 				return;
@@ -471,10 +476,10 @@ public:
 					supertype = store.object();
 				else
 					supertype = resolve_name(super_path);
-				if (!supertype)
+				if (supertype.is_null())
 				{
 					supertype = resolve_name(super_path, 1);
-					if (!supertype)
+					if (supertype.is_null())
 					{
 						error("Supertype name not found", super_path.display().asUTF8());
 						return;
@@ -483,7 +488,7 @@ public:
 			}
 			else
 			{		// If name is present in this parent, access it.
-				if (!frame().handle)
+				if (frame().handle.is_null())
 				{
 					error("Object name not found", object_pathname().asUTF8());
 					return;
@@ -501,12 +506,12 @@ public:
 
 			StrVal	last_name = new_path.path.length() > 0 ? new_path.path.last() : "";
 			printf("%s %s.%s : %s\n",
-				frame().handle ? "Redeclaring existing" : "Making",
+				frame().handle.is_null() ? "Making" : "Redeclaring existing",
 				parent.name().asUTF8(),
 				last_name.asUTF8(),
-				supertype ? supertype.name().asUTF8() : ""
+				supertype.is_null() ? "" : supertype.name().asUTF8()
 			);
-			if (!frame().handle)
+			if (frame().handle.is_null())
 			{
 				frame().handle = store.object(
 						parent,
@@ -518,8 +523,8 @@ public:
 			else if (frame().handle != store.object())	// Only object has no supertype
 			{
 				Handle	existing_super = frame().handle.super();
-				if (supertype && !existing_super
-				 || supertype && existing_super != supertype)
+				if (!supertype.is_null() && existing_super.is_null()
+				 || !supertype.is_null() && existing_super != supertype)
 					error("Cannot change supertype", super_path.display().asUTF8());
 			}
 		}
@@ -532,7 +537,7 @@ public:
 		Handle	parent;
 		if (stack.length()-1-frames_up >= 0)
 			parent = stack[stack.length()-1-frames_up].handle;
-		if (!parent)
+		if (parent.is_null())
 			parent = store.top();
 
 		printf("Resolving %s from %s\n", path.display().asUTF8(), parent.name().asUTF8());
@@ -541,9 +546,9 @@ public:
 			return 0;	// No ascent, no path.
 		bool	no_implicit_ascent = path.ascent > 0;
 		if (path.ascent)
-			while (parent && path.ascent-- > 0)
+			while (!parent.is_null() && path.ascent-- > 0)
 				parent = parent.parent();
-		if (!parent)
+		if (parent.is_null())
 			return parent;
 
 		if (path.path.length() == 0)
@@ -551,23 +556,23 @@ public:
 
 		Handle	start_parent = parent;
 		StrVal	name;
-		for (int i = 0; parent && i < path.path.length(); i++)
+		for (int i = 0; !parent.is_null() && i < path.path.length(); i++)
 		{
 			name = path.path[i];
 
 			// Search all children lists in the supertype chain
 			Handle	child;
-			for (Handle node = parent; parent && node; node = node.super())
+			for (Handle node = parent; !parent.is_null() && !node.is_null(); node = node.super())
 			{
 				child = node.lookup(name);
-				printf("\tLooking up %s in %s %s\n", name.asUTF8(), node.name().asUTF8(), child ? "succeeded" : "failed");
-				if (child)
+				printf("\tLooking up %s in %s %s\n", name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded");
+				if (!child.is_null())
 				{
-					parent = child.for_() ? child.for_() : child;
+					parent = child.for_().is_null() ? child : child.for_();
 					break;
 				}
 			}
-			if (child)
+			if (!child.is_null())
 				continue;	// Found, descend again?
 
 			if (!no_implicit_ascent && i == 0)

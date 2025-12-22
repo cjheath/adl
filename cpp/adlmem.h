@@ -20,10 +20,13 @@ public:
 	Handle() : object(0) {}
 	Handle(Object* o) : object(o) {}
 	~Handle() {}
-			operator bool() const
-			{ return (bool)object; }
-	bool		operator==(const Handle& other)
-			{ return object == other; }
+
+	bool		is_null()
+			{ return !(bool)object; }
+	bool		operator==(const Handle& other) const
+			{ return static_cast<const Object*>(object) == static_cast<const Object*>(other.object); }
+	bool		operator!=(const Handle& other) const
+			{ return !(*this == other); }
 
 	Handle		parent();
 	StrVal		name();
@@ -121,15 +124,15 @@ public:
 
 	MemStore() : _top(0) {}
 	Handle		top()
-			{ if (!_top) bootstrap(); return _top; }
+			{ if (_top.is_null()) bootstrap(); return _top; }
 	Handle		object()
-			{ if (!_object) bootstrap(); return _object; }
+			{ if (_object.is_null()) bootstrap(); return _object; }
 
 	// Make new objects:
 	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0)	// New Object
 			{
 				Object*	o = new Object(parent, name, supertype, aspect);
-				if (parent)		// Add this object to the parent
+				if (!parent.is_null())		// Add this object to the parent
 					parent.children().push(o);
 				return o;
 			}
