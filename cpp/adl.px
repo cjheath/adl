@@ -36,9 +36,9 @@ name =
 	| symbol
 	| integer
 
-// Unicode categories here: \a = any letter, \w = any letter or digit, \p{Mn} = non-spacing mark (accent)
+// Unicode categories here: \a = any letter, \w = any letter or digit
 symbol =
-	[_\a] *[_\w\p{Mn}]
+	[_\a] *[_\w]
 
 integer =
 	[1-9] *\d

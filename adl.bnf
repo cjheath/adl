@@ -17,7 +17,7 @@ descend         = '.'
 
 name            = symbol | integer
 
-// Unicode categories here: \p{L} = any letter, \p{N} = any digit, \p{Mn} = non-spacing mark (accent)
+// Unicode categories here: \p{L} = any letter, \p{N} = any digit
 symbol          = [_\p{L}] [_\p{L}\p{N}]*
 
 integer         = [1-9] [0-9]*

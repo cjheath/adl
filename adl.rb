@@ -771,7 +771,7 @@ module ADL
 
     Tokens = {
       white: %r{(\s|//.*)+},
-      symbol: %r{[_\p{L}][_\p{L}\p{N}\p{Mn}]*},
+      symbol: %r{[_\p{L}][_\p{L}\p{N}]*},
       integer: %r{0|[-+]?([1-9]\d*)},
       string: %r{
         '
@@ -815,7 +815,7 @@ module ADL
                   | [^*+?()/|\[ ]               # Anything else except these
                 )
               | \(                              # A parenthesised group
-                  (\?(<[_\p{L}\p{Mn}\p{N}]*>|!))?      # Optional capture name or negative lookahead
+                  (\?(<[_\p{L}\p{N}]*>|!))?     # Optional capture name or negative lookahead
                   \g<sequence>*
                 \)
               | \[                              # Character class starts with [

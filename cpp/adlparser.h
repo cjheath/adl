@@ -141,7 +141,7 @@ protected:
 	bool	matched_literal(Source&, Type&);
 	bool	space(Source&);			// Optional white-space
 	// White-space is free above here, explicit below
-	bool	symbol(Source&);		// [_\a] *[_\w\p{Mn}]
+	bool	symbol(Source&);		// [_\a] *[_\w]
 	bool	integer(Source&);		// [1-9] *[0-9]
 	bool	pegexp_literal(Source& source);		// '/' pegexp_sequence '/'
 	bool	pegexp_sequence(Source&);	// | pegexp_atom | +('|' pegexp_atom)
@@ -693,7 +693,7 @@ template<typename Source> bool ADLParser<Source>::symbol(Source& source)
 	probe.advance();
 
 	while ('_' == (ch = probe.peek_char())
-	    || (UCS4IsAlphabetic(ch) || UCS4IsDecimal(ch) /* || UCS4IsNonSpacingMark(ch) */))
+	    || (UCS4IsAlphabetic(ch) || UCS4IsDecimal(ch)))
 	    	probe.advance();
 	source = probe;
 	return true;
