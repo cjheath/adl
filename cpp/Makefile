@@ -48,9 +48,9 @@ lib:
 adlmem:		adlparser.h adlstore.h adlmem.h
 adl_scan:	adlparser.h
 
-doc:	adl-rr.html
-adl-rr.html: px adl.px
-	$(PX)/px -r adl.px > adl-rr.html
+doc:	../docs/adl-rr.html
+../docs/adl-rr.html: px adl.px
+	$(PX)/px -r adl.px > ../docs/adl-rr.html
 
 px:	
 	@cd $(PX); $(MAKE) px
