@@ -25,6 +25,11 @@ class	ADLHandleStub
 {
 	using 	Handle = ADLHandleStub;
 public:
+	bool		is_null();
+	bool		operator==(const Handle& other) const;
+	bool		operator!=(const Handle& other) const
+			{ return !(*this == other); }
+
 	Handle		parent();
 	StrVal		name();
 	Handle		super();
@@ -51,9 +56,16 @@ public:
 	// when Handle is an Alias:
 	Handle		for_();
 
-	// Derived behaviour
+	// Derived behaviour:
+	void		adopt(Handle child);
+	bool		is_top()
+			{ return parent().is_null(); }
 	StrVal		pathname()
 			{
+				Handle	p = parent();
+				StrVal	n = name();
+				return (!p.is_null() && !p.is_top() ? p.pathname() + "." : "") +
+					(n != "" ? n : "<anonymous>");
 			}
 };
 
@@ -468,17 +480,17 @@ public:
 				return;
 			}
 
-			frame().handle = resolve_name(new_path, 1);
+			frame().handle = lookup_path(new_path, 1);
 			if (supertype_present())
 			{
 				// Find the supertype:
 				if (super_path.ascent == 0 && super_path.path.length() == 0)
 					supertype = store.object();
 				else
-					supertype = resolve_name(super_path);
+					supertype = lookup_path(super_path);
 				if (supertype.is_null())
 				{
-					supertype = resolve_name(super_path, 1);
+					supertype = lookup_path(super_path, 1);
 					if (supertype.is_null())
 					{
 						error("Supertype name not found", super_path.display().asUTF8());
@@ -532,18 +544,36 @@ public:
 		object_started() = true;
 	}
 
-	Handle	resolve_name(PathName path, int frames_up = 0)
+	// Search this object and its supertypes for an object of the given name
+	Handle	lookup_child(Handle parent, StrVal child_name)
+	{
+		for (Handle node = parent; !parent.is_null() && !node.is_null(); node = node.super())
+		{
+			Handle	child = node.lookup(child_name);
+			printf("\tLooking up %s in %s %s\n", child_name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded");
+			if (child.is_null())
+				continue;
+
+			if (!child.for_().is_null())
+				return child.for_();	// Traverse the alias
+			return child;
+		}
+		return 0;
+	}
+
+	Handle	lookup_path(PathName path, int levels_up = 0)
 	{
 		Handle	parent;
-		if (stack.length()-1-frames_up >= 0)
-			parent = stack[stack.length()-1-frames_up].handle;
-		if (parent.is_null())
+		if (stack.length()-1-levels_up >= 0)	// Ascend the lexical stack, not the parent scope
+			parent = stack[stack.length()-1-levels_up].handle;
+		if (parent.is_null())			// If we try to ascend too far, stop at TOP
 			parent = store.top();
 
 		printf("Resolving %s from %s\n", path.display().asUTF8(), parent.name().asUTF8());
 
 		if (path.is_empty())
 			return 0;	// No ascent, no path.
+
 		bool	no_implicit_ascent = path.ascent > 0;
 		if (path.ascent)
 			while (!parent.is_null() && path.ascent-- > 0)
@@ -555,23 +585,12 @@ public:
 			return parent;
 
 		Handle	start_parent = parent;
-		StrVal	name;
 		for (int i = 0; !parent.is_null() && i < path.path.length(); i++)
 		{
-			name = path.path[i];
+			StrVal	child_name = path.path[i];
 
 			// Search all children lists in the supertype chain
-			Handle	child;
-			for (Handle node = parent; !parent.is_null() && !node.is_null(); node = node.super())
-			{
-				child = node.lookup(name);
-				printf("\tLooking up %s in %s %s\n", name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded");
-				if (!child.is_null())
-				{
-					parent = child.for_().is_null() ? child : child.for_();
-					break;
-				}
-			}
+			Handle	child = lookup_child(parent, child_name);
 			if (!child.is_null())
 				continue;	// Found, descend again?
 
@@ -582,7 +601,7 @@ public:
 				continue;
 			}
 
-			error("Can't find name", name.asUTF8());
+			error("Can't find name", child_name.asUTF8());
 			return Handle();	// Not found
 		}
 

@@ -162,27 +162,25 @@ namespace ADL
 	// Adopt this child
 	public void adopt(Object _child)
 	{
-	    if (_child.name != null && child(_child.name) != null)
+	    if (_child.name != null && lookup(_child.name) != null)
 		throw new System.ArgumentException("Can't have two children called "+_child.name);
 
 	    children.Add(_child);
 	}
 
-	public Object child(string name)
+	public Object lookup(string name)
 	{
 	    return name == null ? null : children.Find(m => m.name == name);
 	}
 
 	// Search this object and its supertypes for an object of the given name
-	// REVISIT: This is where we need to implement aliases
-	public Object child_transitive(string name)
+	public Object lookup_child(string name)
 	{
-	    Object	m = child(name);
-	    if (m != null)
-		return m;
-	    if (zuper != null)
-		return zuper.child_transitive(name);
-	    return null;
+	    Object	m = lookup(name);
+	    if (m == null && zuper != null)
+		return zuper.lookup_child(name);
+	    // REVISIT: This is where we need to implement aliases
+	    return m;
 	}
 
 	// Get list of ancestors starting with the outermost and ending with this object
@@ -306,7 +304,7 @@ namespace ADL
 	    Object	p = this;
 	    while (p.parent != null)
 		p = p.parent;
-	    return child("Assignment");
+	    return lookup("Assignment");
 	}
 
 	private bool is_top{get{
@@ -460,18 +458,20 @@ namespace ADL
 	    System.Environment.Exit(1);
 	}
 
-	public	Object	    resolve_name(List<string> path_name, int levels_up = 0)
+	public	Object	    lookup_path(List<string> path_name, int levels_up = 0)
 	{
 	    Object	    o = stacktop;
 	    for (int i = 0; i < levels_up; i++)
-                o = o.parent;
+		o = o.parent;
 	    if (path_name.Count == 0)
-		return o;
-	    List<string>	remaining = new List<string>(path_name);
-	    bool	no_ascend = false;
+		return o;	    // No ascent, no path
+
+	    // Ascend
+	    List<string>    remaining = new List<string>(path_name);
+	    bool	    no_implicit_ascent = false;
 	    if (remaining[0] == ".")	    // Do not implicitly ascend
 	    {
-	        no_ascend = true;
+	        no_implicit_ascent = true;
 		remaining.RemoveAt(0);
 		while (remaining.Count > 0 && remaining[0] == "." && o != null)    // just ascend explicitly
 		{
@@ -486,11 +486,11 @@ namespace ADL
 	    Object	m = null;
 
 	    // Ascend the parent chain until we fail or find our first name:
-	    if (!no_ascend)
+	    if (!no_implicit_ascent)
 	    {
 	        while (remaining.Count > 0 && remaining[0] != (m = o).name)
 		{
-		    if ((m = o.child_transitive(remaining[0])) != null)
+		    if ((m = o.lookup_child(remaining[0])) != null)
 			break;	    // Found!
 		    if (o.parent == null)
 		        error("Failed to find "+remaining[0]+" from "+stacktop.pathname());
@@ -509,7 +509,7 @@ namespace ADL
 	    // REVISIT: If we descend a supertype's child, this becomes contextual!
 	    foreach (var n in remaining)
 	    {
-	        m = o.child(n);
+	        m = o.lookup(n);
 		if (m == null)
 		    error("Failed to find "+n+" in "+o.pathname());
 		o = m;   // Descend
@@ -526,17 +526,17 @@ namespace ADL
 	    {
 		List<string>	parent_name = new List<string>(object_name);
 		parent_name.RemoveAt(parent_name.Count-1);
-		parent = resolve_name(parent_name);
+		parent = lookup_path(parent_name);
 	    }
 	    else
 		parent = stacktop;
 
 	    // Resolve the supertype_name to find the zuper:
-	    Object	zuper = supertype_name != null ? resolve_name(supertype_name) : _object;
+	    Object	zuper = supertype_name != null ? lookup_path(supertype_name) : _object;
 
 	    string	local_name = object_name != null ? object_name[object_name.Count-1] : null;
 	    Object	o;
-	    if (local_name != null && (o = parent.child(local_name)) != null)
+	    if (local_name != null && (o = parent.lookup(local_name)) != null)
 	    {
 		if (supertype_name != null && o.zuper.name != joined_name(supertype_name))
 		    error("Cannot change supertype of "+local_name+" from "+o.zuper.name+" to "+joined_name(supertype_name));
@@ -713,7 +713,7 @@ namespace ADL
 		}
 		else if (peek("open"))
 		{
-		    defining = context.resolve_name(object_name);
+		    defining = context.lookup_path(object_name);
 		    // if (defining.ancestry is not a prefix of context.stack)
 			// REVISIT: This is contextual extension
 		    context.stack = defining.ancestry;
@@ -725,15 +725,15 @@ namespace ADL
 		    name_prefix = new List<string>(object_name);
 		    name_prefix.RemoveAt(object_name.Count-1);
 
-		    Object	reopen = context.resolve_name(name_prefix);
+		    Object	reopen = context.lookup_path(name_prefix);
 		    context.stack = reopen.ancestry;
 		    Object	variable;
-		    variable = context.resolve_name(new List<string>{object_name[object_name.Count-1]});
+		    variable = context.lookup_path(new List<string>{object_name[object_name.Count-1]});
 		    defining = assignment(variable);
 		    is_assignment = defining != null;
 		}
 		else if (object_name != null)
-		    defining = context.resolve_name(object_name);
+		    defining = context.lookup_path(object_name);
 
 		if (!has_block || is_array || is_assignment)
 		    if (!peek("close"))
@@ -798,7 +798,7 @@ namespace ADL
 		    error("expected path name for Reference");
 
 		// Find what this is a reference to
-		Object		reference_object = context.resolve_name(reference_to);
+		Object		reference_object = context.lookup_path(reference_to);
 
 		// An eponymous reference uses reference_to for object_name. It better not be local.
 		if (object_name == null && reference_object.parent == context.stacktop)
@@ -868,7 +868,7 @@ namespace ADL
 		    if (regexp_string != null)
 			val = new RegexValue(regexp_string);
 		    else if ((path_with_syntax = path_name()) != null &&
-			     (existing_object = @context.resolve_name(path_with_syntax)) != null &&
+			     (existing_object = @context.lookup_path(path_with_syntax)) != null &&
 			     (assigned_syntax = existing_object.assigned(@context.syntax)) != null
 			 )
 			val = assigned_syntax.value as RegexValue;
@@ -943,7 +943,7 @@ namespace ADL
 		    if (p == null)
 			error("Assignment to " + variable.name + " must name an ADL object");
 		    bool is_self_assignment = variable == context.stacktop;
-		    defining = context.resolve_name(p, is_self_assignment ? 1 : 0);
+		    defining = context.lookup_path(p, is_self_assignment ? 1 : 0);
 		}
 		val = new ObjectValue(defining);
 		if (refine_from != null && !defining.supertypes.Contains(refine_from))

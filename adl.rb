@@ -145,7 +145,7 @@ module ADL
       # Find whether the first descent is the one that will be resolved:
       scope = object
       while scope && scope != common_ancestor && descent[0]
-        blocker = scope.child_transitive?(descent[0])
+        blocker = scope.lookup_child?(descent[0])
         if blocker
           if blocker != descent_path[0]
             # puts "\nTraverse for name of #{self.pathname} seen from #{object.pathname} common #{common_ancestor.pathname} to avoid #{blocker.pathname}"
@@ -169,21 +169,24 @@ module ADL
     end
 
     def adopt child
-      if child.name && child?(child.name)
+      if child.name && lookup?(child.name)
         raise "Cannot have two children called #{child.name}"
       end
       children << child
     end
 
-    def child? name
+    def lookup? name
       name && children.detect{|m| m.name == name}
     end
 
     # Search this object and its supertypes for an object of the given name
-    # REVISIT: This is where we need to implement aliases
-    def child_transitive? name
-      children.detect{|m| m.name == name} or
-        (@zuper and @zuper.child_transitive?(name))
+    def lookup_child? name
+      child = children.detect{|m| m.name == name}
+      if (!child && @zuper)
+        return @zuper.lookup_child?(name)
+      end
+      # REVISIT: This is where we need to implement aliases
+      child
     end
 
     # Manage inheritance
@@ -380,7 +383,7 @@ module ADL
       exit 1
     end
 
-    def resolve_name path_name, levels_up = 0
+    def lookup_path path_name, levels_up = 0
       o = stacktop
       levels_up.times { o = o.parent }
       return o if path_name.empty?
@@ -398,7 +401,7 @@ module ADL
       start_parent = o
       # Ascend the parent chain until we fail or find our first name:
       unless no_ascend
-        until path_name.empty? or path_name[0] == (m = o).name or m = o.child_transitive?(path_name[0])
+        until path_name.empty? or path_name[0] == (m = o).name or m = o.lookup_child?(path_name[0])
           unless o.parent
             error("Failed to find #{path_name[0].inspect} from #{stacktop.name}")
           end
@@ -413,7 +416,7 @@ module ADL
       # Now descend from the current position down the named children
       # REVISIT: If we descend a supertype's child, this becomes contextual!
       path_name.each do |n|
-        m = o.child?(n)
+        m = o.lookup?(n)
         error("Failed to find #{n.inspect} in #{o.pathname}") unless m
         o = m   # Descend
       end
@@ -424,17 +427,17 @@ module ADL
     def start_object(object_name, supertype_name, orphan = false)
       # Resolve the object_name prefix to find the parent and local name:
       if object_name
-        parent = resolve_name(object_name[0..-2])
+        parent = lookup_path(object_name[0..-2])
         @stack.replace(parent.ancestry)
       else
         parent = stacktop
       end
 
       # Resolve the supertype_name to find the zuper:
-      zuper = supertype_name ? resolve_name(supertype_name) : @object
+      zuper = supertype_name ? lookup_path(supertype_name) : @object
 
       local_name = object_name ? object_name[-1] : nil
-      if local_name and o = parent.child?(local_name)
+      if local_name and o = parent.lookup?(local_name)
         error("Cannot change supertype of #{local_name} from #{o.zuper.name} to #{supertype_name*' '}") if supertype_name && o.zuper.name != supertype_name*' '
       else
         o = Object.new(parent, local_name, zuper)
@@ -536,20 +539,20 @@ module ADL
           is_assignment = assignment(defining)
           @context.end_object
         elsif peek('open')
-          defining = @context.resolve_name(object_name)
+          defining = @context.lookup_path(object_name)
           if (@context.stack & defining.ancestry) != @context.stack
             # puts "REVISIT: Contextual extension"
           end
           @context.stack.replace defining.ancestry
           has_block = block object_name
         elsif object_name and peek('equals') || peek('approx')
-          reopen = @context.resolve_name(object_name[0..-2])
+          reopen = @context.lookup_path(object_name[0..-2])
           @context.stack.replace reopen.ancestry
-          variable = @context.resolve_name([object_name[-1]])
+          variable = @context.lookup_path([object_name[-1]])
           is_assignment = defining = assignment(variable)
         elsif object_name
           # This may be the trailing namespace to use for a following file.
-          defining = @context.resolve_name(object_name)
+          defining = @context.lookup_path(object_name)
         end
         if !has_block || is_array || is_assignment
           peek 'close' or require 'semi'
@@ -596,7 +599,7 @@ module ADL
         error('expected path name for Reference') unless reference_to
 
         # Find what this is a reference to
-        reference_object = @context.resolve_name(reference_to)
+        reference_object = @context.lookup_path(reference_to)
 
         # An eponymous reference uses reference_to for object_name. It better not be local.
         if !object_name && reference_object.parent == @context.stacktop
@@ -641,7 +644,7 @@ module ADL
           if regexp_string = expect('regexp')
             val = RegexValue.new(regexp_string[1..-2])  # Strip off leading and trailing /
           elsif p = path_name and
-            existing_syntax = @context.resolve_name(p) and
+            existing_syntax = @context.lookup_path(p) and
             val = existing_syntax.assigned(@context.syntax) and
             val = val[0]
           else
@@ -714,7 +717,7 @@ module ADL
           p = path_name
           error("Assignment to #{variable.name} must name an ADL object") unless p
           is_self_assignment = variable == @context.stacktop
-          defining = @context.resolve_name(p, is_self_assignment ? 1 : 0)
+          defining = @context.lookup_path(p, is_self_assignment ? 1 : 0)
         end
         val = ObjectValue.new(defining)
         if refine_from && !defining.supertypes.include?(refine_from)

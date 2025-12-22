@@ -36,7 +36,6 @@ public:
 	bool		is_complete();
 	StrVal		syntax();
 	bool		is_array();
-	Array<Handle>&	children();
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Children iterator?
@@ -54,6 +53,11 @@ public:
 
 	// when Handle is an Alias:
 	Handle		for_();
+
+	// Implementation APIs
+	Array<Handle>&	children();
+	void		adopt(Handle child)
+			{ children().push(child); }
 
 private:
 	Ref<Object>	object;
@@ -133,7 +137,7 @@ public:
 			{
 				Object*	o = new Object(parent, name, supertype, aspect);
 				if (!parent.is_null())		// Add this object to the parent
-					parent.children().push(o);
+					parent.adopt(o);
 				return o;
 			}
 
