@@ -1,7 +1,9 @@
 ## Aspect Definition Language (ADL)
 
-The Aspect Definition Language (ADL) is a language for defining the
-classification, attributes and values of hierarchies of data objects.
+The Aspect Definition Language (ADL) is a minimalist language for
+defining the classification, attributes and values of hierarchies
+of data objects. It simplifies and improves in almost every way
+on JSON, XML and YAML, while being fully extensible and type-safe.
 
 ### Free-form
 
@@ -14,11 +16,11 @@ and is considered as white-space.
 
 An object name consists of one or more words, where a word is a
 sequence of alphanumeric or underscore starting with an alphabetic
-character, or is an integer made of a sequence of decimal ASCII
-digits. Any white-space between words of an object name is regarded
-as equivalent to a single space character.  Any object may be
-anonymous, but there is no way to refer to such an object, except
-by iterating over its parent's children.
+or underscore character, or is an integer made of a sequence of
+decimal ASCII digits. Any white-space between words of an object
+name is regarded as equivalent to a single space character.  Any
+object may be anonymous, but there is no way to refer to such an
+object, except by iterating over its parent's children.
 
 ### Inheritance and children
 
