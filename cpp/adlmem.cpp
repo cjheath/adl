@@ -37,24 +37,38 @@ char* slurp_file(const char* filename, off_t* size_p)
 	return text;
 }
 
-int main(int argc, const char** argv)
+typedef	ADLStoreSink<ADL::MemStore>	ADLMemStoreSink;
+
+bool load_file(ADLMemStoreSink& sink, const char* filename)
 {
-	const char*			filename = argv[1];
 	off_t				file_size;
 	char*				text = slurp_file(filename, &file_size);
 
+	ADLParser<ADLMemStoreSink>	adl(sink);		// a Parser to feed the Sink
 	ADLSourceUTF8Ptr		source(text);		// Some input for the parser
-	ADL::MemStore			store;			// Use the memory store
-	typedef	ADLStoreSink<ADL::MemStore>	ADLMemStoreSink;
-	ADLMemStoreSink			sink(store);		// Use the adapter
-	ADLParser<ADLMemStoreSink>	adl(sink);		// With a Parser to feed it
 
 	bool				ok = adl.parse(source);
 	off_t				bytes_parsed = source - text;
+	printf("%s, parsed %lld of %lld bytes\n", ok ? "Success" : "Failed", bytes_parsed, file_size);
+
+	return bytes_parsed == file_size;
+}
+
+int main(int argc, const char** argv)
+{
+	ADL::MemStore	store;			// Use the memory store
+	ADLMemStoreSink	sink(store);		// Use the adapter
+
+	const char*	program_name = argv[0];
+	bool		ok = true;
+	for (--argc, ++argv; ok && argc > 0; argc--, argv++)
+	{
+		const char*	filename = *argv;
+		ok = load_file(sink, filename);
+	}
 
 	ADL::MemStore::Handle		top = store.top();
 
-	printf("%s, parsed %lld of %lld bytes\n", ok ? "Success" : "Failed", bytes_parsed, file_size);
 	p(store);
 	exit(ok ? 0 : 1);
 }

@@ -367,7 +367,7 @@ public:
 		// The top object on the stack is the variable.
 		// Next top is the object from which it's being assigned (the context)
 		// We don't have easy access to the parent for the assignment -
-		// it's not the parent of the variable as that is probably a superclass
+		// it's not the parent of the variable as that is probably a supertype
 	}
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
@@ -438,6 +438,7 @@ public:
 		PathName&	new_path = object_path();
 		PathName&	super_path = supertype_path();
 
+		// REVISIT: Remove diagnostics:
 		printf("-------- %s Object '%s'", supertype_present() ? "new" : "access", new_path.display().asUTF8());
 		if (supertype_present())
 		{
