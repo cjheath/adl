@@ -155,17 +155,17 @@ private:
 				{ clear(); }
 
 		int		ascent;
-		StringArray	path;
+		StringArray	names;
 		StrVal		sep;	// Next separator to use while building ("", " " or ".")
 
 		void		clear()
-				{ ascent = 0; path.clear(); sep = ""; }
+				{ ascent = 0; names.clear(); sep = ""; }
 		bool		is_empty()
-				{ return ascent == 0 && path.length() == 0; }
+				{ return ascent == 0 && names.length() == 0; }
 		void		consume(PathName& target)
 				{ target = *this; clear(); }
 		StrVal		display() const
-				{ return (ascent > 0 ? StrVal(".")*ascent : "") + path.join("."); }
+				{ return (ascent > 0 ? StrVal(".")*ascent : "") + names.join("."); }
 	};
 
 	class Frame
@@ -273,9 +273,9 @@ public:
 		StrVal	n(start.peek(), (int)(end-start));
 
 		if (current_path.sep != " ")			// "" or ".", start new name in pathname
-			current_path.path.push(n);
+			current_path.names.push(n);
 		else if (current_path.sep != ".")
-			current_path.path.push(current_path.path.pull() + current_path.sep + n);	// Append the partial name
+			current_path.names.push(current_path.names.pull() + current_path.sep + n);	// Append the partial name
 		current_path.sep = " ";
 	}
 
@@ -454,22 +454,33 @@ public:
 		if (must_be_top)
 		{
 			if (new_path.ascent		// Can't ascend to TOP
-			 || new_path.path.length() < 1	// Cannot be anonymous
-			 || new_path.path[0] != "TOP")	// Must be called "TOP"
+			 || new_path.names.length() < 1	// Cannot be anonymous
+			 || new_path.names[0] != "TOP")	// Must be called "TOP"
 			{
-			 	error("Top object must be called TOP");
-				return;
-			}
+				last_closed = store.top();
 
-			if (supertype_present()		// If you provide a supertype
-			 && (super_path.path.length() != 1 && super_path.path[0] != "Object"))
-			{
-			 	error("TOP must be Object");
-				return;
-			}
+				if (new_path.ascent		// Can't ascend to TOP
+				 || new_path.names.length() < 1	// Cannot be anonymous
+				 || new_path.names[0] != "TOP")	// Must be called "TOP"
+				{
+					error("Top object must be called TOP");
+					return;
+				}
 
-			parent = frame().handle = store.top();
-			supertype = store.object();
+				if (supertype_present()		// If you provide a supertype
+				 && (super_path.names.length() != 1 && super_path.names[0] != "Object"))
+				{
+					error("TOP must be Object");
+					return;
+				}
+				new_path.names.shift();		// All good, we re-opened TOP
+				if (new_path.names.length() == 0)
+				{
+					object_started() = true;
+					return;			// All done here
+				}
+			}
+			parent = last_closed;
 		}
 		else
 		{
@@ -485,7 +496,7 @@ public:
 			if (supertype_present())
 			{
 				// Find the supertype:
-				if (super_path.ascent == 0 && super_path.path.length() == 0)
+				if (super_path.ascent == 0 && super_path.names.length() == 0)
 					supertype = store.object();
 				else
 					supertype = lookup_path(super_path);
@@ -509,7 +520,7 @@ public:
 
 				if (frame().handle.parent() == parent)
 				{
-					printf("Found existing %s\n", new_path.path.last().asUTF8());
+					printf("Found existing %s\n", new_path.names.last().asUTF8());
 					return;		// Found existing, just access it.
 				}
 
@@ -517,7 +528,7 @@ public:
 				supertype = frame().handle;
 			}
 
-			StrVal	last_name = new_path.path.length() > 0 ? new_path.path.last() : "";
+			StrVal	last_name = new_path.names.length() > 0 ? new_path.names.last() : "";
 			printf("%s %s.%s : %s\n",
 				frame().handle.is_null() ? "Making" : "Redeclaring existing",
 				parent.name().asUTF8(),
@@ -582,13 +593,13 @@ public:
 		if (parent.is_null())
 			return parent;
 
-		if (path.path.length() == 0)
+		if (path.names.length() == 0)
 			return parent;
 
 		Handle	start_parent = parent;
-		for (int i = 0; !parent.is_null() && i < path.path.length(); i++)
+		for (int i = 0; !parent.is_null() && i < path.names.length(); i++)
 		{
-			StrVal	child_name = path.path[i];
+			StrVal	child_name = path.names[i];
 
 			// Search all children lists in the supertype chain
 			Handle	child = lookup_child(parent, child_name);
