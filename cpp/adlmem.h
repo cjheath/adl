@@ -59,6 +59,18 @@ public:
 	void		adopt(Handle child)
 			{ children().push(child); }
 
+	bool		is_top()
+			{ return parent().is_null(); }
+	StrVal		pathname()
+			{
+				if (is_null())
+					return "<NULL>";
+				Handle	p = parent();
+				StrVal	n = name();
+				return (!p.is_null() && !p.is_top() ? p.pathname() + "." : "") +
+					(n.isEmpty() ? "<anonymous>" : n);
+			}
+
 private:
 	Ref<Object>	object;
 };
