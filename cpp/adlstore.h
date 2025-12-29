@@ -23,7 +23,7 @@ class	ADLValueStub
 template<typename Value, typename PegexpValue = StrVal>
 class	ADLHandleStub
 {
-	using 	Handle = ADLHandleStub;
+	using	Handle = ADLHandleStub;
 public:
 	bool		is_null();
 	bool		operator==(const Handle& other) const;
@@ -62,10 +62,12 @@ public:
 			{ return parent().is_null(); }
 	StrVal		pathname()
 			{
+				if (is_null())
+					return "<NULL>";
 				Handle	p = parent();
 				StrVal	n = name();
 				return (!p.is_null() && !p.is_top() ? p.pathname() + "." : "") +
-					(n != "" ? n : "<anonymous>");
+					(n.isEmpty() ? "<anonymous>" : n);
 			}
 };
 
@@ -165,7 +167,10 @@ private:
 		void		consume(PathName& target)
 				{ target = *this; clear(); }
 		StrVal		display() const
-				{ return (ascent > 0 ? StrVal(".")*ascent : "") + names.join("."); }
+				{
+					return (ascent > 0 ? StrVal(".")*ascent : "")
+						+ (names.length() == 0 ? "<none>" : names.join("."));
+				}
 	};
 
 	class Frame
@@ -193,6 +198,16 @@ private:
 		StrVal		value;		// Value assigned
 
 		Handle		handle;
+
+		StrVal		display() const
+				{
+					return	"Frame[" +
+						object_path.display() +
+						(supertype_present ? " : " + supertype_path.display() : "") +
+						(obj_array ? "[]" : "") +
+						(value_type != None ? " = \""+value+"\"" : "") +
+						"]";
+				}
 	};
 
 	Store&		store;
@@ -604,7 +619,10 @@ public:
 			// Search all children lists in the supertype chain
 			Handle	child = lookup_child(parent, child_name);
 			if (!child.is_null())
+			{
+				parent = child;
 				continue;	// Found, descend again?
+			}
 
 			if (!no_implicit_ascent && i == 0)
 			{		// We can ascend to look in a parent
