@@ -73,6 +73,7 @@ public:
 
 private:
 	Ref<Object>	object;
+	Object&		o() { return *object; }
 };
 
 class	Value
@@ -172,7 +173,7 @@ MemStore::bootstrap()
 {
 	Object*	top = new Object(0, "TOP", 0);
 	_top = top;
-	_object = new Object(0, "Object", 0);
+	_object = new Object(_top, "Object", 0);
 	top->_super = _object;
 	_top.children().push(_object);
 

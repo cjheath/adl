@@ -463,109 +463,188 @@ public:
 		}
 		printf(";\n");
 
-		Handle		parent;
-		Handle		supertype;
-		bool		must_be_top = stack.length() == 1;
-		if (must_be_top)
-		{
-			if (new_path.ascent		// Can't ascend to TOP
+		/*
+		 * Search for names in the parent frame, or last_closed, otherwise we must reopen TOP
+		 */
+		bool		is_outermost = stack.length() == 1;	// We've entered but not initialised this frame
+		Handle		parent = is_outermost ? last_closed : stack.elem(stack.length()-2).handle;
+		bool		may_ascend = true;	// A path may ascend only once, either implicitly or explicitly
+		int		descent = 0;		// Start with the first name
+
+		/*
+		 * We're re-opening TOP. Check that's done correctly
+		 */
+		if (is_outermost && last_closed.is_null())
+		{		// names[0] must be "TOP":
+			if (new_path.ascent > 0		// Can't ascend to TOP
 			 || new_path.names.length() < 1	// Cannot be anonymous
 			 || new_path.names[0] != "TOP")	// Must be called "TOP"
 			{
-				last_closed = store.top();
+				error("Top object must be called TOP");
+				return;
+			}
 
-				if (new_path.ascent		// Can't ascend to TOP
-				 || new_path.names.length() < 1	// Cannot be anonymous
-				 || new_path.names[0] != "TOP")	// Must be called "TOP"
-				{
-					error("Top object must be called TOP");
-					return;
-				}
-
-				if (supertype_present()		// If you provide a supertype
-				 && (super_path.names.length() != 1 && super_path.names[0] != "Object"))
+			if (new_path.names.length() == 1)
+			{
+				// If a supertype of TOP is given, it must be just "Object"
+				if (supertype_present()
+				 && (super_path.ascent != 0 || super_path.names.length() != 1 || super_path.names[0] != "Object"))
 				{
 					error("TOP must be Object");
 					return;
 				}
-				new_path.names.shift();		// All good, we re-opened TOP
-				if (new_path.names.length() == 0)
-				{
-					object_started() = true;
-					return;			// All done here
-				}
+
+				frame().handle = store.top();
+				printf("Re-opening TOP\n");
+				object_started() = true;
+				return;			// All done here
 			}
+
+			descent = 1;			// All good, we re-opened TOP, but can descend from there
+			printf("Re-opening top with %d names to descend\n", new_path.names.length()-descent);
+			may_ascend = false;
 			parent = last_closed;
 		}
-		else
+
+		if (parent.is_null())
 		{
-			Frame&		parent_frame = stack.elem_mut(stack.length()-2);
-			parent = parent_frame.handle;
-			if (parent.is_null())
+			error("Child skipped because parent is missing");
+			return;
+		}
+
+		Handle	context = parent;		// We might descend further
+
+		/*
+		 * Handle explicit ascent (up the lexical scopes) to find a parent if requested
+		 */
+		if (new_path.ascent > 0)		// 1 means use the current parent scope (2nd top on stack)
+		{
+			may_ascend = false;
+			int	depth = stack.length()-new_path.ascent-1;
+			if (depth < 0)
+				depth = 0;
+			parent = stack[depth].handle;
+			printf("Ascended to %s\n", stack[depth].display().asUTF8());
+		}
+
+		// Search down from the parent for each name leading to the last one
+		StrVal	child_name;
+		Handle	child;
+		for (; descent+2 < new_path.names.length(); descent++)	// Care: length() is unsigned
+		{
+			child_name = new_path.names[descent];
+			child = lookup_child(parent, child_name);	// Check in all supertypes
+			printf("Descending name %d of %d `%s` from %s found %s\n", descent, new_path.names.length(), child_name.asUTF8(), parent.pathname().asUTF8(), child.pathname().asUTF8());
+			if (child.is_null())		// Not in this parent and we can't ascend
 			{
-				error("Child skipped because parent is missing");
+				if (!may_ascend)
+				{
+					error("Parent object name not found", child_name.asUTF8());
+					return;
+				}
+				parent = parent.parent();
+				may_ascend = false;
+				descent--;
+				continue;
+			}
+
+			parent = child;	// Descend normally
+		}
+		assert(descent == new_path.names.length()-1);
+		child_name = new_path.names[descent];
+		child = child_name.isEmpty() ? Handle() : lookup_child(parent, child_name);
+		if (!child.is_null())
+			printf("Found existing %s\n", new_path.names.last().asUTF8());
+		frame().handle = child;
+
+		/*
+		 * At this point we have a context, a parent, a final name, and perhaps a supertype pathname.
+		 * The supertype must be searched from the context.
+		 */
+		Handle		supertype;
+		if (supertype_present())
+		{
+			auto	empty_super = super_path.is_empty();
+			if (!empty_super)
+			{
+				printf("Looking up supertype %s in %s\n", super_path.display().asUTF8(), context.pathname().asUTF8());
+				supertype = lookup_path(context, super_path);
+			}
+			else
+				supertype = store.object();
+			if (supertype.is_null())
+			{
+				error("Supertype name not found", super_path.display().asUTF8());
 				return;
 			}
 
-			frame().handle = lookup_path(new_path, 1);
-			if (supertype_present())
+			if (!child.is_null() && child.super() != supertype)
 			{
-				// Find the supertype:
-				if (super_path.ascent == 0 && super_path.names.length() == 0)
-					supertype = store.object();
-				else
-					supertype = lookup_path(super_path);
-				if (supertype.is_null())
-				{
-					supertype = lookup_path(super_path, 1);
-					if (supertype.is_null())
-					{
-						error("Supertype name not found", super_path.display().asUTF8());
-						return;
-					}
-				}
+				error("Cannot change supertype", object_pathname().asUTF8());
+				return;
 			}
-			else
-			{		// If name is present in this parent, access it.
-				if (frame().handle.is_null())
-				{
-					error("Object name not found", object_pathname().asUTF8());
-					return;
-				}
-
-				if (frame().handle.parent() == parent)
-				{
-					printf("Found existing %s\n", new_path.names.last().asUTF8());
-					return;		// Found existing, just access it.
-				}
-
-				// Otherwise it was found elsewhere. Use eponymous naming
-				supertype = frame().handle;
-			}
-
-			StrVal	last_name = new_path.names.length() > 0 ? new_path.names.last() : "";
-			printf("%s %s.%s : %s\n",
-				frame().handle.is_null() ? "Making" : "Redeclaring existing",
-				parent.name().asUTF8(),
-				last_name.asUTF8(),
-				supertype.is_null() ? "" : supertype.name().asUTF8()
+		}
+		else if (!child.is_null() && parent != context)
+		{
+#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
+			printf("Found child %s of parent %s from context %s with no supertype\n",
+				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
+				parent.is_null() ? "<none>" : parent.pathname().asUTF8(),
+				context.is_null() ? "<none>" : parent.pathname().asUTF8()
 			);
-			if (frame().handle.is_null())
-			{
-				frame().handle = store.object(
-						parent,
-						last_name,
-						supertype,
-						parent			// REVISIT: Set Aspect correctly where necessary
-					);
-			}
-			else if (frame().handle != store.object())	// Only object has no supertype
-			{
-				Handle	existing_super = frame().handle.super();
-				if (!supertype.is_null() && existing_super.is_null()
-				 || !supertype.is_null() && existing_super != supertype)
-					error("Cannot change supertype", super_path.display().asUTF8());
-			}
+			printf("REVISIT: Unsure how to proceed, so ignoring it\n");
+			return;
+#endif
+		}
+#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
+		else if (child.is_null() && may_ascend)	// See if the name appears in a parent context
+		{
+			// Otherwise it was found elsewhere. Use eponymous naming
+			printf("No child %s of parent %s from context %s with no supertype\n",
+				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
+				parent.is_null() ? "<none>" : parent.pathname().asUTF8(),
+				context.is_null() ? "<none>" : parent.pathname().asUTF8()
+			);
+			printf("Could be eponymous, or a contextual re-opening of a parent's child\n");
+			printf("REVISIT: Unsure how to proceed, so ignoring it\n");
+			return;
+
+			// supertype = frame().handle;
+		}
+#endif
+
+		// At this point, we have set context, parent, and perhaps child and supertype
+
+		printf("%s, ", frame().display().asUTF8());
+		if (!context.is_null() && context != parent)
+			printf("Context: %s, ", context.pathname().asUTF8());
+		printf("Parent: %s, ", parent.is_null() ? "<none>" : parent.pathname().asUTF8());
+		printf("Child name: %s, ", child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8());
+		if (!child.is_null())
+			printf("Found as %s, ", child.pathname().asUTF8());
+		printf("Child name: %s, ", child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8());
+		printf("Supertype: %s\n", supertype.is_null() ? "<none>" : supertype.pathname().asUTF8());
+
+		// REVISIT: This should be just the same as child_name now:
+		StrVal	last_name = new_path.names.length() > 0 ? new_path.names.last() : "";
+
+		if (!child.is_null()
+		 && !supertype.is_null()
+		 && child.super() != supertype)
+		{
+			error("Cannot change supertype", super_path.display().asUTF8());
+			return;
+		}
+
+		frame().handle = child;
+		if (frame().handle.is_null())
+		{
+			frame().handle = store.object(
+					parent,
+					last_name,
+					supertype,
+					context		// REVISIT: check that Aspect is correct
+				);
 		}
 
 		object_started() = true;
@@ -577,7 +656,7 @@ public:
 		for (Handle node = parent; !parent.is_null() && !node.is_null(); node = node.super())
 		{
 			Handle	child = node.lookup(child_name);
-			printf("\tLooking up %s in %s %s\n", child_name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded");
+			printf("\tLooking up %s in %s %s and found %s\n", child_name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded", child.pathname().asUTF8());
 			if (child.is_null())
 				continue;
 
@@ -588,16 +667,12 @@ public:
 		return 0;
 	}
 
-	Handle	lookup_path(PathName path, int levels_up = 0)
+	// Lookup the entire path, ascending to the parent where necessary
+	Handle	lookup_path(Handle parent, PathName path)
 	{
-		Handle	parent;
-		if (stack.length()-1-levels_up >= 0)	// Ascend the lexical stack, not the parent scope
-			parent = stack[stack.length()-1-levels_up].handle;
-		if (parent.is_null())			// If we try to ascend too far, stop at TOP
-			parent = store.top();
+		printf("lookup_path(%s, %s)\n", path.display().asUTF8(), parent.pathname().asUTF8());
 
-		printf("Resolving %s from %s\n", path.display().asUTF8(), parent.name().asUTF8());
-
+		assert(!path.is_empty());
 		if (path.is_empty())
 			return 0;	// No ascent, no path.
 
