@@ -12,6 +12,7 @@
 #include	<adlstore.h>
 #include	<adlmem.h>
 
+StrVal inspect(ADL::Handle, int depth = 0);
 void p(ADL::Handle h);
 void p(ADL::MemStore m);
 
@@ -69,45 +70,49 @@ int main(int argc, const char** argv)
 
 	ADL::MemStore::Handle		top = store.top();
 
-	p(store);
+	p(top);
 	exit(ok ? 0 : 1);
 }
 
 /*
  * Debugging functions
  */
+StrVal inspect(ADL::Value v)
+{
+	   return v.handle.is_null()
+		   ? "\""+v.string+"\""
+		   : inspect(v.handle);
+}
+
+StrVal inspect(ADL::Handle h, int depth)
+{
+	auto	super = h.super();
+	auto	sp = !super.is_null() ? super.parent() : ADL::Handle();
+	auto	v = h.value();
+	Array<ADL::Handle>&	c = h.children();
+	StrVal	indent = StrVal("\t")*depth;
+
+	return	h.name()					// Object name
+		+ (!super.is_null() ? " : "+super.name() : ":")	// Supertype
+		+ (!sp.is_null() && sp.parent().is_null() && super.name() == "Assignment"
+		   ? (h.is_final() ? "=" : "~") + inspect(v)	// Assigned value
+		   : ""
+		  )
+		+ (c.length() > 0					// Children
+		   ?	" {\n\t"
+			+ indent
+		 	+ c.template map<StringArray, StrVal>(
+				[&](const ADL::Handle& h) -> const StrVal
+				{ return inspect(h, depth+1); }
+			).join("\n\t"+indent)
+			+ "\n" + indent + "}"
+		   : ";"
+		);
+}
+
 void p(ADL::Handle h)
 {
-	printf("%s", h.name().asUTF8());
-	if (!h.super().is_null())
-	{
-		printf(" : %s", h.super().name().asUTF8());
-		auto sp = h.super().parent();
-		if (!sp.is_null()
-		 && sp.parent().is_null())
-		{
-			if (h.super().name() == "Assignment")
-			{
-				printf(" %s ", h.is_final() ? "=" : "~");
-				auto v = h.value();
-				if (!v.handle.is_null())
-					p(v.handle);
-				else
-					p(v.string);
-			}
-		}
-	}
-	Array<ADL::Handle>&	c = h.children();
-	if (c.length() > 0)
-	{
-		printf(" {\n");
-		for (int i = 0; i < c.length(); i++)
-			p(c[i]);
-		printf("}");
-	}
-	else
-		printf(";");
-	printf("\n");
+	printf("%s\n", inspect(h).asUTF8());
 }
 
 void p(ADL::MemStore m)
