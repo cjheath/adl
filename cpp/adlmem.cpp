@@ -59,18 +59,25 @@ int main(int argc, const char** argv)
 {
 	ADL::MemStore	store;			// Use the memory store
 	ADLMemStoreSink	sink(store);		// Use the adapter
+	bool		show_all = false;
 
 	const char*	program_name = argv[0];
 	bool		ok = true;
 	for (--argc, ++argv; ok && argc > 0; argc--, argv++)
 	{
 		const char*	filename = *argv;
+		if (0 == strcmp(filename, "-a"))
+		{
+			show_all = true;
+			continue;
+		}
+		sink.root_object = sink.last_object();
 		ok = load_file(sink, filename);
 	}
 
-	ADL::MemStore::Handle		top = store.top();
+	ADL::MemStore::Handle	last = show_all ? store.top() : sink.last_object();
 
-	p(top);
+	p(last);
 	exit(ok ? 0 : 1);
 }
 
@@ -86,6 +93,8 @@ StrVal inspect(ADL::Value v)
 
 StrVal inspect(ADL::Handle h, int depth)
 {
+	if (h.is_null())
+		return "<NULL>";
 	auto	super = h.super();
 	auto	sp = !super.is_null() ? super.parent() : ADL::Handle();
 	auto	v = h.value();

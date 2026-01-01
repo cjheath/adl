@@ -239,12 +239,16 @@ private:
 			{ return frame().value; }
 
 public:
+	Handle		root_object;		// Starting point for top-level declarations
 
 	ADLStoreSink(Store& a)
 	: store(a)
 	, last_source()
 	{
 	}
+
+	Handle	last_object() const
+	{ return last_closed; }
 
 	void	error(const char* why, const char* what = 0, const Source& where = Source())
 	{
@@ -272,7 +276,7 @@ public:
 	void	definition_ends()
 	{
 		start_object();
-		printf("-------- Definition Ends\n");
+		printf("-------- Definition Ends for %s\n", stack.last().handle.pathname().asUTF8());
 		last_closed = stack.pull().handle;	// This can be used as a starting point for the next input file
 		current_path.clear();
 	}
@@ -464,17 +468,17 @@ public:
 		printf(";\n");
 
 		/*
-		 * Search for names in the parent frame, or last_closed, otherwise we must reopen TOP
+		 * Search for names in the parent frame, or root_object, otherwise we must reopen TOP
 		 */
 		bool		is_outermost = stack.length() == 1;	// We've entered but not initialised this frame
-		Handle		parent = is_outermost ? last_closed : stack.elem(stack.length()-2).handle;
+		Handle		parent = is_outermost ? root_object : stack.elem(stack.length()-2).handle;
 		bool		may_ascend = true;	// A path may ascend only once, either implicitly or explicitly
 		int		descent = 0;		// Start with the first name
 
 		/*
 		 * We're re-opening TOP. Check that's done correctly
 		 */
-		if (is_outermost && last_closed.is_null())
+		if (is_outermost && parent.is_null())
 		{		// names[0] must be "TOP":
 			if (new_path.ascent > 0		// Can't ascend to TOP
 			 || new_path.names.length() < 1	// Cannot be anonymous
@@ -501,9 +505,9 @@ public:
 			}
 
 			descent = 1;			// All good, we re-opened TOP, but can descend from there
-			printf("Re-opening top with %d names to descend\n", new_path.names.length()-descent);
+			printf("Re-opening TOP with %d names to descend\n", new_path.names.length()-descent);
 			may_ascend = false;
-			parent = last_closed;
+			parent = store.top();
 		}
 
 		if (parent.is_null())
@@ -622,7 +626,6 @@ public:
 		printf("Child name: %s, ", child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8());
 		if (!child.is_null())
 			printf("Found as %s, ", child.pathname().asUTF8());
-		printf("Child name: %s, ", child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8());
 		printf("Supertype: %s\n", supertype.is_null() ? "<none>" : supertype.pathname().asUTF8());
 
 		// REVISIT: This should be just the same as child_name now:
@@ -664,6 +667,8 @@ public:
 				return child.for_();	// Traverse the alias
 			return child;
 		}
+		if (child_name == "TOP")
+			return store.top();
 		return 0;
 	}
 
@@ -671,7 +676,6 @@ public:
 	Handle	lookup_path(Handle parent, PathName path)
 	{
 		printf("lookup_path(%s, %s)\n", path.display().asUTF8(), parent.pathname().asUTF8());
-// { static bool fault = true; if (fault) assert(!"fault"); }
 		assert(!path.is_empty());
 		if (path.is_empty())
 			return 0;	// No ascent, no path.
