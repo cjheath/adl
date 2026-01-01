@@ -671,15 +671,18 @@ public:
 	Handle	lookup_path(Handle parent, PathName path)
 	{
 		printf("lookup_path(%s, %s)\n", path.display().asUTF8(), parent.pathname().asUTF8());
-
+// { static bool fault = true; if (fault) assert(!"fault"); }
 		assert(!path.is_empty());
 		if (path.is_empty())
 			return 0;	// No ascent, no path.
 
 		bool	no_implicit_ascent = path.ascent > 0;
 		if (path.ascent)
+		{
+			path.ascent--;	// First . indicates just parent
 			while (!parent.is_null() && path.ascent-- > 0)
 				parent = parent.parent();
+		}
 		if (parent.is_null())
 			return parent;
 
