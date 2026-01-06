@@ -95,7 +95,7 @@ public:
 
 #if defined(ADL_HELPERS)
 	// All these builtins can be found by searching in top(), these are short-cuts/caches
-	static	Handle	Object();		// aka top.Object
+	static	Handle	Object();		// aka TOP.Object
 	static	Handle	Parent();		// aka Object.Parent
 	static	Handle	Name();			// aka Object.Name
 	static	Handle	Super();		// aka Object.Super
@@ -105,20 +105,20 @@ public:
 	static	Handle	PegularExpression();	// aka Object.PegularExpression
 	static	Handle	Syntax();		// aka Object.Syntax
 
-	static	Handle	Reference();		// aka top.Reference
-	static	Handle	Enumeration();		// aka top.Enumeration
-	static	Handle	Boolean();		// aka top.Boolean
-	static	Handle	False();		// aka top.False
-	static	Handle	True();			// aka top.True
-	static	Handle	String();		// aka top.String
-	static	Handle	Number();		// aka top.Number
+	static	Handle	Reference();		// aka TOP.Reference
+	static	Handle	Enumeration();		// aka TOP.Enumeration
+	static	Handle	Boolean();		// aka TOP.Boolean
+	static	Handle	False();		// aka TOP.False
+	static	Handle	True();			// aka TOP.True
+	static	Handle	String();		// aka TOP.String
+	static	Handle	Number();		// aka TOP.Number
 
-	static	Handle	Assignment();		// aka top.Assignment
+	static	Handle	Assignment();		// aka TOP.Assignment
 	static	Handle	Variable();		// aka Assignment.Variable
 	static	Handle	ValueOf();		// aka Assignment.Value
-	static	Handle	IsFinal();		// aka Assignment.IsFinal (either top.True or top.False)
+	static	Handle	IsFinal();		// aka Assignment.IsFinal (either TOP.True or TOP.False)
 
-	static	Handle	Alias();		// aka top.Alias
+	static	Handle	Alias();		// aka TOP.Alias
 	static	Handle	For();			// aka Alias.For
 
 	Handle		reference(Handle parent, StrVal name, Handle target, bool is_multi);	// New Reference
@@ -534,7 +534,7 @@ public:
 		// Search down from the parent for each name leading to the last one
 		StrVal	child_name;
 		Handle	child;
-		for (; descent+2 < new_path.names.length(); descent++)	// Care: length() is unsigned
+		for (; descent+1 < new_path.names.length(); descent++)	// Care: length() is unsigned
 		{
 			child_name = new_path.names[descent];
 			child = lookup_child(parent, child_name);	// Check in all supertypes
