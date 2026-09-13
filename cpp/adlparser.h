@@ -660,11 +660,16 @@ template<typename Source> bool ADLParser<Source>::string_literal(Source& source)
 	probe.advance();
 
 	Source	start(probe);
-	while ((ch = probe.peek_char()) && '\'' != ch)
+	while ((ch = probe.peek_char()) != UCS4_NONE && '\'' != ch)
 	{
 		probe.advance();
 		if (ch == '\\')
 			probe.advance(), ch = probe.peek_char();
+	}
+	if (UCS4_NONE == ch)
+	{
+		error("string_literal", "closing '", probe);
+		return false;
 	}
 	sink.string_literal(start, probe);
 	probe.advance();
@@ -869,7 +874,10 @@ template<typename Source> bool ADLParser<Source>::pegexp_lookahead(Source& sourc
 	if ('&' != ch && '!' != ch)
 		return false;
 	probe.advance();
-	return pegexp_atom(probe);
+	if (!pegexp_atom(probe))
+		return false;
+	source = probe;
+	return true;
 }
 
 // | '\\[adhswLU]'			// alpha, digit, hexadecimal, whitespace, word (alpha or digit), Lowercase, Uppercase
@@ -965,8 +973,8 @@ template<typename Source> bool ADLParser<Source>::pegexp_char(Source& source)
 		return false;
 	}
 
-	// No control characters, or whitespace, or other unescaped special characters:
-	if (ch <= ' ' || (UCS4IsASCII(ch) && 0 != strchr("*+?()|/\\[", ch)))
+	// No EOF, control characters, whitespace, or other unescaped special characters:
+	if (ch == UCS4_NONE || ch <= ' ' || (UCS4IsASCII(ch) && 0 != strchr("*+?()|/\\[", ch)))
 		return false;	// These chars are not allowed unescaped
 	probe.advance();
 	source = probe;

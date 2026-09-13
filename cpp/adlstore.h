@@ -789,6 +789,29 @@ public:
 		if (parent.is_null())
 			return error(ADLERR_NO_PARENT, "Child skipped because parent is missing");
 
+		if (new_path.is_empty())
+		{
+			/*
+			 * A standalone anonymous object (README "Anonymity", e.g.
+			 * `: Person {...}` used directly in a block, not as a value -
+			 * for the object-literal-as-value case see
+			 * start_literal_object() above). Always a fresh object, never
+			 * a reopening: lookup_child()/lookup() match by name, and an
+			 * anonymous object has none, so there's no name to search for
+			 * here (it stays reachable via each()/each_child(), just not
+			 * nameable or reopenable, per README).
+			 */
+			Handle	supertype = supertype_present() && !super_path.is_empty()
+						? lookup_path(parent, super_path)
+						: store.object();
+			if (supertype.is_null())
+				return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
+
+			frame().handle = store.object(parent, "", supertype);
+			object_started() = true;
+			return 0;
+		}
+
 		Handle	context = parent;		// We might descend further
 
 		/*
@@ -807,28 +830,38 @@ public:
 		// Search down from the parent for each name leading to the last one
 		StrVal	child_name;
 		Handle	child;
-		for (; descent+1 < new_path.names.length(); descent++)	// Care: length() is unsigned
+		if (new_path.names.length() == 0)
 		{
-			child_name = new_path.names[descent];
-			child = lookup_child(parent, child_name);	// Check in all supertypes
-			ADL_TRACE("Descending name %d of %d `%s` from %s found %s\n", descent, new_path.names.length(), child_name.asUTF8(), parent.pathname().asUTF8(), child.pathname().asUTF8());
-			if (child.is_null())		// Not in this parent and we can't ascend
-			{
-				if (!may_ascend)
-					return error(ADLERR_PARENT_NOT_FOUND, "Parent object name not found", child_name.asUTF8());
-				parent = parent.parent();
-				may_ascend = false;
-				descent--;
-				continue;
-			}
-
-			parent = child;	// Descend normally
+			// Pure ascent, no name (e.g. a lone "."): reopen the
+			// ascended-to object itself - there's no name here to
+			// search it for a child of.
+			child = parent;
 		}
-		assert(descent == new_path.names.length()-1);
-		child_name = new_path.names[descent];
-		child = child_name.isEmpty() ? Handle() : lookup_child(parent, child_name);
-		if (!child.is_null())
-			ADL_TRACE("Found existing %s\n", new_path.names.last().asUTF8());
+		else
+		{
+			for (; descent+1 < new_path.names.length(); descent++)	// Care: length() is unsigned
+			{
+				child_name = new_path.names[descent];
+				child = lookup_child(parent, child_name);	// Check in all supertypes
+				ADL_TRACE("Descending name %d of %d `%s` from %s found %s\n", descent, new_path.names.length(), child_name.asUTF8(), parent.pathname().asUTF8(), child.pathname().asUTF8());
+				if (child.is_null())		// Not in this parent and we can't ascend
+				{
+					if (!may_ascend)
+						return error(ADLERR_PARENT_NOT_FOUND, "Parent object name not found", child_name.asUTF8());
+					parent = parent.parent();
+					may_ascend = false;
+					descent--;
+					continue;
+				}
+
+				parent = child;	// Descend normally
+			}
+			assert(descent == new_path.names.length()-1);
+			child_name = new_path.names[descent];
+			child = child_name.isEmpty() ? Handle() : lookup_child(parent, child_name);
+			if (!child.is_null())
+				ADL_TRACE("Found existing %s\n", new_path.names.last().asUTF8());
+		}
 		frame().handle = child;
 
 		/*

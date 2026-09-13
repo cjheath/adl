@@ -1,0 +1,24 @@
+// EXPECT: PASS
+// Regression test for a real bug found by AFL++ fuzzing this session (see
+// cpp/ToDo): pegexp_lookahead() (adlparser.h) failed to write its advanced
+// scan position back to its caller, so a pegexp literal containing a
+// lookahead ('&'/'!') could never be scanned past - an unterminated one
+// (e.g. "/&0" with no closing '/') hung forever. Fixed, and confirmed this
+// doesn't just avoid the hang but actually works: strpp's own pegexp.h
+// already correctly implements lookahead as a zero-width assertion at
+// match time (see strpp/test/pegexp_test.cases) - this only needed the
+// ADL-side *source-text* scanner (finding where "/regex/" ends in the
+// .adl file) to correctly advance through a lookahead's own characters,
+// which is unrelated to - and doesn't compromise - that zero-width match
+// semantics (see pegexp.h's own skip_atom() for the same distinction).
+//
+// Like every other test here, run_tests.sh only checks the exit code, so
+// this confirms the file parses without crashing/hanging, not that the
+// match result is exactly "y" - that was checked by hand against the
+// trace, not asserted by this test.
+TOP {
+	NotX: {
+		Syntax = /!(x)./
+	}
+	Good: NotX = y;			// Doesn't start with 'x': lookahead passes, matches
+}
