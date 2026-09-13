@@ -931,13 +931,13 @@ template<typename Source> bool ADLParser<Source>::pegexp_char(Source& source)
 				bool	has_curly = '{' == ch;
 				if (has_curly)
 					probe.advance(), ch = probe.peek_char();
-				if (!UCS4HexDigit(ch))
+				if (UCS4HexDigit(ch) < 0)
 					return false;
 				const	int	max = is_hex ? (has_curly ? 8 : 2) : (has_curly ? 8 : 4);
 				for (int i = 1; i < max; i++)
 				{
 					probe.advance(), ch = probe.peek_char();
-					if (!UCS4HexDigit(ch))
+					if (UCS4HexDigit(ch) < 0)
 						break;
 				}
 				if (has_curly && '}' != ch)
