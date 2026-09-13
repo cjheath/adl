@@ -36,6 +36,7 @@ public:
 	bool		is_complete();
 	StrVal		syntax();		// Effective (inherited) Syntax, fetched via store()->Syntax()
 	bool		is_array();
+	void		set_array();		// Mark this object as accepting an array value
 	bool		is_assignment();
 	bool		is_reference();		// Is this object's type chain rooted at the built-in Reference?
 
@@ -99,9 +100,11 @@ public:
 	Value() : string(""), handle(0) {}
 	Value(StrVal s) : string(s), handle(0) {}
 	Value(Handle h) : handle(h) {}
+	Value(Array<Value> a) : string(""), handle(0), elements(a) {}
 // protected:					// REVISIT: Make this visible until I decide an API
 	StrVal		string;
 	Handle		handle;
+	Array<Value>	elements;	// Non-empty iff this Value is an array of element Values
 };
 
 class	Object
@@ -123,6 +126,7 @@ public:
 	bool		is_complete() { return (flags & IsComplete) != 0; }
 	bool		is_array() { return (flags & IsArray) != 0; }
 	bool		is_final() { return (flags & IsFinal) != 0; }
+	void		set_array() { flags |= IsArray; }
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Children iterator?
@@ -230,6 +234,7 @@ public:
 	static	Value	matched_literal(StrVal);		// Value matching a Syntax
 	static	Value	string_literal(StrVal);			// placeholder in the absence of Syntax
 	static	Value	numeric_literal(StrVal);		// placeholder in the absence of Syntax
+	static	Value	array_literal(Array<Value>);		// One element Value per array member
 
 protected:
 	void		bootstrap();
@@ -332,6 +337,12 @@ inline bool
 Handle::is_array()
 {
 	return object->is_array();
+}
+
+inline void
+Handle::set_array()
+{
+	object->set_array();
 }
 
 inline bool
@@ -539,6 +550,12 @@ inline MemStore::Value
 MemStore::numeric_literal(StrVal s)
 {
 	return Value(s);
+}
+
+inline MemStore::Value
+MemStore::array_literal(Array<Value> elements)
+{
+	return Value(elements);
 }
 
 }

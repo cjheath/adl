@@ -97,6 +97,9 @@ public:
 	void	object_literal() {}			// An object_literal (supertype, block, assignment) was pushed
 	void	reference_literal() {}			// The last pathname is a value to assign to a reference variable
 	void	pegexp_literal(Source start, Source end) {}	// Contents of a pegexp between start and end
+	void	array_value_start() {}			// '[' seen; an array of values follows
+	void	array_value_element() {}		// One element's literal was just reported above
+	void	array_value_end() {}			// ']' seen; the reported elements are now the whole value
 
 	Source	lookup_syntax(Source type)		// Return Source of a Pegexp string to use in matching
 		{ return Source(""); }
@@ -512,12 +515,14 @@ template<typename Source> bool ADLParser<Source>::array_value(Source& source, Ty
 	probe.advance();
 
 	space(probe);
+	sink.array_value_start();
 
 	UCS4	ch;
 	while (true)
 	{
 		if (!atomic_value(probe, type))
 			return false;
+		sink.array_value_element();
 
 		ch = probe.peek_char();		// Save ch to avoid peeking again for ']'
 		if (',' != ch)
@@ -528,6 +533,7 @@ template<typename Source> bool ADLParser<Source>::array_value(Source& source, Ty
 	if (']' != ch)
 		return false;
 	probe.advance();
+	sink.array_value_end();
 	space(probe);
 	source = probe;
 	return true;

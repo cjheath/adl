@@ -76,10 +76,11 @@ public:
 	// when Handle is an Alias:
 	Handle		for_();
 
+	void		set_array();		// Mark this object as accepting an array value
+
 #if defined(ADL_HELPERS)
 	Handle		reference(StrVal name, Handle target, bool is_multi);	// Create new Reference child
 	Handle		alias(StrVal name, Handle target);			// Create new Alias child
-	void		set_array();		// Mark this object as accepting an array value
 #endif
 
 	// Derived behaviour:
@@ -120,6 +121,7 @@ public:
 	static	Value	matched_literal(StrVal);		// Value matching a Syntax
 	static	Value	string_literal(StrVal);			// placeholder in the absence of Syntax
 	static	Value	numeric_literal(StrVal);		// placeholder in the absence of Syntax
+	static	Value	array_literal(Array<Value>);		// One element Value per array member
 
 #if defined(ADL_HELPERS)
 	// All these builtins can be found by searching in top(), these are short-cuts/caches;
@@ -170,7 +172,8 @@ private:
 		Reference,
 		Object,
 		Pegexp,
-		Match
+		Match,
+		ArrayValue	// Not "Array": would shadow the ::Array<> template used throughout this class
 	};
 
 	struct	PathName
@@ -218,6 +221,10 @@ private:
 
 		// path name and ascent for a Reference value (only meaningful when value_type == Reference)
 		PathName	reference_path;
+
+		// One Store::Value per element, accumulated by array_value_element()
+		// as each is parsed; only meaningful when value_type == Array
+		Array<Value>	array_elements;
 
 		Handle		handle;
 
@@ -392,7 +399,7 @@ public:
 			obj_array() = true;
 
 		Handle	variable = frame().handle;
-		Handle	context = stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
+		Handle	context = current_context();
 		if (variable.is_null() || context.is_null())
 			return 0;
 
@@ -443,6 +450,7 @@ public:
 		if (err)
 			return err;
 		obj_array() = true;
+		frame().handle.set_array();
 		printf("-------- %s.Is Array = true;\n",
 			object_pathname().asUTF8()
 		);
@@ -463,7 +471,7 @@ public:
 		// The top object on the stack is the variable being assigned.
 		// The next frame down is the context (the object from which it's being assigned).
 		Handle	variable = frame().handle;
-		Handle	context = stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
+		Handle	context = current_context();
 
 		if (variable.is_null() || context.is_null())
 			return 0;
@@ -520,6 +528,21 @@ public:
 		value() = pegexp;		// excludes the delimiting '/'s, per Store::pegexp_literal's contract
 	}
 
+	void	array_value_start()			// '[' seen; an array of values follows
+	{
+		frame().array_elements.clear();
+	}
+
+	void	array_value_element()			// One element's literal was just reported above (value()/value_type())
+	{
+		frame().array_elements.push(build_value(current_context()));
+	}
+
+	void	array_value_end()			// ']' seen; the reported elements are now the whole value
+	{
+		value_type() = ValueType::ArrayValue;	// build_value() will use frame().array_elements, not value()
+	}
+
 	Source	lookup_syntax(Source type)		// Return Source of a Pegexp string to use in matching
 	{
 		start_object();		// Resolve frame().handle now: for a bare "X.Y = value" with no
@@ -538,6 +561,14 @@ public:
 
 	// Methods below here are not a required part of the Sink:
 
+	// The object one level up the stack from the current definition - the
+	// context an assignment, Reference restriction, or array element
+	// value is resolved/recorded from (see README "Resolving Names").
+	Handle	current_context()
+	{
+		return stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
+	}
+
 	// Turn the current Frame's parsed literal into a Store Value.
 	// 'context' is where the search for a Reference's target begins (the same
 	// starting point used for supertype resolution - see README "Resolving Names").
@@ -554,6 +585,7 @@ public:
 			return store.reference_literal(target);
 		}
 		case ValueType::Match:		return store.matched_literal(value());
+		case ValueType::ArrayValue:	return store.array_literal(frame().array_elements);
 		case ValueType::Object:	// REVISIT: inline object-literal assignment not yet supported
 		default:			return store.string_literal(value());
 		}

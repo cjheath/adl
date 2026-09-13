@@ -86,9 +86,14 @@ int main(int argc, const char** argv)
  */
 StrVal inspect(ADL::Value v)
 {
-	   return v.handle.is_null()
-		   ? "\""+v.string+"\""
-		   : inspect(v.handle);
+	if (v.elements.length() > 0)
+		return "[" + v.elements.map<StringArray, StrVal>(
+			[&](const ADL::Value& e) -> const StrVal
+			{ return inspect(e); }
+		).join(", ") + "]";
+	return v.handle.is_null()
+		? "\""+v.string+"\""
+		: inspect(v.handle);
 }
 
 StrVal inspect(ADL::Handle h, int depth)
