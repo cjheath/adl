@@ -11,6 +11,22 @@
 
 #include	<adlparser.h>
 #include	<strval.h>
+#include	<cstdlib>
+
+/*
+ * Verbose parse-tracing, off by default: gated behind the ADL_DEBUG
+ * environment variable so all the tracing added while developing this
+ * Sink stays available for future debugging without cluttering normal
+ * output. getenv() is checked only once - the result can't change during
+ * a run - and cached in a function-local static; `inline` keeps this
+ * header-safe while still sharing that one cached value process-wide.
+ */
+inline bool adl_debug_enabled()
+{
+	static bool	enabled = getenv("ADL_DEBUG") != nullptr;
+	return enabled;
+}
+#define	ADL_TRACE(...)	do { if (adl_debug_enabled()) printf(__VA_ARGS__); } while (0)
 
 /*
  * Error numbers for the ADL Store/Sink layer. See strval.h's STRERR_*
@@ -344,14 +360,14 @@ public:
 
 	void	definition_starts()			// A declaration just started
 	{
-		printf("-------- Definition Starts\n");
+		ADL_TRACE("-------- Definition Starts\n");
 		stack.push(Frame());			// Start with an empty Frame
 	}
 
 	ErrNum	definition_ends()
 	{
 		ErrNum	err = start_object();
-		printf("-------- Definition Ends for %s\n", stack.last().handle.pathname().asUTF8());
+		ADL_TRACE("-------- Definition Ends for %s\n", stack.last().handle.pathname().asUTF8());
 		last_closed = stack.pull().handle;	// This can be used as a starting point for the next input file
 		current_path.clear();
 		return err;
@@ -411,7 +427,7 @@ public:
 		PathName	reference_path;
 		current_path.consume(reference_path);
 
-		printf("-------------- new Reference %s %s '%s'\n",
+		ADL_TRACE("-------------- new Reference %s %s '%s'\n",
 			object_path().display().asUTF8(),
 			is_multi ? "=>" : "->",
 			reference_path.display().asUTF8());
@@ -464,7 +480,7 @@ public:
 		PathName	alias_path;
 		current_path.consume(alias_path);
 
-		printf("---------------- new Alias %s to '%s'\n",
+		ADL_TRACE("---------------- new Alias %s to '%s'\n",
 			object_path().display().asUTF8(),
 			alias_path.display().asUTF8());
 		object_started() = true;
@@ -488,7 +504,7 @@ public:
 			return err;
 		obj_array() = true;
 		frame().handle.set_array();
-		printf("-------- %s.Is Array = true;\n",
+		ADL_TRACE("-------- %s.Is Array = true;\n",
 			object_pathname().asUTF8()
 		);
 		return 0;
@@ -522,7 +538,7 @@ public:
 		ErrNum	err = start_object();
 		if (err)
 			return err;
-		printf("-------- new Assignment '%s' %s %s;\n",
+		ADL_TRACE("-------- new Assignment '%s' %s %s;\n",
 			object_pathname().asUTF8(),
 			is_final ? "=" : "~=",
 			value().asUTF8()
@@ -724,14 +740,14 @@ public:
 		PathName&	super_path = supertype_path();
 
 		// REVISIT: Remove diagnostics:
-		printf("-------- %s Object '%s'", supertype_present() ? "new" : "access", new_path.display().asUTF8());
+		ADL_TRACE("-------- %s Object '%s'", supertype_present() ? "new" : "access", new_path.display().asUTF8());
 		if (supertype_present())
 		{
-			printf(" : ");
+			ADL_TRACE(" : ");
 			if (!super_path.is_empty())
-				printf("'%s'", super_path.display().asUTF8());
+				ADL_TRACE("'%s'", super_path.display().asUTF8());
 		}
-		printf(";\n");
+		ADL_TRACE(";\n");
 
 		/*
 		 * Search for names in the parent frame, or root_object, otherwise we must reopen TOP
@@ -759,13 +775,13 @@ public:
 					return error(ADLERR_TOP_SUPER, "TOP must be Object");
 
 				frame().handle = store.top();
-				printf("Re-opening TOP\n");
+				ADL_TRACE("Re-opening TOP\n");
 				object_started() = true;
 				return 0;		// All done here
 			}
 
 			descent = 1;			// All good, we re-opened TOP, but can descend from there
-			printf("Re-opening TOP with %d names to descend\n", new_path.names.length()-descent);
+			ADL_TRACE("Re-opening TOP with %d names to descend\n", new_path.names.length()-descent);
 			may_ascend = false;
 			parent = store.top();
 		}
@@ -785,7 +801,7 @@ public:
 			if (depth < 0)
 				depth = 0;
 			parent = stack[depth].handle;
-			printf("Ascended to %s\n", stack[depth].display().asUTF8());
+			ADL_TRACE("Ascended to %s\n", stack[depth].display().asUTF8());
 		}
 
 		// Search down from the parent for each name leading to the last one
@@ -795,7 +811,7 @@ public:
 		{
 			child_name = new_path.names[descent];
 			child = lookup_child(parent, child_name);	// Check in all supertypes
-			printf("Descending name %d of %d `%s` from %s found %s\n", descent, new_path.names.length(), child_name.asUTF8(), parent.pathname().asUTF8(), child.pathname().asUTF8());
+			ADL_TRACE("Descending name %d of %d `%s` from %s found %s\n", descent, new_path.names.length(), child_name.asUTF8(), parent.pathname().asUTF8(), child.pathname().asUTF8());
 			if (child.is_null())		// Not in this parent and we can't ascend
 			{
 				if (!may_ascend)
@@ -812,7 +828,7 @@ public:
 		child_name = new_path.names[descent];
 		child = child_name.isEmpty() ? Handle() : lookup_child(parent, child_name);
 		if (!child.is_null())
-			printf("Found existing %s\n", new_path.names.last().asUTF8());
+			ADL_TRACE("Found existing %s\n", new_path.names.last().asUTF8());
 		frame().handle = child;
 
 		/*
@@ -825,7 +841,7 @@ public:
 			auto	empty_super = super_path.is_empty();
 			if (!empty_super)
 			{
-				printf("Looking up supertype %s in %s\n", super_path.display().asUTF8(), context.pathname().asUTF8());
+				ADL_TRACE("Looking up supertype %s in %s\n", super_path.display().asUTF8(), context.pathname().asUTF8());
 				supertype = lookup_path(context, super_path);
 			}
 			else
@@ -839,12 +855,12 @@ public:
 		else if (!child.is_null() && parent != context)
 		{
 #if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
-			printf("Found child %s of parent %s from context %s with no supertype\n",
+			ADL_TRACE("Found child %s of parent %s from context %s with no supertype\n",
 				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
 				parent.is_null() ? "<none>" : parent.pathname().asUTF8(),
 				context.is_null() ? "<none>" : parent.pathname().asUTF8()
 			);
-			printf("REVISIT: Unsure how to proceed, so ignoring it\n");
+			ADL_TRACE("REVISIT: Unsure how to proceed, so ignoring it\n");
 			return 0;
 #endif
 		}
@@ -852,13 +868,13 @@ public:
 		{
 #if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
 			// Otherwise it was found elsewhere. Use eponymous naming
-			printf("No child %s of parent %s from context %s with no supertype\n",
+			ADL_TRACE("No child %s of parent %s from context %s with no supertype\n",
 				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
 				parent.is_null() ? "<none>" : parent.pathname().asUTF8(),
 				context.is_null() ? "<none>" : parent.pathname().asUTF8()
 			);
-			printf("Could be eponymous, or a contextual re-opening of a parent's child\n");
-			printf("REVISIT: Unsure how to proceed, so ignoring it\n");
+			ADL_TRACE("Could be eponymous, or a contextual re-opening of a parent's child\n");
+			ADL_TRACE("REVISIT: Unsure how to proceed, so ignoring it\n");
 			return 0;
 
 			// supertype = frame().handle;
@@ -873,14 +889,14 @@ public:
 
 		// At this point, we have set context, parent, and perhaps child and supertype
 
-		printf("%s, ", frame().display().asUTF8());
+		ADL_TRACE("%s, ", frame().display().asUTF8());
 		if (!context.is_null() && context != parent)
-			printf("Context: %s, ", context.pathname().asUTF8());
-		printf("Parent: %s, ", parent.is_null() ? "<none>" : parent.pathname().asUTF8());
-		printf("Child name: %s, ", child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8());
+			ADL_TRACE("Context: %s, ", context.pathname().asUTF8());
+		ADL_TRACE("Parent: %s, ", parent.is_null() ? "<none>" : parent.pathname().asUTF8());
+		ADL_TRACE("Child name: %s, ", child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8());
 		if (!child.is_null())
-			printf("Found as %s, ", child.pathname().asUTF8());
-		printf("Supertype: %s\n", supertype.is_null() ? "<none>" : supertype.pathname().asUTF8());
+			ADL_TRACE("Found as %s, ", child.pathname().asUTF8());
+		ADL_TRACE("Supertype: %s\n", supertype.is_null() ? "<none>" : supertype.pathname().asUTF8());
 
 		// REVISIT: This should be just the same as child_name now:
 		StrVal	last_name = new_path.names.length() > 0 ? new_path.names.last() : "";
@@ -911,7 +927,7 @@ public:
 		for (Handle node = parent; !parent.is_null() && !node.is_null(); node = node.super())
 		{
 			Handle	child = node.lookup(child_name);
-			printf("\tLooking up %s in %s %s and found %s\n", child_name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded", child.pathname().asUTF8());
+			ADL_TRACE("\tLooking up %s in %s %s and found %s\n", child_name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded", child.pathname().asUTF8());
 			if (child.is_null())
 				continue;
 
@@ -927,7 +943,7 @@ public:
 	// Lookup the entire path, ascending to the parent where necessary
 	Handle	lookup_path(Handle parent, PathName path)
 	{
-		printf("lookup_path(%s, %s)\n", path.display().asUTF8(), parent.pathname().asUTF8());
+		ADL_TRACE("lookup_path(%s, %s)\n", path.display().asUTF8(), parent.pathname().asUTF8());
 		assert(!path.is_empty());
 		if (path.is_empty())
 			return 0;	// No ascent, no path.
