@@ -1,10 +1,17 @@
+// EXPECT: PASS
+// Inline object literals used as array-element values for a Reference-array
+// variable (README "Reference Variables" / "Values"): each ": Type {...}"
+// creates a real, if anonymous, object - parented on the Assignment it's
+// the value of, not on whatever lexically encloses it (see cpp/ToDo item 4)
+// - and each must be a subtype of the variable's restriction (here, Base).
 TOP {
-	b:;
-	c:{foo:}
-	d:;
+	Target:;
+	Base:;
+	Derived: Base { Note:; }
+	Other: Base;
 
-	a => b = [
-		: c { foo = bar; };
-		: d;
+	Refs => Base = [
+		: Derived { Note = Target },
+		: Other
 	];
 }

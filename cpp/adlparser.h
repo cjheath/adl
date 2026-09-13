@@ -90,11 +90,13 @@ public:
 	void	block_start() {}			// enter the block given by the pathname and supertype
 	void	block_end() {}				// exit the block given by the pathname and supertype
 	void	is_array() {}				// This definition is an array
+	void	assignment_starts(bool is_final) {}	// '=' or '~=' just seen; about to parse its value
 	void	assignment(bool is_final) {}		// The value(s) are assigned to the current definition
 	void	string_literal(Source start, Source end) {}	// Contents of a string between start and end
 	void	numeric_literal(Source start, Source end) {}	// Contents of a number between start and end
 	void	matched_literal(Source start, Source end) {}	// Contents of a matched value between start and end
-	void	object_literal() {}			// An object_literal (supertype, block, assignment) was pushed
+	void	object_literal_starts() {}		// ':' seen for an object-literal value
+	void	object_literal_ends() {}		// supertype/?block/?assignment for the literal are complete
 	void	reference_literal() {}			// The last pathname is a value to assign to a reference variable
 	void	pegexp_literal(Source start, Source end) {}	// Contents of a pegexp between start and end
 	void	array_value_start() {}			// '[' seen; an array of values follows
@@ -459,6 +461,7 @@ template<typename Source> bool ADLParser<Source>::final_assignment(Source& sourc
 	probe.advance();
 	space(probe);
 
+	sink.assignment_starts(true);
 	bool	has_value = value(probe, type);
 	if (!has_value)
 	{
@@ -488,6 +491,7 @@ template<typename Source> bool ADLParser<Source>::tentative_assignment(Source& s
 	probe.advance();
 	space(probe);
 
+	sink.assignment_starts(false);
 	bool	has_value = value(probe, type);
 	if (!has_value)
 		return false;	// Assignment must have a value
@@ -586,13 +590,23 @@ template<typename Source> bool ADLParser<Source>::reference_literal(Source& sour
 // supertype ?block ?assignment
 template<typename Source> bool ADLParser<Source>::object_literal(Source& source)
 {
-	Type	type(source);
-	if (!supertype(source))
+	if (':' != source.peek_char())		// Not a literal; let atomic_value() try something else
 		return false;
 
+	/*
+	 * Start a new Frame for the anonymous object before supertype()/block()
+	 * run, so their sink calls land on it instead of the enclosing value's
+	 * Frame (which they used to corrupt - an object literal is not itself
+	 * a named definition, but supertype()/block_start() are shared with
+	 * that code path and need a Frame of their own to operate on).
+	 */
+	sink.object_literal_starts();
+
+	Type	type(source);
+	supertype(source);			// Always succeeds now that we've seen ':'
 	bool	has_block = block(source);
 	bool	has_assignment = assignment(source, type);
-	sink.object_literal();
+	sink.object_literal_ends();		// Create the object (if not already), and pop its Frame
 	return true;
 }
 

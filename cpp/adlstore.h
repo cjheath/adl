@@ -59,11 +59,21 @@ public:
 	bool		is_reference();	// Is this object's type chain rooted at the built-in Reference?
 
 	Handle		lookup(StrVal name);		// Search down one level
-	void		each(std::function<void (Handle child)> operation) const;	// Children iterator?
+	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
+	void		each_child(std::function<void (Handle child)> operation) const;	// Every child, named or anonymous
+	void		each_assignment(std::function<void (Handle assignment)> operation) const;	// Only this object's own local Assignments
 	// Shortcut methods:
 	ErrNum		assign(Handle variable, Value value, bool is_final);	// Create/refine an Assignment;
 					// ADLERR_FINAL_VIOLATION if this violates a final Reference restriction
 	Handle		assigned(Handle variable);	// Search for an assignment
+
+	/*
+	 * Split form of assign(), used when the value may itself contain an
+	 * anonymous object-literal value that needs a home (see ADLStoreSink::
+	 * assignment_starts()/object_literal_starts()) before it's known:
+	 */
+	Handle		begin_assign(Handle variable);		// Locate/create the local Assignment slot, value not yet set
+	ErrNum		finish_assign(Handle slot, Handle variable, Value value, bool is_final);	// Finality check, then set the value
 
 	// when Handle is an Assignment:
 	Handle		variable();
@@ -201,11 +211,12 @@ private:
 	class Frame
 	{
 	public:
-		Frame()
+		Frame(bool literal = false)
 		: object_started(false)
 		, supertype_present(false)
 		, obj_array(false)
 		, value_type(None)
+		, is_literal_value(literal)
 		{}
 
 		// path name and ascent for current object:
@@ -225,6 +236,28 @@ private:
 		// One Store::Value per element, accumulated by array_value_element()
 		// as each is parsed; only meaningful when value_type == Array
 		Array<Value>	array_elements;
+
+		/*
+		 * True for a Frame pushed by object_literal_starts(), i.e. this
+		 * Frame is for an anonymous object literal ('": Super {...}"')
+		 * used as a value, not for a named definition. Makes start_object()
+		 * use start_literal_object() instead of the usual name-search path.
+		 */
+		bool		is_literal_value;
+
+		/*
+		 * Set by assignment_starts() on the Frame for the variable whose
+		 * value is about to be parsed: the local Assignment that value
+		 * belongs to. Read by a nested object_literal via current_assignment()
+		 * (one level down the stack) so it knows what to parent itself on.
+		 */
+		Handle		pending_assignment;
+
+		/*
+		 * Resolved handle of an anonymous object literal parsed as this
+		 * Frame's value (set by object_literal_ends(), consumed by build_value()).
+		 */
+		Handle		literal_handle;
 
 		Handle		handle;
 
@@ -461,6 +494,29 @@ public:
 		return 0;
 	}
 
+	ErrNum	assignment_starts(bool is_final)	// '=' or '~=' just seen, about to parse its value
+	{
+		/*
+		 * Obtain (creating if necessary) the variable's local Assignment
+		 * now, before its value is parsed: a nested object-literal value
+		 * (see object_literal_starts()) needs this to already exist, so it
+		 * has somewhere of its own to be parented (see current_assignment()).
+		 */
+		ErrNum	err = start_object();
+		if (err)
+			return err;
+
+		// The variable being assigned, and the context it's assigned from:
+		Handle	variable = frame().handle;
+		Handle	context = current_context();
+
+		if (variable.is_null() || context.is_null())
+			return 0;
+
+		frame().pending_assignment = context.begin_assign(variable);
+		return 0;
+	}
+
 	ErrNum	assignment(bool is_final)		// The value(s) are assigned to the current definition
 	{
 		ErrNum	err = start_object();
@@ -472,15 +528,14 @@ public:
 			value().asUTF8()
 		);
 
-		// The top object on the stack is the variable being assigned.
-		// The next frame down is the context (the object from which it's being assigned).
 		Handle	variable = frame().handle;
 		Handle	context = current_context();
+		Handle	slot = frame().pending_assignment;
 
-		if (variable.is_null() || context.is_null())
+		if (variable.is_null() || context.is_null() || slot.is_null())
 			return 0;
 
-		ErrNum	final_err = context.assign(variable, build_value(context), is_final);
+		ErrNum	final_err = context.finish_assign(slot, variable, build_value(context), is_final);
 		if (final_err)
 			return error(final_err, "Assignment violates a final restriction", object_pathname().asUTF8());
 
@@ -511,10 +566,26 @@ public:
 		value() = match;
 	}
 
-	void	object_literal()			// An object_literal (supertype, block, assignment) was pushed
+	void	object_literal_starts()			// ':' seen for an object-literal value: start a Frame for it
 	{
+		/*
+		 * Pushed *before* supertype()/block() run, so their sink calls
+		 * (supertype(), block_start(), ...) land on this new Frame instead
+		 * of corrupting the enclosing value's Frame.
+		 */
+		stack.push(Frame(true));
+	}
+
+	ErrNum	object_literal_ends()			// supertype/?block/?assignment for the literal are complete
+	{
+		ErrNum	err = start_object();		// In case neither block nor assignment triggered it (e.g. ': d;')
+		Handle	handle = frame().handle;
+		stack.pull();				// Pop the literal's Frame; the enclosing value's Frame is current again
+		if (err)
+			return err;
 		value_type() = ValueType::Object;
-		value() = "<object literal>";		// REVISIT: include object supertype here
+		frame().literal_handle = handle;
+		return 0;
 	}
 
 	void	reference_literal()			// The last pathname is a value to assign to a reference variable
@@ -573,6 +644,20 @@ public:
 		return stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
 	}
 
+	/*
+	 * The pending_assignment of the Frame one level down - the local
+	 * Assignment that the value currently being parsed belongs to (set by
+	 * assignment_starts()). This is what an object_literal parents itself
+	 * on, so an anonymous value always belongs to the Assignment it's the
+	 * value of, never to whatever object happens to lexically enclose it
+	 * (which may not even be local, if the variable being assigned is
+	 * itself inherited).
+	 */
+	Handle	current_assignment()
+	{
+		return stack.length() >= 2 ? stack.elem(stack.length()-2).pending_assignment : Handle();
+	}
+
 	// Turn the current Frame's parsed literal into a Store Value.
 	// 'context' is where the search for a Reference's target begins (the same
 	// starting point used for supertype resolution - see README "Resolving Names").
@@ -590,7 +675,7 @@ public:
 		}
 		case ValueType::Match:		return store.matched_literal(value());
 		case ValueType::ArrayValue:	return store.array_literal(frame().array_elements);
-		case ValueType::Object:	// REVISIT: inline object-literal assignment not yet supported
+		case ValueType::Object:		return store.reference_literal(frame().literal_handle);
 		default:			return store.string_literal(value());
 		}
 	}
@@ -604,10 +689,36 @@ public:
 		).join(".");
 	}
 
+	ErrNum	start_literal_object()		// Create the anonymous Object for an object-literal value
+	{
+		Handle	slot = current_assignment();	// The Assignment this literal's value belongs to (see assignment_starts())
+		if (slot.is_null())
+			return 0;	// Can't happen via the grammar: assignment_starts() always runs before a value is parsed
+
+		/*
+		 * The Assignment's own context is always local (see begin_assign()),
+		 * even when the variable being assigned is itself inherited - so
+		 * it's the right scope to search for the supertype name in, per
+		 * README "Resolving Names".
+		 */
+		Handle		context = slot.parent();
+		PathName&	super_path = supertype_path();
+		Handle		supertype = super_path.is_empty() ? store.object() : lookup_path(context, super_path);
+		if (supertype.is_null())
+			return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
+
+		frame().handle = store.object(slot, "", supertype);
+		object_started() = true;
+		return 0;
+	}
+
 	ErrNum	start_object()
 	{
 		if (object_started())
 			return 0;
+
+		if (frame().is_literal_value)
+			return start_literal_object();
 
 		PathName&	new_path = object_path();
 		PathName&	super_path = supertype_path();

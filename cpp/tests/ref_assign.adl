@@ -1,3 +1,4 @@
+// EXPECT: PASS
 TOP {
 	b:;
 	c: b;
