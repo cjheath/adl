@@ -1,0 +1,7 @@
+// EXPECT: PASS
+TOP {
+	String:;
+	Object {
+		Name: String;			// The name of this object
+	}
+}

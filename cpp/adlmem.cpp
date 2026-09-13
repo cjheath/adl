@@ -129,6 +129,8 @@ void p(ADL::MemStore m)
 	p(m.top());
 }
 
+void p_str(StrVal s) { p(s); }
+
 void p(const ADLStoreSink<ADL::MemStore>::Frame& f)
 {
 	printf(	"Frame {\n"

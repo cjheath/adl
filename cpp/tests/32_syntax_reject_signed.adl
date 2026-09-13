@@ -1,0 +1,11 @@
+// EXPECT: FAIL
+TOP {
+	Number:;
+	Digits: Number {
+		Syntax = /[1-9]*\d/
+	}
+	// Digits' Syntax has no sign in it, so a leading +/- must be rejected.
+	// (Without a real Syntax to consult, the old hard-coded numeric fallback
+	// would have accepted this, since it treats a leading -/+ as a number.)
+	Plus: Digits = +42;			// Faulty: no sign allowed by the Syntax
+}

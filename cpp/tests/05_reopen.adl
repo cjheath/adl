@@ -1,0 +1,35 @@
+// EXPECT: PASS
+TOP {
+	a: {
+		b: {
+			c:;
+		}
+
+		// Reopen b.c and add d with contents:
+		b.c.d: {		// New a.b.c.d
+			f: b.c;		// Contains an f
+			f1: c;		// Anticipated: Faulty lookup (supertype should not be sought in b).
+					// Actual: succeeds - b is searched anyway.
+			g: b;		// Supertype ascends implicitly
+			h: ..b;		// Anticipated: supertype ascends explicitly and succeeds.
+					// Actual: fails - "Can't find name looking for b".
+			h1: ...b;	// Faulty ascend, b is not at the top level
+			i: f;		// No ascend
+			j: e;		// Ascend 1. Actual: fails - no 'e' is defined anywhere to find.
+		}
+
+		b.c {
+			k:;
+		}
+
+		l: {			// New scope for extension
+			m:;		// Something local
+			b.c {		// Contextually extend c
+				n: m;	// Anticipated: supertype found from lexical stack, not from c.
+					// Actual: fails - "Supertype name not found looking for m".
+				o: k;	// Anticipated: Faulty lookup, k should not be sought in b.c.
+					// Actual: succeeds - k is found in b.c.
+			}
+		}
+	}
+}

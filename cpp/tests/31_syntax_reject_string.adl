@@ -1,0 +1,8 @@
+// EXPECT: FAIL
+TOP {
+	Number:;
+	Digits: Number {
+		Syntax = /[1-9]*\d/
+	}
+	Bad: Digits = 'nope';			// Faulty: a quoted string doesn't match Digits' Syntax
+}

@@ -36,7 +36,7 @@ public:
 	Handle		aspect();
 	bool		is_sterile();
 	bool		is_complete();
-	PegexpValue	syntax();
+	PegexpValue	syntax();	// Effective (inherited) Syntax, resolved internally via the owning Store
 	bool		is_array();
 
 	Handle		lookup(StrVal name);		// Search down one level
@@ -56,6 +56,12 @@ public:
 	// when Handle is an Alias:
 	Handle		for_();
 
+#if defined(ADL_HELPERS)
+	Handle		reference(StrVal name, Handle target, bool is_multi);	// Create new Reference child
+	Handle		alias(StrVal name, Handle target);			// Create new Alias child
+	void		set_array();		// Mark this object as accepting an array value
+#endif
+
 	// Derived behaviour:
 	void		adopt(Handle child);
 	bool		is_top()
@@ -66,7 +72,7 @@ public:
 					return "<NULL>";
 				Handle	p = parent();
 				StrVal	n = name();
-				return (!p.is_null() && !p.is_top() ? p.pathname() + "." : "") +
+				return (!p.is_null() /*&& !p.is_top()*/ ? p.pathname() + "." : "") +
 					(n.isEmpty() ? "<anonymous>" : n);
 			}
 };
@@ -80,50 +86,46 @@ public:
 
 	// Access built-ins quickly:
 	Handle		top() { return Handle(); }
+	Handle		object();		// aka TOP.Object; backends should memoize this lookup
+	Handle		Syntax();		// aka Object.Syntax; backends should memoize this lookup
+	Handle		Assignment();		// aka TOP.Assignment; backends should memoize this lookup
 
 	// Make new objects:
 	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0);	// New Object
-	Handle		assign(Handle object, Handle variable, Value value, bool is_final);	// New Assignment
 
 	// Make new Values:
 	static	Value	pegexp_literal(StrVal);			// contents of a pegexp excluding the '/'s
-	static	Value	reference_literal(StrVal);		// just a pathname
+	static	Value	reference_literal(Handle);		// the object a pathname resolved to (see Sink::lookup_path)
 	static	Value	object_literal(Handle);			// an inline object
 	static	Value	matched_literal(StrVal);		// Value matching a Syntax
 	static	Value	string_literal(StrVal);			// placeholder in the absence of Syntax
 	static	Value	numeric_literal(StrVal);		// placeholder in the absence of Syntax
 
 #if defined(ADL_HELPERS)
-	// All these builtins can be found by searching in top(), these are short-cuts/caches
-	static	Handle	Object();		// aka TOP.Object
-	static	Handle	Parent();		// aka Object.Parent
-	static	Handle	Name();			// aka Object.Name
-	static	Handle	Super();		// aka Object.Super
-	static	Handle	IsSterile();		// aka Object.IsSterile
-	static	Handle	IsComplete();		// aka Object.IsComplete
-	static	Handle	IsArray();		// aka Object.IsArray
-	static	Handle	PegularExpression();	// aka Object.PegularExpression
-	static	Handle	Syntax();		// aka Object.Syntax
+	// All these builtins can be found by searching in top(), these are short-cuts/caches;
+	// backends should memoize each lookup, as Syntax()/Assignment() above already do
+	Handle		Parent();		// aka Object.Parent
+	Handle		Name();			// aka Object.Name
+	Handle		Super();		// aka Object.Super
+	Handle		IsSterile();		// aka Object.IsSterile
+	Handle		IsComplete();		// aka Object.IsComplete
+	Handle		IsArray();		// aka Object.IsArray
+	Handle		RegularExpression();	// aka TOP.RegularExpression
 
-	static	Handle	Reference();		// aka TOP.Reference
-	static	Handle	Enumeration();		// aka TOP.Enumeration
-	static	Handle	Boolean();		// aka TOP.Boolean
-	static	Handle	False();		// aka TOP.False
-	static	Handle	True();			// aka TOP.True
-	static	Handle	String();		// aka TOP.String
-	static	Handle	Number();		// aka TOP.Number
+	Handle		Reference();		// aka TOP.Reference
+	Handle		Enumeration();		// aka TOP.Enumeration
+	Handle		Boolean();		// aka TOP.Boolean
+	Handle		False();		// aka TOP.False
+	Handle		True();			// aka TOP.True
+	Handle		String();		// aka TOP.String
+	Handle		Number();		// aka TOP.Number
 
-	static	Handle	Assignment();		// aka TOP.Assignment
-	static	Handle	Variable();		// aka Assignment.Variable
-	static	Handle	ValueOf();		// aka Assignment.Value
-	static	Handle	IsFinal();		// aka Assignment.IsFinal (either TOP.True or TOP.False)
+	Handle		Variable();		// aka Assignment.Variable
+	Handle		ValueOf();		// aka Assignment.Value
+	Handle		IsFinal();		// aka Assignment.IsFinal (either TOP.True or TOP.False)
 
-	static	Handle	Alias();		// aka TOP.Alias
-	static	Handle	For();			// aka Alias.For
-
-	Handle		reference(Handle parent, StrVal name, Handle target, bool is_multi);	// New Reference
-	Handle		alias(Handle parent, StrVal name, Handle target);			// New Alias
-	void		is_array(Handle);	// Set IsArray
+	Handle		Alias();		// aka TOP.Alias
+	Handle		For();			// aka Alias.For
 #endif
 
 };
@@ -176,9 +178,6 @@ private:
 	class Frame
 	{
 	public:
-		using		Handle = typename Store::Handle;
-		using		Value = typename Store::Value;
-
 		Frame()
 		: object_started(false)
 		, supertype_present(false)
@@ -195,7 +194,10 @@ private:
 		bool		object_started;	// We've seen the name and supertype and can announce those
 		bool		obj_array;	// This object accepts an array value
 		ValueType	value_type;	// Type of value assigned
-		StrVal		value;		// Value assigned
+		StrVal		value;		// Value assigned (display text; see reference_path for a Reference)
+
+		// path name and ascent for a Reference value (only meaningful when value_type == Reference)
+		PathName	reference_path;
 
 		Handle		handle;
 
@@ -218,6 +220,10 @@ private:
 	PathName	current_path;
 
 	Array<Frame>	stack;
+
+	// Owns the pegexp pattern text returned by the most recent lookup_syntax() call,
+	// so the Source it returns (which points into this buffer) stays valid.
+	StrVal		current_syntax;
 
 	// Access the current ADL Frame:
 	Frame&		frame() { return stack.last_mut(); }
@@ -383,10 +389,14 @@ public:
 			is_final ? "=" : "~=",
 			value().asUTF8()
 		);
-		// The top object on the stack is the variable.
-		// Next top is the object from which it's being assigned (the context)
-		// We don't have easy access to the parent for the assignment -
-		// it's not the parent of the variable as that is probably a supertype
+
+		// The top object on the stack is the variable being assigned.
+		// The next frame down is the context (the object from which it's being assigned).
+		Handle	variable = frame().handle;
+		Handle	context = stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
+
+		if (!variable.is_null() && !context.is_null())
+			context.assign(variable, build_value(context), is_final);
 	}
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
@@ -422,9 +432,8 @@ public:
 	void	reference_literal()			// The last pathname is a value to assign to a reference variable
 	{
 		value_type() = ValueType::Reference;
-		value() = current_path.display();
-		PathName	reference_path;
-		current_path.consume(reference_path);
+		value() = current_path.display();		// Retained for debug display only
+		current_path.consume(frame().reference_path);	// The structured path, resolved later in build_value()
 	}
 
 	void	pegexp_literal(Source start, Source end)	// Contents of a pegexp between start and end
@@ -432,13 +441,47 @@ public:
 		last_source = end;
 		StrVal	pegexp(start.peek(), (int)(end-start));
 		value_type() = ValueType::Pegexp;
-		value() = StrVal("/")+pegexp+"/";
+		value() = pegexp;		// excludes the delimiting '/'s, per Store::pegexp_literal's contract
 	}
 
 	Source	lookup_syntax(Source type)		// Return Source of a Pegexp string to use in matching
-	{ return Source(""); }
+	{
+		start_object();		// Resolve frame().handle now: for a bare "X.Y = value" with no
+					// ':' or '{', this otherwise wouldn't run until after the value
+					// is parsed, but we need the variable's type to look up its Syntax.
+		Handle	var = frame().handle;
+		if (var.is_null())
+			return Source("");
+
+		current_syntax = var.syntax();	// Own a copy: syntax() returns a temporary StrVal,
+						// and the Source we return below points into it.
+		if (current_syntax.isEmpty())
+			return Source("");
+		return Source(current_syntax.asUTF8());
+	}
 
 	// Methods below here are not a required part of the Sink:
+
+	// Turn the current Frame's parsed literal into a Store Value.
+	// 'context' is where the search for a Reference's target begins (the same
+	// starting point used for supertype resolution - see README "Resolving Names").
+	Value	build_value(Handle context)
+	{
+		switch (value_type())
+		{
+		case ValueType::String:	return store.string_literal(value());
+		case ValueType::Number:		return store.numeric_literal(value());
+		case ValueType::Pegexp:		return store.pegexp_literal(value());
+		case ValueType::Reference:
+		{
+			Handle	target = lookup_path(context, frame().reference_path);
+			return store.reference_literal(target);
+		}
+		case ValueType::Match:		return store.matched_literal(value());
+		case ValueType::Object:	// REVISIT: inline object-literal assignment not yet supported
+		default:			return store.string_literal(value());
+		}
+	}
 
 	// Join the display values of the object names in the stack frames:
 	StrVal	object_pathname()
@@ -600,9 +643,9 @@ public:
 			return;
 #endif
 		}
-#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
 		else if (child.is_null() && may_ascend)	// See if the name appears in a parent context
 		{
+#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
 			// Otherwise it was found elsewhere. Use eponymous naming
 			printf("No child %s of parent %s from context %s with no supertype\n",
 				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
@@ -614,8 +657,15 @@ public:
 			return;
 
 			// supertype = frame().handle;
-		}
 #endif
+		}
+		else if (child.is_null())
+		{
+			// No supertype, no matching child, this is a failure.
+			error("Cannot find object to reopen", object_pathname().asUTF8());
+			// object_started() = true;
+			return;
+		}
 
 		// At this point, we have set context, parent, and perhaps child and supertype
 

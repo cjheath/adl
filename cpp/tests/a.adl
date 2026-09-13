@@ -1,0 +1,13 @@
+// This is only a scanner test. It will not compile to a Store.
+TOP {
+
+	..a	// First name of a compound name
+	b.c	  	d. e f : g	. h = 'jargon';
+
+	i:Integer = 3;
+
+	m => ..n o = p;
+
+	r ~= /foo/;
+
+}

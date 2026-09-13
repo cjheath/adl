@@ -1,0 +1,15 @@
+// EXPECT: PASS
+TOP {
+	a: {
+		b:
+	}
+	c: a.b;
+	d:;
+
+	a.e: d;
+	a.f: a.b;	// Supertype search start from TOP
+
+	a {		// Reopen a
+		g: c;	// Supertype search ascends from a to TOP
+	}
+}

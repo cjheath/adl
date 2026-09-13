@@ -58,9 +58,10 @@ px:
 strpp:	
 	@cd $(STRPP); $(MAKE) lib
 
-test:
+test:	tests
 
-tests:
+tests:	bins
+	@tests/run_tests.sh
 
 clean:
 	rm -f $(BINS) $(OBJS)

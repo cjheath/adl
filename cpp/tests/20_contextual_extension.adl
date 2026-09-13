@@ -1,0 +1,18 @@
+// EXPECT: PASS
+TOP {
+	a: {
+		b:
+	}
+
+	c: {
+		a.b.d:;		// From the aspect of c, a.b has a child called d. REVISIT: Should show context
+
+		.a {		// Cannot re-open, a not found. REVISIT: Should fail
+			e:;	// So cannot add e
+		}
+	}
+
+	.a.b {
+		f:;		// This is not contextual because no ascent is required
+	}
+}

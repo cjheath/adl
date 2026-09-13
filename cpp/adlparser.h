@@ -8,6 +8,7 @@
 #include	<char_encoding.h>
 #include	<error.h>
 #include	<fcntl.h>
+#include	<pegexp.h>
 
 #include	<stdio.h>	// Only used for the stub Source and Sink
 
@@ -92,7 +93,7 @@ public:
 	void	assignment(bool is_final) {}		// The value(s) are assigned to the current definition
 	void	string_literal(Source start, Source end) {}	// Contents of a string between start and end
 	void	numeric_literal(Source start, Source end) {}	// Contents of a number between start and end
-	// void	matched_literal(Source start, Source end) {}	// Contents of a matched value between start and end
+	void	matched_literal(Source start, Source end) {}	// Contents of a matched value between start and end
 	void	object_literal() {}			// An object_literal (supertype, block, assignment) was pushed
 	void	reference_literal() {}			// The last pathname is a value to assign to a reference variable
 	void	pegexp_literal(Source start, Source end) {}	// Contents of a pegexp between start and end
@@ -592,18 +593,39 @@ template<typename Source> bool ADLParser<Source>::object_literal(Source& source)
 // Value matches the Type syntax of the variable being assigned
 template<typename Source> bool ADLParser<Source>::matched_literal(Source& source, Type& type)
 {
-	UCS4	ch = source.peek_char();
+	if (type.peek_char() != UCS4_NONE)	// A Syntax was resolved for this variable; use it to match
+	{
+		using	MatchContext = PegexpDefaultContext<>;
+
+		MatchContext		context;
+		Pegexp<MatchContext>	pegexp(type.peek());		// 8-bit pegexp pattern text, no delimiters
+		PegexpDefaultSource	psource(source.peek());	// Wraps the same underlying bytes as source
+
+		auto	match = pegexp.match_here(psource, &context);
+		if (match.is_failure())
+			return false;		// The Syntax is known, so don't fall back to the built-in hack
+
+		off_t	consumed = match.to.source.bytes_from(match.from.source);
+		Source	start(source);
+		while (source - start < consumed)
+		{
+			source.peek_char();
+			source.advance();
+		}
+		sink.matched_literal(start, source);
+		return true;
+	}
 
 	/*
-	 * REVISIT: match the assignment type syntax provided.
-	 * This hack matches string and numeric values
+	 * No Syntax could be determined (e.g. while bootstrapping String/Integer/etc themselves,
+	 * before any Syntax exists to describe them). Fall back to hard-coded literal forms:
 	 */
+	UCS4	ch = source.peek_char();
 	if ('\'' == ch)
 		return string_literal(source);
 	if ('0' <= ch && ch <= '9' || '-' == ch || '+' == ch)
 		return numeric_literal(source);
 
-	// sink.matched_literal(source, probe);
 	return false;
 }
 

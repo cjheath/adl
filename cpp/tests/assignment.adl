@@ -1,0 +1,14 @@
+TOP {
+	// a: = 3;
+
+	a: {
+		b:;		// Will need Syntax or a superclass with one
+	}
+	// a.b = 3;		// Not contextual, because we didn't ascend
+
+	c: {
+		a.b = 4;	// Contextual, because we did
+	}
+
+	// a = 3;
+}

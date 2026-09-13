@@ -1,0 +1,8 @@
+// EXPECT: PASS
+TOP {
+	Number:;
+	Digits: Number {
+		Syntax = /[1-9]*\d/		// A custom (non-built-in) Syntax
+	}
+	Good: Digits = 42;			// Matches the custom Syntax
+}

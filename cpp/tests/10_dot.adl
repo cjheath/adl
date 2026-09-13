@@ -1,0 +1,6 @@
+// EXPECT: PASS
+TOP {
+	a: {
+		b: .;	// b is a subtype and member of a
+	}
+}

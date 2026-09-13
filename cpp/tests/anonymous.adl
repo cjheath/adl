@@ -1,0 +1,9 @@
+TOP {
+	Super: {
+		Syntax = /\d/
+	}
+
+	: Super {	// An anonymous instance
+	} = 2		// with valid Syntax
+
+}

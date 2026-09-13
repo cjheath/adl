@@ -1,0 +1,9 @@
+TOP {
+	a:;	// Original object
+
+	b!a;	// b is the new name
+
+	b {	// re-open b to show it can be found
+		c:
+	}
+}

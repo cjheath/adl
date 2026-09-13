@@ -1,0 +1,12 @@
+TOP {
+	foo: {
+		bar: {
+		}
+	}
+
+	// Reopen foo and add bat:
+	foo {
+		bat: {
+		}
+	}
+}

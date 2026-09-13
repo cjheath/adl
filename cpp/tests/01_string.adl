@@ -1,0 +1,4 @@
+// EXPECT: PASS
+TOP {
+	String:;
+}

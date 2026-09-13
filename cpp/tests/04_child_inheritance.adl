@@ -1,0 +1,16 @@
+// EXPECT: PASS
+TOP {
+	a: {
+		b:
+	}
+
+	c: a {
+		d: b;		// b is a child of a, should be found as supertype
+	}
+
+	c {			// Reopen c
+		d {		// Reopen d
+			e: c;	// Add a new child
+		}
+	}
+}
