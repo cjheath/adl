@@ -236,7 +236,7 @@ MemStore::bootstrap()
 	Handle	regexp = new Object(_top, "Regular Expression", _object, 0);
 	_top.children().push(regexp);
 
-	Handle	syntax = new Object(regexp, "Syntax", regexp, 0);
+	Handle	syntax = new Object(_object, "Syntax", regexp, 0);
 	_object.children().push(syntax);
 	_syntax_variable = syntax;
 
