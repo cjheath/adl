@@ -1,0 +1,27 @@
+// EXPECT: PASS
+// Name characters beyond plain ASCII, confirmed to work today:
+// 8-bit European (ISO8859-1/Latin-1 and Greek), in both leading and
+// in-word position, single- and multi-word. (CJK and emoji are NOT
+// currently accepted - see 62_unicode_reject.adl.)
+TOP {
+	// ASCII, for a baseline in the same file:
+	Ascii Name: Object;
+
+	// Latin-1 accented letter leading the name:
+	Ünïcode: Object;
+	Ébène: Object;
+
+	// Latin-1 accented letters within/trailing a word:
+	Café: Object;
+	Naïve: Object;
+
+	// Multi-word, with accented letters in both words:
+	Naïve Café: Object;
+
+	// A Greek letter leading a name (8-bit European in the broader sense,
+	// per ISO8859-7 rather than -1, but the same "not plain ASCII" class):
+	Ω Symbol: Object;
+
+	// Mixed ASCII/accented/Greek in one multi-word name:
+	Résumé Ω Test: Object;
+}

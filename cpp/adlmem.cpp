@@ -91,9 +91,11 @@ StrVal inspect(ADL::Value v)
 			[&](const ADL::Value& e) -> const StrVal
 			{ return inspect(e); }
 		).join(", ") + "]";
-	return v.handle.is_null()
-		? "\""+v.string+"\""
-		: inspect(v.handle);
+	if (v.handle.is_null())
+		return "\""+v.string+"\"";
+	// Avoid infinite recursion using pathname, not by re-expanding the subtree.
+	// (e.g. adl.adl's Object.Parent -> Object) would cause infitite recursion otherwise.
+	return "-> " + v.handle.pathname();
 }
 
 StrVal inspect(ADL::Handle h, int depth)

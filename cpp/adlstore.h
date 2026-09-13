@@ -337,7 +337,11 @@ public:
 		if (current_path.sep != " ")			// "" or ".", start new name in pathname
 			current_path.names.push(n);
 		else if (current_path.sep != ".")
-			current_path.names.push(current_path.names.pull() + current_path.sep + n);	// Append the partial name
+		{
+			// Materialize pull() from StrRef to StrVal so we can append
+			StrVal	prev = current_path.names.pull();
+			current_path.names.push(prev + current_path.sep + n);
+		}
 		current_path.sep = " ";
 	}
 

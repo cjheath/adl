@@ -1,0 +1,27 @@
+// EXPECT: PASS
+// A multi-word name must not care about the amount or kind of whitespace
+// between its words - space, repeated spaces, a tab, or a newline should
+// all normalize to the same name. Re-opening the same name with a
+// different amount of whitespace each time is the strongest check
+// run_tests.sh can make of this (it only checks the exit code): if the
+// words were joined differently each time, the name wouldn't match and
+// this would either fail to parse or (see cpp/ToDo) silently create a
+// separate anonymous object instead of re-opening the same one - the
+// former shows up here, the latter doesn't (run_tests.sh doesn't check
+// tree contents), so this was also confirmed by hand with `-a`.
+TOP {
+	Family Name: {
+		Original: Object;
+	}
+	Family   Name {			// Extra spaces
+		ExtraSpaces: Object;
+	}
+	Family	Name {			// A tab
+		TabSeparated: Object;
+	}
+	Family
+		Name {			// A newline (plus leading whitespace)
+		NewlineSeparated: Object;
+	}
+	One Two Three: Object;		// Three words, not just two
+}

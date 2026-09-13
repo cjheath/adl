@@ -1,0 +1,11 @@
+// EXPECT: PASS
+TOP {
+	Number:;
+	Digits: Number {
+		Syntax = /[1-9]*\d/
+	}
+	// Every element must be collected, not just the last one - this used
+	// to only keep "17" (see cpp/ToDo, "Array values only keep the last
+	// element").
+	SomePrimes: Digits[] = [2, 3, 5, 7, 9, 11, 13, 17];
+}

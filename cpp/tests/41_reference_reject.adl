@@ -1,0 +1,21 @@
+// Deliberately carries no EXPECT marker: this is rejected (see the
+// printed "violates a final restriction" diagnostic below), but like
+// every other semantic check in start_object()/assignment() (e.g.
+// "Cannot change supertype"), that's print-only and doesn't currently
+// affect the exit code - the parse still fully succeeds grammatically.
+// Mark this test properly once errors are propagated through a proper
+// ErrNum (see cpp/ToDo).
+TOP {
+	Company:;
+	Dog:;
+
+	Employment: {
+		Employer -> Company;		// Final restriction: Employer must be a Company
+	}
+
+	// Faulty: Dog is not a Company, nor a subtype of it, so this violates
+	// Employer's final restriction inherited from Employment.
+	BadJob: Employment {
+		Employer = Dog;
+	}
+}

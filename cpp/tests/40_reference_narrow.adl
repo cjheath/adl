@@ -1,0 +1,23 @@
+// EXPECT: PASS
+TOP {
+	Company:;
+	Boolean:;
+	True: Boolean;
+	AcmeInc: Company;
+
+	// Shorthand form: declares Employer as a Reference restricted to Company
+	Employment: {
+		Employer -> Company;
+	}
+
+	// Shorthand with a trailing value assignment ("Is Allowed -> Boolean ~= True;"
+	// from the README): the implicit restriction (Boolean, final) is refined in
+	// place by the tentative value True, a subtype of Boolean.
+	IsAllowed -> Boolean ~= True;
+
+	// A subtype of Employment may narrow Employer's inherited restriction to
+	// any subtype of Company - here, the specific instance AcmeInc.
+	AJob: Employment {
+		Employer = AcmeInc;
+	}
+}

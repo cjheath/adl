@@ -1,0 +1,20 @@
+// EXPECT: FAIL
+// CJK (Chinese/Japanese/Korean) and emoji are NOT currently accepted as
+// name characters, in either leading or in-word position: strval.h's
+// UCS4IsAlphabetic() (see src/char_encoding.cpp) only recognizes a
+// character as a name letter if it has upper/lower case conversion, or
+// is in a short table of case-less letters - CJK ideographs and emoji
+// have neither, so ADLParser::symbol() rejects them outright. This is a
+// known, pre-existing gap in strpp itself (there's even a "#if 0"'d
+// block in char_encoding.cpp about ideographic scripts), not something
+// to silently paper over - this file exists to pin down the current
+// (rejecting) behaviour so a change either way is deliberate.
+//
+// Only the first line is actually reached; each on its own is already
+// enough to fail the parse.
+TOP {
+	日本語: Object;
+	Test語Word: Object;
+	😀Emoji: Object;
+	EmojiTest😀: Object;
+}
