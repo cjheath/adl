@@ -13,6 +13,24 @@
 #include	<strval.h>
 
 /*
+ * Error numbers for the ADL Store/Sink layer. See strval.h's STRERR_*
+ * definitions and error.h's ErrNum for the scheme these follow: a 16-bit
+ * message-set number (allocated to this subsystem) plus a message code
+ * within that set. A default-constructed/zero ErrNum means "no error".
+ */
+#define	ADLERR_SET			1024
+#define	ADLERR_TOP_NAME			ErrNum(ADLERR_SET, 1)	// The outermost object must be named TOP
+#define	ADLERR_TOP_SUPER		ErrNum(ADLERR_SET, 2)	// TOP's supertype, if given, must be Object
+#define	ADLERR_NO_PARENT		ErrNum(ADLERR_SET, 3)	// A child was skipped because its parent is missing
+#define	ADLERR_PARENT_NOT_FOUND		ErrNum(ADLERR_SET, 4)	// A name on the way to the parent wasn't found
+#define	ADLERR_SUPERTYPE_NOT_FOUND	ErrNum(ADLERR_SET, 5)	// The named supertype wasn't found
+#define	ADLERR_SUPERTYPE_CHANGED	ErrNum(ADLERR_SET, 6)	// Re-opening an object may not change its supertype
+#define	ADLERR_REOPEN_NOT_FOUND		ErrNum(ADLERR_SET, 7)	// No supertype and no existing object to reopen
+#define	ADLERR_NAME_NOT_FOUND		ErrNum(ADLERR_SET, 8)	// A name in a path could not be found at all
+#define	ADLERR_REFERENCE_NOT_FOUND	ErrNum(ADLERR_SET, 9)	// A Reference's target path could not be found
+#define	ADLERR_FINAL_VIOLATION		ErrNum(ADLERR_SET, 10)	// An assignment violates an existing final restriction
+
+/*
  * An ADLStoreStub relies on a Value and a Handle to an object.
  * These define and stub the required APIs.
  */
@@ -38,11 +56,13 @@ public:
 	bool		is_complete();
 	PegexpValue	syntax();	// Effective (inherited) Syntax, resolved internally via the owning Store
 	bool		is_array();
+	bool		is_reference();	// Is this object's type chain rooted at the built-in Reference?
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Children iterator?
 	// Shortcut methods:
-	void		assign(Handle variable, Value value, bool is_final);	// Create new Assignment
+	ErrNum		assign(Handle variable, Value value, bool is_final);	// Create/refine an Assignment;
+					// ADLERR_FINAL_VIOLATION if this violates a final Reference restriction
 	Handle		assigned(Handle variable);	// Search for an assignment
 
 	// when Handle is an Assignment:
@@ -256,7 +276,15 @@ public:
 	Handle	last_object() const
 	{ return last_closed; }
 
+	// Grammar-level errors from the Parser itself (unrelated to the Store's
+	// own semantic ErrNum scheme below - the Parser has no code to report)
+	// still call this 3-arg form; it just prints, like it always has.
 	void	error(const char* why, const char* what = 0, const Source& where = Source())
+	{
+		error(ErrNum(), why, what, where);
+	}
+
+	ErrNum	error(ErrNum num, const char* why, const char* what = 0, const Source& where = Source())
 	{
 		printf("At line %d:%d, %s", where.line_number(), where.column(), why);
 		if (what)
@@ -267,10 +295,11 @@ public:
 			{
 				printf(": ");
 				where.print_ahead();
-				return;
+				return num;
 			}
 		}
 		printf("\n");
+		return num;
 	}
 
 	void	definition_starts()			// A declaration just started
@@ -279,12 +308,13 @@ public:
 		stack.push(Frame());			// Start with an empty Frame
 	}
 
-	void	definition_ends()
+	ErrNum	definition_ends()
 	{
-		start_object();
+		ErrNum	err = start_object();
 		printf("-------- Definition Ends for %s\n", stack.last().handle.pathname().asUTF8());
 		last_closed = stack.pull().handle;	// This can be used as a starting point for the next input file
 		current_path.clear();
+		return err;
 	}
 
 	void	ascend()				// Go up one scope level to look for a name
@@ -322,17 +352,17 @@ public:
 		// printf("Object PathName '%s'\n", object_path().display().asUTF8());
 	}
 
-	void	supertype()				// Last pathname was a supertype
+	ErrNum	supertype()				// Last pathname was a supertype
 	{
 		current_path.consume(supertype_path());
 
 		supertype_present() = true;
 
 		// printf("Supertype PathName '%s'\n", supertype_path().display().asUTF8());
-		start_object();
+		return start_object();
 	}
 
-	void	reference_type(bool is_multi)		// Last pathname was a reference
+	ErrNum	reference_type(bool is_multi)		// Last pathname was a reference
 	{
 		PathName	reference_path;
 		current_path.consume(reference_path);
@@ -342,7 +372,42 @@ public:
 			is_multi ? "=>" : "->",
 			reference_path.display().asUTF8());
 
-		object_started() = true;
+		/*
+		 * "X -> Y" (or "X => Y") is sugar for "X: Reference = Y" -
+		 * reuse start_object()'s existing name resolution/reopening
+		 * logic by presenting it with a synthetic supertype path of
+		 * just "Reference", exactly as if that had been parsed after
+		 * a ':'.
+		 */
+		PathName&	super = supertype_path();
+		super.clear();
+		super.names.push("Reference");
+		supertype_present() = true;
+
+		ErrNum	err = start_object();
+		if (err)
+			return err;
+
+		if (is_multi)
+			obj_array() = true;
+
+		Handle	variable = frame().handle;
+		Handle	context = stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
+		if (variable.is_null() || context.is_null())
+			return 0;
+
+		Handle	target = lookup_path(context, reference_path);
+		if (target.is_null())
+			return error(ADLERR_REFERENCE_NOT_FOUND, "Reference target not found", reference_path.display().asUTF8());
+
+		// The implicit type restriction is always final; a following
+		// explicit assignment ("X -> Y ~= Z") refines it in place (see
+		// Handle::assign()), rather than adding a second Assignment.
+		ErrNum	final_err = context.assign(variable, store.reference_literal(target), true);
+		if (final_err)
+			return error(final_err, "Reference restriction violates a final restriction", object_pathname().asUTF8());
+
+		return 0;
 	}
 
 	void	reference_done(bool ok)			// Reference completed
@@ -361,10 +426,10 @@ public:
 		object_started() = true;
 	}
 
-	void	block_start()				// enter the block given by the pathname and supertype
+	ErrNum	block_start()				// enter the block given by the pathname and supertype
 	{
-		start_object();
 		// printf("Enter block\n");
+		return start_object();
 	}
 
 	void	block_end()				// exit the block given by the pathname and supertype
@@ -372,18 +437,23 @@ public:
 		// printf("Exit block\n");
 	}
 
-	void	is_array()				// This definition is an array
+	ErrNum	is_array()				// This definition is an array
 	{
-		start_object();
+		ErrNum	err = start_object();
+		if (err)
+			return err;
 		obj_array() = true;
 		printf("-------- %s.Is Array = true;\n",
 			object_pathname().asUTF8()
 		);
+		return 0;
 	}
 
-	void	assignment(bool is_final)		// The value(s) are assigned to the current definition
+	ErrNum	assignment(bool is_final)		// The value(s) are assigned to the current definition
 	{
-		start_object();
+		ErrNum	err = start_object();
+		if (err)
+			return err;
 		printf("-------- new Assignment '%s' %s %s;\n",
 			object_pathname().asUTF8(),
 			is_final ? "=" : "~=",
@@ -395,8 +465,14 @@ public:
 		Handle	variable = frame().handle;
 		Handle	context = stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
 
-		if (!variable.is_null() && !context.is_null())
-			context.assign(variable, build_value(context), is_final);
+		if (variable.is_null() || context.is_null())
+			return 0;
+
+		ErrNum	final_err = context.assign(variable, build_value(context), is_final);
+		if (final_err)
+			return error(final_err, "Assignment violates a final restriction", object_pathname().asUTF8());
+
+		return 0;
 	}
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
@@ -492,10 +568,10 @@ public:
 		).join(".");
 	}
 
-	void	start_object()
+	ErrNum	start_object()
 	{
 		if (object_started())
-			return;
+			return 0;
 
 		PathName&	new_path = object_path();
 		PathName&	super_path = supertype_path();
@@ -526,25 +602,19 @@ public:
 			if (new_path.ascent > 0		// Can't ascend to TOP
 			 || new_path.names.length() < 1	// Cannot be anonymous
 			 || new_path.names[0] != "TOP")	// Must be called "TOP"
-			{
-				error("Top object must be called TOP");
-				return;
-			}
+				return error(ADLERR_TOP_NAME, "Top object must be called TOP");
 
 			if (new_path.names.length() == 1)
 			{
 				// If a supertype of TOP is given, it must be just "Object"
 				if (supertype_present()
 				 && (super_path.ascent != 0 || super_path.names.length() != 1 || super_path.names[0] != "Object"))
-				{
-					error("TOP must be Object");
-					return;
-				}
+					return error(ADLERR_TOP_SUPER, "TOP must be Object");
 
 				frame().handle = store.top();
 				printf("Re-opening TOP\n");
 				object_started() = true;
-				return;			// All done here
+				return 0;		// All done here
 			}
 
 			descent = 1;			// All good, we re-opened TOP, but can descend from there
@@ -554,10 +624,7 @@ public:
 		}
 
 		if (parent.is_null())
-		{
-			error("Child skipped because parent is missing");
-			return;
-		}
+			return error(ADLERR_NO_PARENT, "Child skipped because parent is missing");
 
 		Handle	context = parent;		// We might descend further
 
@@ -585,10 +652,7 @@ public:
 			if (child.is_null())		// Not in this parent and we can't ascend
 			{
 				if (!may_ascend)
-				{
-					error("Parent object name not found", child_name.asUTF8());
-					return;
-				}
+					return error(ADLERR_PARENT_NOT_FOUND, "Parent object name not found", child_name.asUTF8());
 				parent = parent.parent();
 				may_ascend = false;
 				descent--;
@@ -620,16 +684,10 @@ public:
 			else
 				supertype = store.object();
 			if (supertype.is_null())
-			{
-				error("Supertype name not found", super_path.display().asUTF8());
-				return;
-			}
+				return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
 
 			if (!child.is_null() && child.super() != supertype)
-			{
-				error("Cannot change supertype", object_pathname().asUTF8());
-				return;
-			}
+				return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", object_pathname().asUTF8());
 		}
 		else if (!child.is_null() && parent != context)
 		{
@@ -640,7 +698,7 @@ public:
 				context.is_null() ? "<none>" : parent.pathname().asUTF8()
 			);
 			printf("REVISIT: Unsure how to proceed, so ignoring it\n");
-			return;
+			return 0;
 #endif
 		}
 		else if (child.is_null() && may_ascend)	// See if the name appears in a parent context
@@ -654,7 +712,7 @@ public:
 			);
 			printf("Could be eponymous, or a contextual re-opening of a parent's child\n");
 			printf("REVISIT: Unsure how to proceed, so ignoring it\n");
-			return;
+			return 0;
 
 			// supertype = frame().handle;
 #endif
@@ -662,9 +720,8 @@ public:
 		else if (child.is_null())
 		{
 			// No supertype, no matching child, this is a failure.
-			error("Cannot find object to reopen", object_pathname().asUTF8());
 			// object_started() = true;
-			return;
+			return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
 		}
 
 		// At this point, we have set context, parent, and perhaps child and supertype
@@ -684,10 +741,7 @@ public:
 		if (!child.is_null()
 		 && !supertype.is_null()
 		 && child.super() != supertype)
-		{
-			error("Cannot change supertype", super_path.display().asUTF8());
-			return;
-		}
+			return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", super_path.display().asUTF8());
 
 		frame().handle = child;
 		if (frame().handle.is_null())
@@ -701,6 +755,7 @@ public:
 		}
 
 		object_started() = true;
+		return 0;
 	}
 
 	// Search this object and its supertypes for an object of the given name
@@ -763,7 +818,7 @@ public:
 				continue;
 			}
 
-			error("Can't find name", child_name.asUTF8());
+			error(ADLERR_NAME_NOT_FOUND, "Can't find name", child_name.asUTF8());
 			return Handle();	// Not found
 		}
 

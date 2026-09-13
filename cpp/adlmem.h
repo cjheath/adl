@@ -37,11 +37,13 @@ public:
 	StrVal		syntax();		// Effective (inherited) Syntax, fetched via store()->Syntax()
 	bool		is_array();
 	bool		is_assignment();
+	bool		is_reference();		// Is this object's type chain rooted at the built-in Reference?
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Children iterator?
 	// Shortcut methods:
-	void		assign(Handle variable, Value value, bool is_final);	// Create new Assignment
+	ErrNum		assign(Handle variable, Value value, bool is_final);	// Create/refine an Assignment;
+					// ADLERR_FINAL_VIOLATION if this violates a final Reference restriction
 	Handle		assigned(Handle variable);	// Search for an assignment
 
 	// when Handle is an Assignment:
@@ -79,6 +81,12 @@ public:
 				return (!p.is_null() /*&& !p.is_top()*/ ? p.pathname() + "." : "") +
 					(n.isEmpty() ? "<anonymous>" : n);
 			}
+
+protected:
+	ErrNum		assign_reference(Handle variable, Value value, bool is_final);
+					// The Reference-specific path of assign(): validates the
+					// finality-narrowing rule, then either refines an existing
+					// local Assignment in place or appends a new one.
 
 private:
 	Ref<Object>	object;
@@ -128,6 +136,8 @@ public:
 				_val = val;
 				if (is_final)
 					flags |= IsFinal;
+				else
+					flags &= ~IsFinal;
 			}
 
 protected:
@@ -197,6 +207,12 @@ public:
 					top();		// Ensure bootstrap() has run
 				return _assignment_type;
 			}
+	Handle		Reference()		// aka TOP.Reference, set once by bootstrap()
+			{
+				if (_reference_type.is_null())
+					top();		// Ensure bootstrap() has run
+				return _reference_type;
+			}
 
 	// Make new objects:
 	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0)	// New Object
@@ -221,6 +237,7 @@ protected:
 	Handle		_object;
 	Handle		_syntax_variable;
 	Handle		_assignment_type;
+	Handle		_reference_type;
 };
 
 void
@@ -242,10 +259,17 @@ MemStore::bootstrap()
 
 	Handle	reference = new Object(_top, "Reference", _object, 0);
 	_top.children().push(reference);
+	_reference_type = reference;
 
 	Handle	assignment = new Object(_top, "Assignment", _object, 0);
 	_top.children().push(assignment);
 	_assignment_type = assignment;
+
+	// The default restriction for every Reference is Object, and that's
+	// final (README "Reference Variables"; adl.adl: "Reference: {Reference = Object}").
+	// Must come after _assignment_type is set, since Handle::assign() needs it.
+	reference.assign(reference, reference_literal(_object), true);
+
 	// _alias = new Object(_top, "Alias", _object, 0);
 	// _is_for = new ADL::Object(_alias, "For", _object, 0);
 }
@@ -318,6 +342,18 @@ Handle::is_assignment()
 }
 
 inline bool
+Handle::is_reference()
+{
+	Handle	reference_type = store()->Reference();
+	if (reference_type.is_null())
+		return false;
+	for (Handle t = *this; !t.is_null(); t = t.super())
+		if (t == reference_type)
+			return true;
+	return false;
+}
+
+inline bool
 Handle::is_final()
 {
 	return object->is_final();
@@ -336,12 +372,68 @@ Handle::each(std::function<void (Handle child)> operation) const	// Children ite
 }
 
 // Shortcut methods:
-void
-Handle::assign(Handle variable, Value value, bool is_final)	// Create new Assignment
+ErrNum
+Handle::assign(Handle variable, Value value, bool is_final)	// Create/refine an Assignment
 {
+	if (!variable.is_null() && variable.is_reference())
+		return assign_reference(variable, value, is_final);
+
 	Object*	a = new Object(*this, "", store()->Assignment(), Handle());
 	a->set_assignment(variable, value, is_final);
 	children().push(a);
+	return 0;
+}
+
+ErrNum
+Handle::assign_reference(Handle variable, Value value, bool is_final)
+{
+	/*
+	 * A Reference variable's assigned value is itself a type
+	 * restriction: any value it's ever refined to (by the same
+	 * variable, seen from this context or an inherited one) must
+	 * be that same value, or a subtype of it. This is also how a
+	 * Reference shorthand's own implicit type restriction
+	 * (`X -> Y`) gets narrowed by an explicit trailing value
+	 * assignment (`X -> Y ~= Z`) at the same variable and
+	 * context: rather than adding a second Assignment (which
+	 * assigned() could never find, since it returns the first
+	 * match), we refine the existing one in place below.
+	 */
+	Handle	existing;
+	for (Handle t = *this; !t.is_null() && existing.is_null(); t = t.super())
+		existing = t.assigned(variable);
+
+	if (!existing.is_null() && existing.is_final())
+	{
+		Handle	old_target = existing.value().handle;
+		Handle	new_target = value.handle;
+		if (old_target != new_target)
+		{
+			bool	is_subtype = false;
+			for (Handle t = new_target; !t.is_null(); t = t.super())
+				if (t == old_target)
+				{
+					is_subtype = true;
+					break;
+				}
+			if (!is_subtype)
+				return ADLERR_FINAL_VIOLATION;
+		}
+	}
+
+	if (!existing.is_null() && existing.parent() == *this)
+	{
+		// Refine our own existing local Assignment in place;
+		// an inherited one (existing.parent() != *this) must
+		// not be mutated, since other contexts still see it.
+		existing.object->set_assignment(variable, value, is_final);
+		return 0;
+	}
+
+	Object*	a = new Object(*this, "", store()->Assignment(), Handle());
+	a->set_assignment(variable, value, is_final);
+	children().push(a);
+	return 0;
 }
 
 Handle
@@ -368,10 +460,23 @@ Handle::value()
 }
 
 // when Handle is a Reference:
-Handle	
+Handle
 Handle::to()
 {
-	return 0;		// REVISIT: Not Implemented
+	/*
+	 * The target as declared right here: this variable's own parent's
+	 * assignment to it (the self-assignment made by "X -> Y" or
+	 * "X: Reference = Y"). This does not resolve a further refinement
+	 * recorded on some other instance that inherits this variable (see
+	 * Handle::assign()) - that needs a walk from the instance in
+	 * question, not from the variable itself, since the same shared
+	 * variable can be refined differently by many different instances.
+	 */
+	Handle	p = parent();
+	if (p.is_null())
+		return 0;
+	Handle	a = p.assigned(*this);
+	return a.is_null() ? Handle() : a.value().handle;
 }
 
 // when Handle is an Alias:
