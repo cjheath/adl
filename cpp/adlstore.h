@@ -45,6 +45,7 @@ inline bool adl_debug_enabled()
 #define	ADLERR_NAME_NOT_FOUND		ErrNum(ADLERR_SET, 8)	// A name in a path could not be found at all
 #define	ADLERR_REFERENCE_NOT_FOUND	ErrNum(ADLERR_SET, 9)	// A Reference's target path could not be found
 #define	ADLERR_FINAL_VIOLATION		ErrNum(ADLERR_SET, 10)	// An assignment violates an existing final restriction
+#define	ADLERR_ALIAS_NOT_FOUND		ErrNum(ADLERR_SET, 11)	// An Alias's target path could not be found
 
 /*
  * An ADLStoreStub relies on a Value and a Handle to an object.
@@ -73,6 +74,8 @@ public:
 	PegexpValue	syntax();	// Effective (inherited) Syntax, resolved internally via the owning Store
 	bool		is_array();
 	bool		is_reference();	// Is this object's type chain rooted at the built-in Reference?
+	bool		is_alias();	// Is this object's immediate super() the built-in Alias?
+	bool		hides(StrVal name);	// Does one of this object's own aliases hide the inherited `name`?
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
@@ -100,7 +103,8 @@ public:
 	Handle		to();
 
 	// when Handle is an Alias:
-	Handle		for_();
+	Handle		for_();			// The object this alias refers to
+	void		set_alias(Handle target);	// Point this (already-created) Alias object at its target
 
 	void		set_array();		// Mark this object as accepting an array value
 
@@ -475,7 +479,7 @@ public:
 		// printf("Reference finished\n");
 	}
 
-	void	alias()					// Last pathname is an alias
+	ErrNum	alias()					// Last pathname is an alias
 	{
 		PathName	alias_path;
 		current_path.consume(alias_path);
@@ -483,7 +487,33 @@ public:
 		ADL_TRACE("---------------- new Alias %s to '%s'\n",
 			object_path().display().asUTF8(),
 			alias_path.display().asUTF8());
-		object_started() = true;
+
+		/*
+		 * "NewName! OldName;" (or "! OldName;", with no new name) is
+		 * sugar for "NewName: Alias" (or an anonymous Alias) - reuse
+		 * start_object()'s existing name resolution/creation logic by
+		 * presenting it with a synthetic supertype path of "Alias",
+		 * exactly as reference_type() does for "Reference".
+		 */
+		PathName&	super = supertype_path();
+		super.clear();
+		super.names.push("Alias");
+		supertype_present() = true;
+
+		ErrNum	err = start_object();
+		if (err)
+			return err;
+
+		Handle	context = current_context();
+		if (context.is_null())
+			return 0;
+
+		Handle	target = lookup_path(context, alias_path);
+		if (target.is_null())
+			return error(ADLERR_ALIAS_NOT_FOUND, "Alias target not found", alias_path.display().asUTF8());
+
+		frame().handle.set_alias(target);
+		return 0;
 	}
 
 	ErrNum	block_start()				// enter the block given by the pathname and supertype
@@ -632,6 +662,34 @@ public:
 	void	array_value_end()			// ']' seen; the reported elements are now the whole value
 	{
 		value_type() = ValueType::ArrayValue;	// build_value() will use frame().array_elements, not value()
+	}
+
+	/*
+	 * Which kind of value the variable being assigned expects (README
+	 * "Reference Variables"/"Regular Expression": "If the Variable is a
+	 * Regular Expression the value is a regexp. If the Variable is a
+	 * Reference, the value is a path_name or object literal. Otherwise,
+	 * the value is defined by the Syntax of the variable"). Resolves
+	 * frame().handle now (like lookup_syntax(), below, for the same
+	 * reason: a bare "X.Y = value" with no ':' or '{' otherwise wouldn't
+	 * resolve it until after the value is parsed, but we need the
+	 * variable's type before we know what kind of value to expect).
+	 */
+	ValueExpectation	expected_value_kind(Source type)
+	{
+		start_object();
+		Handle	var = frame().handle;
+		if (var.is_null())
+			return ExpectMatch;	// The variable itself failed to resolve (already reported);
+						// this fails cleanly too (lookup_syntax() also sees a null
+						// var and returns empty), rather than accepting a value no
+						// real check was ever run against
+
+		if (var.is_reference())
+			return ExpectReference;
+		if (var.is_regular_expression())
+			return ExpectRegexp;
+		return ExpectMatch;
 	}
 
 	Source	lookup_syntax(Source type)		// Return Source of a Pegexp string to use in matching
@@ -885,9 +943,19 @@ public:
 			if (!child.is_null() && child.super() != supertype)
 				return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", object_pathname().asUTF8());
 		}
+#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
+		/*
+		 * These two cases are placeholders for eponymous naming and
+		 * contextual re-opening, neither of which is implemented yet -
+		 * see cpp/ToDo. Gating the whole `else if` (not just its body)
+		 * behind the feature macro matters: with an empty body but a
+		 * true condition, an `else if` still counts as "handled" and
+		 * skips the real `else if (child.is_null())` error case below,
+		 * which is what actually happened (silently creating a bogus
+		 * null-supertype object) until this was found and fixed.
+		 */
 		else if (!child.is_null() && parent != context)
 		{
-#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
 			ADL_TRACE("Found child %s of parent %s from context %s with no supertype\n",
 				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
 				parent.is_null() ? "<none>" : parent.pathname().asUTF8(),
@@ -895,11 +963,9 @@ public:
 			);
 			ADL_TRACE("REVISIT: Unsure how to proceed, so ignoring it\n");
 			return 0;
-#endif
 		}
 		else if (child.is_null() && may_ascend)	// See if the name appears in a parent context
 		{
-#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
 			// Otherwise it was found elsewhere. Use eponymous naming
 			ADL_TRACE("No child %s of parent %s from context %s with no supertype\n",
 				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
@@ -911,8 +977,8 @@ public:
 			return 0;
 
 			// supertype = frame().handle;
-#endif
 		}
+#endif
 		else if (child.is_null())
 		{
 			// No supertype, no matching child, this is a failure.
@@ -959,6 +1025,20 @@ public:
 	{
 		for (Handle node = parent; !parent.is_null() && !node.is_null(); node = node.super())
 		{
+			/*
+			 * If this level's own Aliases hide child_name (README
+			 * "Aliasing" - with or without a new name), the search
+			 * stops here: it's hidden from here and any subtype, but
+			 * still visible to a search that doesn't pass through this
+			 * level (e.g. one starting at or above the supertype where
+			 * the name actually lives).
+			 */
+			if (node.hides(child_name))
+			{
+				ADL_TRACE("\t%s hides %s\n", node.name().asUTF8(), child_name.asUTF8());
+				return Handle();
+			}
+
 			Handle	child = node.lookup(child_name);
 			ADL_TRACE("\tLooking up %s in %s %s and found %s\n", child_name.asUTF8(), node.name().asUTF8(), child.is_null() ? "failed" : "succeeded", child.pathname().asUTF8());
 			if (child.is_null())

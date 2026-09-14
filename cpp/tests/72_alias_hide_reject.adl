@@ -1,0 +1,21 @@
+// Deliberately carries no EXPECT marker, for the same reason as
+// 41_reference_reject.adl: this is correctly rejected (see the printed
+// "Can't find name looking for Surname" diagnostic below - Employee's
+// unnamed alias "! Surname;" hides it from here down), but like every
+// other semantic check in start_object(), that's print-only and doesn't
+// currently affect the exit code - the parse still fully succeeds
+// grammatically. Mark this test properly once errors are propagated
+// through a proper ErrNum (see cpp/ToDo).
+TOP {
+	Person: {
+		Surname:;
+	}
+	Employee: Person {
+		! Surname;
+	}
+
+	// Faulty: Surname is hidden from Employee's own point of view, so this
+	// search must not find it (unlike 71_alias_hide.adl's "Person.Surname",
+	// which goes through Person directly and is unaffected).
+	x: Employee.Surname;
+}

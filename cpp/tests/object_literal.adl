@@ -7,7 +7,7 @@
 TOP {
 	Target:;
 	Base:;
-	Derived: Base { Note:; }
+	Derived: Base { Note: Reference; }
 	Other: Base;
 
 	Refs => Base = [

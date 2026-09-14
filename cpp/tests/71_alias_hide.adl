@@ -1,0 +1,18 @@
+// EXPECT: PASS
+// README "Aliasing": an alias with no new name hides the inherited object
+// instead of renaming it ("Family Name! Surname" - the new name is
+// optional; without it there is no name and the object is hidden").
+// Employee hides Person.Surname via "! Surname;". This file only exercises
+// the *positive* side - that Surname is still directly reachable from a
+// scope that doesn't go through Employee (README: "still visible from
+// scopes that can't see the alias") - see 72_alias_hide_reject.adl for the
+// negative side (Employee.Surname correctly failing to resolve).
+TOP {
+	Person: {
+		Surname:;
+	}
+	Employee: Person {
+		! Surname;
+	}
+	y: Person.Surname;		// Still visible directly via Person, not through Employee
+}

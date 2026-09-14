@@ -21,7 +21,10 @@ TOP {
 	}
 	Boolean{Is Sterile = True}		// and no other alternatives can be added
 
-	Reference: {Reference = Object}		// The built-in Syntax accepts a path name
+	Reference: {}				// Reference = Object (final) is set directly by the C++
+						// engine's own bootstrap() - expressing this exact
+						// self-reference in pure ADL needs eponymous naming,
+						// which isn't implemented yet (see cpp/ToDo (b)(9)/(22))
 	Regular Expression;			// The built-in Syntax is not regular
 	Assignment: {
 		Variable -> Object;		// The Object whose Syntax the Value conforms to

@@ -1,0 +1,26 @@
+// Deliberately carries no EXPECT marker, for the same reason as
+// 41_reference_reject.adl/72_alias_hide_reject.adl: this is correctly
+// rejected (see the printed "violates a final restriction" diagnostic
+// below), but like every other semantic check that isn't yet wired
+// through to fail the parse, that's print-only and doesn't currently
+// affect the exit code. Mark this test properly once errors are
+// propagated through a proper ErrNum (see cpp/ToDo).
+TOP {
+	Digits: {
+		Syntax = /\d/
+	}
+	Product: {
+		Discount: Digits;
+	}
+	Baking Product: Product {
+		Discount = 8;		// Final: README "cannot re-assign those variables"
+	}
+
+	// Faulty: Discount was already finalized by Baking Product, so this
+	// subtype cannot re-assign it at all - unlike a Reference (see
+	// 40_reference_narrow.adl), there's no subtype-narrowing exception
+	// for an ordinary variable.
+	Bread Slicer: Baking Product {
+		Discount = 9;
+	}
+}

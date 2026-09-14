@@ -59,6 +59,20 @@ public:
 };
 
 /*
+ * What kind of value is expected here, per the variable being assigned
+ * (grammar comment on atomic_value(), below): a Regular Expression
+ * variable's value is a pegexp; a Reference variable's value is a
+ * path_name or object literal; any other variable's value must match its
+ * Syntax. There's no "don't know, try anything" case: a Sink that can't
+ * determine the variable's type (e.g. because it failed to resolve at
+ * all) has nothing valid to fall back to either, so it should report
+ * whichever of these is closest to correct and let that kind's own
+ * parsing fail normally, rather than accepting a value no real check was
+ * ever run against.
+ */
+enum ValueExpectation { ExpectMatch, ExpectReference, ExpectRegexp };
+
+/*
  * This is an API stub. During parsing, these methods get called.
  * If Syntax lookup is required, you need to save enough data to implement it.
  */
@@ -105,6 +119,10 @@ public:
 
 	Source	lookup_syntax(Source type)		// Return Source of a Pegexp string to use in matching
 		{ return Source(""); }
+	ValueExpectation	expected_value_kind(Source type)	// What kind of value does the variable being assigned expect?
+		{ return ExpectMatch; }			// No object model here to consult; this always fails
+						// cleanly (lookup_syntax() above always returns empty), which is
+						// the right outcome with no real check to run - see adl_scan.cpp
 };
 
 template<
@@ -543,40 +561,45 @@ template<typename Source> bool ADLParser<Source>::array_value(Source& source, Ty
 	return true;
 }
 
-// | '/' pegexp_sequence '/' | path_name | object_literal | matched_literal
+/*
+ * | '/' pegexp_sequence '/' | path_name | object_literal | matched_literal
+ *
+ * Which of these is acceptable is determined by the variable being
+ * assigned, not tried in some fixed order regardless of type: a Regular
+ * Expression variable's value is a pegexp; a Reference variable's value
+ * is a path_name or object literal; any other variable's value must
+ * match its Syntax (matched_literal) - see ValueExpectation. There's no
+ * "try each kind in turn" fallback: exactly one kind is ever attempted,
+ * and failing it rejects the value outright.
+ */
 template<typename Source> bool ADLParser<Source>::atomic_value(Source& source, Type& type)
 {
-	bool	expecting_syntax = true;		// REVISIT: Set these appropriately depending on syntax
-	bool	expecting_reference = true;
-
-	if (expecting_syntax && '/' == source.peek_char())
-		return pegexp_literal(source);
-
 	Source	probe(source);
 
-	/* REVISIT: This should follow reference values, but we need Pegexp Syntax for that */
-	Source	syntax = sink.lookup_syntax(type);
-	if (matched_literal(probe, syntax))
-	{		// A hacked-up literal
-		source = probe;
-		return true;
-	}
-
-	if (expecting_reference)
+	switch (sink.expected_value_kind(type))
 	{
-		if (reference_literal(probe, type)
-		 || object_literal(probe))
-		{
-			source = probe;
-			return true;
-		}
-	}
-	return false;
+	case ExpectRegexp:
+		if (!pegexp_literal(probe))
+			return false;
+		break;
 
-/* REVISIT when matched_literal is complete
-printf("Looking for value matching Type syntax, at: "); source.print_ahead();
-	return matched_literal(source, syntax);
-*/
+	case ExpectReference:
+		if (!reference_literal(probe, type) && !object_literal(probe))
+			return false;
+		break;
+
+	case ExpectMatch:
+	default:
+	{
+		Source	syntax = sink.lookup_syntax(type);
+		if (!matched_literal(probe, syntax))
+			return false;
+		break;
+	}
+	}
+
+	source = probe;
+	return true;
 }
 
 template<typename Source> bool ADLParser<Source>::reference_literal(Source& source, Type& type)

@@ -1,0 +1,20 @@
+// EXPECT: PASS
+// The normal expectation (per the project's own convention) is that
+// adl.adl is always loaded first, completing the built-ins that don't
+// need to be C++-bootstrapped; any subsequent file then continues
+// inside the TOP that adl.adl defined - see adlmem.cpp's main():
+// `sink.root_object = sink.last_object();`, set before each file after
+// the first, and this directory's own naming (1_adl.adl, a symlink to
+// ../../adl.adl, then this file) exercises exactly that sequence.
+//
+// This bare, un-prefixed statement below only resolves ("Reference" is
+// only findable, and "Object" only exists as its target) because
+// root_object correctly carried over as TOP from adl.adl - it does not
+// re-declare "TOP {" itself. Reference is used deliberately, not a
+// quoted string or number: matched_literal() has its own unrelated
+// fallback for those (for bootstrapping String/Integer themselves,
+// before they have a real Syntax) that would mask a broken carryover -
+// confirmed by hand that running this file standalone (without
+// 1_adl.adl first) fails to parse fully, rather than just printing an
+// error and continuing.
+Greeting: Reference = Object;

@@ -39,6 +39,9 @@ public:
 	void		set_array();		// Mark this object as accepting an array value
 	bool		is_assignment();
 	bool		is_reference();		// Is this object's type chain rooted at the built-in Reference?
+	bool		is_regular_expression();	// Is this object's type chain rooted at the built-in Regular Expression?
+	bool		is_alias();		// Is this object's immediate super() the built-in Alias?
+	bool		hides(StrVal name);	// Does one of this object's own aliases hide the inherited `name`?
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
@@ -66,7 +69,8 @@ public:
 	Handle		to();
 
 	// when Handle is an Alias:
-	Handle		for_();
+	Handle		for_();			// The object this alias refers to
+	void		set_alias(Handle target);	// Point this (already-created) Alias object at its target
 
 	// Implementation APIs
 	Array<Handle>&	children();
@@ -94,9 +98,12 @@ public:
 			}
 
 protected:
+	ErrNum		check_final_violation(Handle variable, Value value);
+					// The half of finish_assign() that decides whether the new
+					// value violates an existing final restriction on this variable
 	ErrNum		check_reference_finality(Handle variable, Value value);
-					// The Reference-specific half of finish_assign(): does the new
-					// value violate an existing final restriction on this variable?
+					// The Reference-specific narrowing rule check_final_violation()
+					// dispatches to for a Reference variable
 
 private:
 	Ref<Object>	object;
@@ -164,6 +171,28 @@ public:
 					flags &= ~IsFinal;
 			}
 
+	// Only meaningful when this Object is an Alias:
+	Handle		for_target() { return _for; }
+	void		set_alias(Handle target) { _for = target; }
+
+	/*
+	 * Does one of this object's own Alias children hide the inherited
+	 * `name`? True whether or not that alias also gives it a new name
+	 * (README "Aliasing": "renamed or hidden") - either way, `name`
+	 * (the alias's *target's* name, not the alias's own name, if any)
+	 * is no longer reachable by ordinary lookup from here downward.
+	 */
+	bool		hides(StrVal name)
+			{
+				for (int i = 0; i < children.length(); i++)
+				{
+					Handle	c = children[i];
+					if (c.is_alias() && !c.for_().is_null() && c.for_().name() == name)
+						return true;
+				}
+				return false;
+			}
+
 protected:
 	enum Flags {
 		IsSterile = 0x1,
@@ -192,11 +221,18 @@ protected:
 	 * but included by each()/each_child() - it's a real, if unnamed and
 	 * unreachable-by-name, object in the tree, parented on the Assignment
 	 * it's the value of.
+	 * An Alias (super() is the built-in Alias; see Handle::is_alias())
+	 * is a fourth kind: a real child like any other (possibly with its
+	 * own new name, possibly anonymous if it only hides its target - see
+	 * Object::hides()), but ADLStoreSink's lookup_child() redirects
+	 * through it to its for_target() rather than returning it directly.
 	 */
 	Array<Handle>	children;
 
 	Handle		_var;		// Set only on an Object that is itself an Assignment
 	Value		_val;
+
+	Handle		_for;		// Set only on an Object that is itself an Alias
 
 	MemStore*	_store;		// Set only on TOP; see Handle::store()
 
@@ -244,6 +280,18 @@ public:
 					top();		// Ensure bootstrap() has run
 				return _reference_type;
 			}
+	Handle		Alias()			// aka TOP.Alias, set once by bootstrap()
+			{
+				if (_alias_type.is_null())
+					top();		// Ensure bootstrap() has run
+				return _alias_type;
+			}
+	Handle		RegularExpression()	// aka TOP.Regular Expression, set once by bootstrap()
+			{
+				if (_regexp_type.is_null())
+					top();		// Ensure bootstrap() has run
+				return _regexp_type;
+			}
 
 	// Make new objects:
 	Handle		object(Handle parent, StrVal name, Handle supertype, Handle aspect = 0)	// New Object
@@ -270,6 +318,8 @@ protected:
 	Handle		_syntax_variable;
 	Handle		_assignment_type;
 	Handle		_reference_type;
+	Handle		_alias_type;
+	Handle		_regexp_type;
 };
 
 void
@@ -284,6 +334,7 @@ MemStore::bootstrap()
 
 	Handle	regexp = new Object(_top, "Regular Expression", _object, 0);
 	_top.children().push(regexp);
+	_regexp_type = regexp;
 
 	Handle	syntax = new Object(_object, "Syntax", regexp, 0);
 	_object.children().push(syntax);
@@ -302,8 +353,9 @@ MemStore::bootstrap()
 	// Must come after _assignment_type is set, since Handle::assign() needs it.
 	reference.assign(reference, reference_literal(_object), true);
 
-	// _alias = new Object(_top, "Alias", _object, 0);
-	// _is_for = new ADL::Object(_alias, "For", _object, 0);
+	Handle	alias = new Object(_top, "Alias", _object, 0);
+	_top.children().push(alias);
+	_alias_type = alias;
 }
 
 inline Handle
@@ -392,6 +444,31 @@ Handle::is_reference()
 }
 
 inline bool
+Handle::is_regular_expression()
+{
+	Handle	regexp_type = store()->RegularExpression();
+	if (regexp_type.is_null())
+		return false;
+	for (Handle t = *this; !t.is_null(); t = t.super())
+		if (t == regexp_type)
+			return true;
+	return false;
+}
+
+inline bool
+Handle::is_alias()
+{
+	Handle	s = super();
+	return !s.is_null() && s == store()->Alias();
+}
+
+inline bool
+Handle::hides(StrVal name)
+{
+	return object->hides(name);
+}
+
+inline bool
 Handle::is_final()
 {
 	return object->is_final();
@@ -439,7 +516,7 @@ Handle::assign(Handle variable, Value value, bool is_final)	// Create/refine an 
 Handle
 Handle::begin_assign(Handle variable)
 {
-	if (!variable.is_null() && variable.is_reference())
+	if (!variable.is_null())
 	{
 		for (Handle t = *this; !t.is_null(); t = t.super())
 		{
@@ -458,20 +535,44 @@ Handle::begin_assign(Handle variable)
 }
 
 /*
- * Complete a slot obtained from begin_assign(): for a Reference variable,
- * check the finality-narrowing rule, then set the value.
+ * Complete a slot obtained from begin_assign(): check for a final
+ * violation, then set the value.
  */
 ErrNum
 Handle::finish_assign(Handle slot, Handle variable, Value value, bool is_final)
 {
-	if (!variable.is_null() && variable.is_reference())
+	if (!variable.is_null())
 	{
-		ErrNum	err = check_reference_finality(variable, value);
+		ErrNum	err = check_final_violation(variable, value);
 		if (err)
 			return err;
 	}
 
 	slot.object->set_assignment(variable, value, is_final);
+	return 0;
+}
+
+/*
+ * Would assigning `value` to `variable` in this context violate an
+ * existing final assignment (local, or inherited via this context's own
+ * supertype chain)? A Reference variable gets the narrowing exception
+ * (README "Reference Variables"): a final restriction may be refined by
+ * any subtype of its existing target. Every other variable gets the
+ * plain rule (README "Tentative Assignment": "it cannot re-assign those
+ * variables"): once finalized, it simply cannot be re-assigned at all.
+ */
+ErrNum
+Handle::check_final_violation(Handle variable, Value value)
+{
+	if (variable.is_reference())
+		return check_reference_finality(variable, value);
+
+	Handle	existing;
+	for (Handle t = *this; !t.is_null() && existing.is_null(); t = t.super())
+		existing = t.assigned(variable);
+
+	if (!existing.is_null() && existing.is_final())
+		return ADLERR_FINAL_VIOLATION;
 	return 0;
 }
 
@@ -562,10 +663,16 @@ Handle::to()
 }
 
 // when Handle is an Alias:
-Handle	
+Handle
 Handle::for_()
 {
-	return 0;		// REVISIT: Not Implemented
+	return is_alias() ? object->for_target() : Handle();
+}
+
+void
+Handle::set_alias(Handle target)
+{
+	object->set_alias(target);
 }
 
 Handle
