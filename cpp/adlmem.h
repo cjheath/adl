@@ -39,17 +39,16 @@ public:
 	void		set_array();		// Mark this object as accepting an array value
 	bool		is_assignment();
 	bool		is_reference();		// Is this object's type chain rooted at the built-in Reference?
-	bool		is_regular_expression();	// Is this object's type chain rooted at the built-in Regular Expression?
+	bool		is_regular_expression(); // Is this object's type chain rooted at the built-in Regular Expression?
 	bool		is_alias();		// Is this object's immediate super() the built-in Alias?
 	bool		hides(StrVal name);	// Does one of this object's own aliases hide the inherited `name`?
 
-	Handle		lookup(StrVal name);		// Search down one level
+	Handle		lookup(StrVal name);	// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
 	void		each_child(std::function<void (Handle child)> operation) const;	// Every child, named or anonymous
 	void		each_assignment(std::function<void (Handle assignment)> operation) const;	// Only this object's own local Assignments
 	// Shortcut methods:
-	ErrNum		assign(Handle variable, Value value, bool is_final);	// Create/refine an Assignment;
-					// ADLERR_FINAL_VIOLATION if this violates a final Reference restriction
+	ErrNum		assign(Handle variable, Value value, bool is_final);	// Create/refine an Assignment
 	Handle		assigned(Handle variable);	// Search for an assignment
 
 	/*
@@ -151,8 +150,8 @@ public:
 				for (int i = 0; i < children.length(); i++)
 					operation(children[i]);
 			}
-	void		each_assignment(std::function<void (Handle assignment)> operation) const	// Only this object's own local Assignments
-			{
+	void		each_assignment(std::function<void (Handle assignment)> operation) const
+			{		// Only this object's own local Assignments
 				for (int i = 0; i < children.length(); i++)
 					if (children[i].is_assignment())
 						operation(children[i]);
@@ -176,11 +175,9 @@ public:
 	void		set_alias(Handle target) { _for = target; }
 
 	/*
-	 * Does one of this object's own Alias children hide the inherited
-	 * `name`? True whether or not that alias also gives it a new name
-	 * (README "Aliasing": "renamed or hidden") - either way, `name`
-	 * (the alias's *target's* name, not the alias's own name, if any)
-	 * is no longer reachable by ordinary lookup from here downward.
+	 * Does one of this object's own Alias children hide the inherited `name`?
+	 * True whether or not that alias also gives it a new name.  Either way,
+	 * `name` is no longer reachable by ordinary lookup from here downward.
 	 */
 	bool		hides(StrVal name)
 			{
@@ -208,24 +205,15 @@ protected:
 	int		flags;
 
 	/*
-	 * Named sub-objects and Assignments made to this object share this
-	 * array. An Assignment is identified by having the built-in
-	 * Assignment object as its immediate super() (see
-	 * Handle::is_assignment()), and is anonymous bookkeeping, not
-	 * reachable by name: lookup() and each() skip such entries, while
-	 * assigned()/each_assignment() consider only such entries.
-	 * An anonymous object-literal value (see ADLStoreSink::
-	 * object_literal_starts()) is a third kind of entry: anonymous like
-	 * an Assignment, but not one itself (its super() is its own declared
-	 * supertype), so it's skipped by lookup() (empty name never matches)
-	 * but included by each()/each_child() - it's a real, if unnamed and
-	 * unreachable-by-name, object in the tree, parented on the Assignment
-	 * it's the value of.
-	 * An Alias (super() is the built-in Alias; see Handle::is_alias())
-	 * is a fourth kind: a real child like any other (possibly with its
-	 * own new name, possibly anonymous if it only hides its target - see
-	 * Object::hides()), but ADLStoreSink's lookup_child() redirects
-	 * through it to its for_target() rather than returning it directly.
+	 * Named sub-objects and Assignments made to this object share this array:
+	 * - A normal sub-object,
+	 * - An Assignment is identified by having the built-in Assignment object
+	 *   as its immediate super(), and is anonymous bookkeeping, skipped in
+	 *   lookup() and each(),
+	 * - An anonymous object-literal value is a third kind of entry, anonymous
+	 *   like an Assignment, but not as Assignment itself, so lookup() skips it,
+	 *   but it's included by each()/each_child(), parented by the Assignment,
+	 * - An Alias is a real child like any other, but steers lookup_child()
 	 */
 	Array<Handle>	children;
 
@@ -481,37 +469,35 @@ Handle::lookup(StrVal name)		// Search down one level
 }
 
 void
-Handle::each(std::function<void (Handle child)> operation) const	// Named, non-Assignment children
-{
+Handle::each(std::function<void (Handle child)> operation) const
+{		// Named, non-Assignment children
 	object->each(operation);
 }
 
 void
-Handle::each_child(std::function<void (Handle child)> operation) const	// Every child, named or anonymous
-{
+Handle::each_child(std::function<void (Handle child)> operation) const
+{		// Every child, named or anonymous
 	object->each_child(operation);
 }
 
 void
-Handle::each_assignment(std::function<void (Handle assignment)> operation) const	// Only this object's own local Assignments
-{
+Handle::each_assignment(std::function<void (Handle assignment)> operation) const
+{		// Only this object's own local Assignments
 	object->each_assignment(operation);
 }
 
 // Shortcut methods:
 ErrNum
-Handle::assign(Handle variable, Value value, bool is_final)	// Create/refine an Assignment
-{
+Handle::assign(Handle variable, Value value, bool is_final)
+{		// Create/refine an Assignment
 	return finish_assign(begin_assign(variable), variable, value, is_final);
 }
 
 /*
- * Locate or create the local Assignment for `variable`, without yet setting
- * its value. Split out of assign() so a value that itself contains an
- * anonymous object-literal (which needs a real Assignment to be parented on
- * while it's being parsed - see ADLStoreSink::assignment_starts()) has
- * somewhere to attach before the value as a whole is known. finish_assign()
- * completes the job once the value is ready.
+ * Locate or create the local Assignment for `variable`, without yet setting its value.
+ * Split out from assign() so a value that itself contains an anonymous object-literal
+ * provides a real parent for that object.
+ * finish_assign() completes the job once the value is ready.
  */
 Handle
 Handle::begin_assign(Handle variable)
@@ -535,8 +521,8 @@ Handle::begin_assign(Handle variable)
 }
 
 /*
- * Complete a slot obtained from begin_assign(): check for a final
- * violation, then set the value.
+ * Complete a slot obtained from begin_assign(): check for a final violation,
+ * then set the value.
  */
 ErrNum
 Handle::finish_assign(Handle slot, Handle variable, Value value, bool is_final)
@@ -553,13 +539,26 @@ Handle::finish_assign(Handle slot, Handle variable, Value value, bool is_final)
 }
 
 /*
+ * A position-less counterpart to ADLStoreSink::error() (adlstore.h): this
+ * layer (the object model, not the parser) has no Source/line-number to
+ * report, only the names of the variable/context/value involved in the
+ * failure - the Sink's own error() call, back at the site that receives
+ * this ErrNum, still prints the parse position that goes with it.
+ */
+ErrNum
+error(ErrNum num, const char* why, StrVal what)
+{
+	printf("%s: %s\n", why, what.asUTF8());
+	return num;
+}
+
+/*
  * Would assigning `value` to `variable` in this context violate an
  * existing final assignment (local, or inherited via this context's own
- * supertype chain)? A Reference variable gets the narrowing exception
- * (README "Reference Variables"): a final restriction may be refined by
- * any subtype of its existing target. Every other variable gets the
- * plain rule (README "Tentative Assignment": "it cannot re-assign those
- * variables"): once finalized, it simply cannot be re-assigned at all.
+ * supertype chain)? A Reference variable gets the narrowing exception,
+ * such that a final restriction may be refined by any subtype of its
+ * existing target. Every other variable gets the plain rule: once
+ * finalized, it simply cannot be re-assigned at all.
  */
 ErrNum
 Handle::check_final_violation(Handle variable, Value value)
@@ -572,17 +571,19 @@ Handle::check_final_violation(Handle variable, Value value)
 		existing = t.assigned(variable);
 
 	if (!existing.is_null() && existing.is_final())
-		return ADLERR_FINAL_VIOLATION;
+		return error(
+			ADLERR_FINAL_VIOLATION,
+			"Assignment violates a final restriction",
+			pathname() + "." + variable.name() + " was already finalised by " + existing.parent().pathname()
+		);
 	return 0;
 }
 
 /*
  * A Reference variable's assigned value is itself a type restriction: any
- * value it's ever refined to (by the same variable, seen from this context
- * or an inherited one) must be that same value, or a subtype of it. An
- * array-typed Reference (e.g. "X => Y") restricts each element
- * individually; value.handle is meaningless for an ArrayValue (it's only
- * ever set on a single Reference value).
+ * value it's ever refined to must be that same value, or a subtype of it.
+ * An array-typed Reference (e.g. "X => Y") restricts each element
+ * individually.
  */
 ErrNum
 Handle::check_reference_finality(Handle variable, Value value)
@@ -606,16 +607,23 @@ Handle::check_reference_finality(Handle variable, Value value)
 			};
 
 	bool	ok = true;
+	Handle	rejected;
 	if (value.elements.length() > 0)
 	{
 		for (int i = 0; ok && i < value.elements.length(); i++)
-			ok = same_or_subtype(value.elements[i].handle);
+			if (!(ok = same_or_subtype(rejected = value.elements[i].handle)))
+				break;
 	}
 	else
-		ok = same_or_subtype(value.handle);
+		ok = same_or_subtype(rejected = value.handle);
 
 	if (!ok)
-		return ADLERR_FINAL_VIOLATION;
+		return error(
+			ADLERR_FINAL_VIOLATION,
+			"Reference assignment violates a final restriction",
+			pathname() + "." + variable.name() + " must be " + old_target.pathname()
+				+ " or a subtype, not " + rejected.pathname()
+		);
 	return 0;
 }
 
@@ -647,13 +655,12 @@ Handle
 Handle::to()
 {
 	/*
-	 * The target as declared right here: this variable's own parent's
-	 * assignment to it (the self-assignment made by "X -> Y" or
-	 * "X: Reference = Y"). This does not resolve a further refinement
-	 * recorded on some other instance that inherits this variable (see
-	 * Handle::assign()) - that needs a walk from the instance in
-	 * question, not from the variable itself, since the same shared
-	 * variable can be refined differently by many different instances.
+	 * The target as declared right here: this variable's own parent's assignment
+	 * to it (the self-assignment made by "X -> Y" or "X: Reference = Y").
+	 * This does not resolve a further refinement recorded on some other instance
+	 * that inherits this variable. That would need a walk from the instance in
+	 * question, not from the variable itself, since the same shared variable
+	 * can be refined differently by many different instances.
 	 */
 	Handle	p = parent();
 	if (p.is_null())

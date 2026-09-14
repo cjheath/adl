@@ -152,34 +152,6 @@ public:
 	static	Value	string_literal(StrVal);			// placeholder in the absence of Syntax
 	static	Value	numeric_literal(StrVal);		// placeholder in the absence of Syntax
 	static	Value	array_literal(Array<Value>);		// One element Value per array member
-
-#if defined(ADL_HELPERS)
-	// All these builtins can be found by searching in top(), these are short-cuts/caches;
-	// backends should memoize each lookup, as Syntax()/Assignment() above already do
-	Handle		Parent();		// aka Object.Parent
-	Handle		Name();			// aka Object.Name
-	Handle		Super();		// aka Object.Super
-	Handle		IsSterile();		// aka Object.IsSterile
-	Handle		IsComplete();		// aka Object.IsComplete
-	Handle		IsArray();		// aka Object.IsArray
-	Handle		RegularExpression();	// aka TOP.RegularExpression
-
-	Handle		Reference();		// aka TOP.Reference
-	Handle		Enumeration();		// aka TOP.Enumeration
-	Handle		Boolean();		// aka TOP.Boolean
-	Handle		False();		// aka TOP.False
-	Handle		True();			// aka TOP.True
-	Handle		String();		// aka TOP.String
-	Handle		Number();		// aka TOP.Number
-
-	Handle		Variable();		// aka Assignment.Variable
-	Handle		ValueOf();		// aka Assignment.Value
-	Handle		IsFinal();		// aka Assignment.IsFinal (either TOP.True or TOP.False)
-
-	Handle		Alias();		// aka TOP.Alias
-	Handle		For();			// aka Alias.For
-#endif
-
 };
 
 /*
@@ -450,20 +422,18 @@ public:
 			reference_path.display().asUTF8());
 
 		/*
-		 * "X -> Y" (or "X => Y") is sugar for "X: Reference = Y" -
+		 * "X -> Y" (or "X => Y") is sugar for "X: Reference = Y", so
 		 * reuse start_object()'s existing name resolution/reopening
 		 * logic by presenting it with a synthetic supertype path of
 		 * just "Reference", exactly as if that had been parsed after
 		 * a ':'.
-		 */
-		/*
-		 * Resolve the reference's target type from the enclosing context
-		 * now, before start_object() below creates (or finds) the field
-		 * itself: for the eponymous case just above, the field and its
+		 *
+		 * Resolve the reference's target type from the enclosing context,
+		 * before start_object() below creates (or finds) the field
+		 * itself. For the eponymous case just above, the field and its
 		 * target now share a name, so looking this up afterward would
 		 * find the just-created field instead of the intended external
-		 * type (confirmed - that's exactly what happened before this
-		 * was reordered).
+		 * type.
 		 */
 		Handle	context = current_context();
 		Handle	target = context.is_null() ? Handle() : lookup_path(context, reference_path);
@@ -942,20 +912,10 @@ public:
 			if (is_outermost && parent == root_object && child_name == parent.name())
 			{
 				/*
-				 * Continuing a previous file (root_object is its
-				 * last-finalised object, not TOP): writing that
-				 * object's own bare name again at the top level
-				 * reopens it in place. lookup_child(parent, child_name)
-				 * below can't find this - it searches parent's own
-				 * children, and root_object isn't its own child - so
-				 * without this, the eponymous-naming fallback further
-				 * down ascends from root_object, finds root_object
-				 * itself (as its parent's child), and creates a *new*
-				 * child of root_object named after and supertyped by
-				 * root_object itself: nesting it inside itself. This
-				 * mirrors the is_outermost/parent.is_null() TOP
-				 * special-case above, generalised to a continuation
-				 * point other than TOP.
+				 * Declarations in a new file start with the last-finalised
+				 * object of the previous file. The exception is when that
+				 * last object is explicitly named (re-opened) at the top of
+				 * the new file
 				 */
 				child = parent;
 			}
@@ -990,12 +950,7 @@ public:
 #if	defined(CAN_USE_CONTEXTUAL_REOPEN)
 		/*
 		 * Placeholder for contextual re-opening (README "Contextual
-		 * Extension") - not implemented yet, see cpp/ToDo (a)(2)/(3).
-		 * Gating the whole `else if` (not just its body) matters: with
-		 * an empty body but a true condition, an `else if` still counts
-		 * as "handled" and skips the real `else if (child.is_null())`
-		 * error case below - see (b)(22) for the bug that caused
-		 * (found when this and eponymous naming shared one macro).
+		 * Extension") - not implemented yet.
 		 */
 		else if (!child.is_null() && parent != context)
 		{
@@ -1011,18 +966,14 @@ public:
 		else if (child.is_null() && may_ascend)
 		{
 			/*
-			 * Eponymous naming (README "Eponymous Naming"): a bare
-			 * name (no ':', no block - the shape that got us into
-			 * this branch at all) that's not already a child of this
-			 * object (child.is_null(), just confirmed) but *is* the
-			 * name of some existing type - found the same way a
-			 * supertype name is (search here, then ascend to
-			 * enclosing scopes; lookup_path()'s own ascend-on-first-
-			 * failure logic does this without any special-casing) -
-			 * creates a new child of that type, named the same as the
-			 * type itself. E.g. inside "Event: { Date }", "Date"
-			 * becomes a new Event child named "Date" with supertype
-			 * Date, exactly as if "Date: Date;" had been written.
+			 * Eponymous naming (README "Eponymous Naming").
+			 *
+			 * A bare name (no ':') that's not already a child of this object
+			 * (which would be re-opening) but *is* the name of some existing
+			 * type - found the same way as a supertype name - creates a new
+			 * child of that type, named the same as the type itself (it's eponymous)
+			 * E.g. inside "Event: { Date }", "Date" becomes a new Event child
+			 * named "Date" with supertype Date, as if we wrote "Date: Date;"
 			 */
 			PathName	eponymous_path;
 			eponymous_path.names.push(child_name);
@@ -1077,12 +1028,8 @@ public:
 		for (Handle node = parent; !parent.is_null() && !node.is_null(); node = node.super())
 		{
 			/*
-			 * If this level's own Aliases hide child_name (README
-			 * "Aliasing" - with or without a new name), the search
-			 * stops here: it's hidden from here and any subtype, but
-			 * still visible to a search that doesn't pass through this
-			 * level (e.g. one starting at or above the supertype where
-			 * the name actually lives).
+			 * If this level's own Aliases hide child_name, the search
+			 * stops here. The object may still be visible from elsewhere.
 			 */
 			if (node.hides(child_name))
 			{
