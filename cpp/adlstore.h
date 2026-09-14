@@ -431,6 +431,19 @@ public:
 		PathName	reference_path;
 		current_path.consume(reference_path);
 
+		/*
+		 * README "Reference Shorthand": "Eponymous naming of reference
+		 * variables is also allowed" - a bare "-> Y;"/"=> Y;" with no
+		 * name of its own (object_path() still empty here, since
+		 * object_name() already committed whatever path_name preceded
+		 * the arrow) names the new variable after the referenced type's
+		 * own last name, the same way a bare type name creates an
+		 * eponymous child elsewhere (see start_object()'s eponymous
+		 * naming branch).
+		 */
+		if (object_path().is_empty() && reference_path.names.length() > 0)
+			object_path().names.push(reference_path.names.last());
+
 		ADL_TRACE("-------------- new Reference %s %s '%s'\n",
 			object_path().display().asUTF8(),
 			is_multi ? "=>" : "->",
@@ -443,6 +456,18 @@ public:
 		 * just "Reference", exactly as if that had been parsed after
 		 * a ':'.
 		 */
+		/*
+		 * Resolve the reference's target type from the enclosing context
+		 * now, before start_object() below creates (or finds) the field
+		 * itself: for the eponymous case just above, the field and its
+		 * target now share a name, so looking this up afterward would
+		 * find the just-created field instead of the intended external
+		 * type (confirmed - that's exactly what happened before this
+		 * was reordered).
+		 */
+		Handle	context = current_context();
+		Handle	target = context.is_null() ? Handle() : lookup_path(context, reference_path);
+
 		PathName&	super = supertype_path();
 		super.clear();
 		super.names.push("Reference");
@@ -456,11 +481,9 @@ public:
 			obj_array() = true;
 
 		Handle	variable = frame().handle;
-		Handle	context = current_context();
 		if (variable.is_null() || context.is_null())
 			return 0;
 
-		Handle	target = lookup_path(context, reference_path);
 		if (target.is_null())
 			return error(ADLERR_REFERENCE_NOT_FOUND, "Reference target not found", reference_path.display().asUTF8());
 
@@ -916,7 +939,28 @@ public:
 			}
 			assert(descent == new_path.names.length()-1);
 			child_name = new_path.names[descent];
-			child = child_name.isEmpty() ? Handle() : lookup_child(parent, child_name);
+			if (is_outermost && parent == root_object && child_name == parent.name())
+			{
+				/*
+				 * Continuing a previous file (root_object is its
+				 * last-finalised object, not TOP): writing that
+				 * object's own bare name again at the top level
+				 * reopens it in place. lookup_child(parent, child_name)
+				 * below can't find this - it searches parent's own
+				 * children, and root_object isn't its own child - so
+				 * without this, the eponymous-naming fallback further
+				 * down ascends from root_object, finds root_object
+				 * itself (as its parent's child), and creates a *new*
+				 * child of root_object named after and supertyped by
+				 * root_object itself: nesting it inside itself. This
+				 * mirrors the is_outermost/parent.is_null() TOP
+				 * special-case above, generalised to a continuation
+				 * point other than TOP.
+				 */
+				child = parent;
+			}
+			else
+				child = child_name.isEmpty() ? Handle() : lookup_child(parent, child_name);
 			if (!child.is_null())
 				ADL_TRACE("Found existing %s\n", new_path.names.last().asUTF8());
 		}
