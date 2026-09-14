@@ -1,0 +1,24 @@
+// EXPECT: PASS
+// Is Sterile/Is Complete only block *new* content - reopening an
+// existing subtype without adding anything, or refining an *already-
+// assigned* variable in place (begin_assign() reuses that local
+// Assignment rather than creating a new one), is unaffected. A variable's
+// very first assignment is new content, even if the variable itself was
+// declared earlier - see 84_complete_reject for that case.
+
+// True/False (adl.adl) are existing subtypes of the already-sterile
+// Boolean; reopening them is not "a new subtype".
+True {}
+False {}
+
+Widget: {
+	Colour: String;
+	Colour ~= 'Red';	// Colour's first assignment, before completeness
+}
+Widget { Is Complete = True; }
+
+// Refining Colour's *existing* local Assignment (tentative -> final) is
+// not new content - it's the same Assignment, refined in place.
+Widget {
+	Colour = 'Blue';
+}

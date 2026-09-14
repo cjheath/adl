@@ -26,13 +26,13 @@ Fact Based Model: {
 	Modality: Enumeration;
 	Alethic Modality: Modality;
 	Deontic Modality: Modality;
-	Modality.Is Sterile = True;
+	Modality { Is Sterile = True; }
 
 	World Assumption: Enumeration;
 	Open World Assumption: World Assumption;
 	Open World With Negation Assumption: World Assumption;
 	Closed World Assumption: World Assumption;
-	World Assumption.Is Sterile = True;
+	World Assumption { Is Sterile = True; }
 
 	// Comparator is an extensible enumeration. Here are the standard values.
 	Comparator: Enumeration;
@@ -105,7 +105,7 @@ Fact Based Model: {
 		FixedValue: Facet Restriction Style;	// Value may not be overridden
 		AscendingRestriction: Facet Restriction Style;	// Ascending means larger is more restrictive
 		DescendingRestriction: Facet Restriction Style;	// Descending means smaller is more restrictive
-		Facet Restriction Style.Is Sterile = True;
+		Facet Restriction Style { Is Sterile = True; }
 
 		// NOTE: I would rather call it Data Type.Parameter, not Facet
 		Facet: {

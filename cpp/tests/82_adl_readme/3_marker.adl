@@ -1,0 +1,9 @@
+// EXPECT: PASS
+// adl.adl + examples/readme.adl, loaded together exactly as
+// examples/readme.adl's own header comment describes ("exists to be
+// processed as a second file after a previous file creates TOP" - see
+// adl.adl's own header too). Previously blocked by two now-fixed bugs
+// (see cpp/ToDo's closed-out (b)(15) note) - both files now parse fully
+// clean together, with no diagnostics of any kind. This file adds
+// nothing of its own; it only carries the EXPECT marker, since neither
+// real file should be modified just to host one.

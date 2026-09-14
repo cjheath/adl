@@ -1,0 +1,18 @@
+// Deliberately carries no EXPECT marker, for the same reason as
+// 41_reference_reject.adl and its siblings: this is correctly rejected
+// (see the printed "Cannot create a new subtype of a sterile object"
+// diagnostic below), but like every other semantic check that isn't yet
+// wired through to fail the parse, that's print-only and doesn't
+// currently affect the exit code. Mark this test properly once errors
+// are propagated through a proper ErrNum (see cpp/ToDo).
+//
+// README "Enumerations": "Making an object Sterile prevents definition
+// of any further subtypes." Colour declares its alternatives first, then
+// becomes sterile - matching adl.adl's own Boolean/True/False idiom.
+Colour: Enumeration;
+Red: Colour;
+Colour { Is Sterile = True; }
+
+// Faulty: Colour is now sterile, so Blue may not be added as a new
+// subtype.
+Blue: Colour;

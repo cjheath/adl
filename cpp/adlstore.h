@@ -46,6 +46,8 @@ inline bool adl_debug_enabled()
 #define	ADLERR_REFERENCE_NOT_FOUND	ErrNum(ADLERR_SET, 9)	// A Reference's target path could not be found
 #define	ADLERR_FINAL_VIOLATION		ErrNum(ADLERR_SET, 10)	// An assignment violates an existing final restriction
 #define	ADLERR_ALIAS_NOT_FOUND		ErrNum(ADLERR_SET, 11)	// An Alias's target path could not be found
+#define	ADLERR_STERILE_SUPERTYPE	ErrNum(ADLERR_SET, 12)	// Is Sterile forbids a new subtype of this object
+#define	ADLERR_COMPLETE_PARENT		ErrNum(ADLERR_SET, 13)	// Is Complete forbids new content in this object
 
 /*
  * An ADLStoreStub relies on a Value and a Handle to an object.
@@ -777,6 +779,34 @@ public:
 		).join(".");
 	}
 
+	/*
+	 * Making an object Sterile prevents definition of any further subtypes.
+	 * We check this wherever a brand new Object is about to be created with
+	 * `supertype` as its super(), whether named, anonymous, or an object-literal
+	 * value.
+	 */
+	ErrNum	check_sterile_supertype(Handle supertype)
+	{
+		if (!supertype.is_null() && supertype.is_sterile())
+			return error(ADLERR_STERILE_SUPERTYPE, "Cannot create a new subtype of a sterile object", supertype.pathname().asUTF8());
+		return 0;
+	}
+
+	/*
+	 * adl.adl's own comment on Is Complete: "No further contents may be
+	 * added." Checked wherever a brand new named or anonymous child
+	 * object (not an object-literal value, and not a mere Assignment) is
+	 * about to be added to `parent` - whether `parent` was just reopened
+	 * or is only now being created for the first time (always is_complete()
+	 * == false then, so the check is harmless there).
+	 */
+	ErrNum	check_complete_parent(Handle parent)
+	{
+		if (!parent.is_null() && parent.is_complete())
+			return error(ADLERR_COMPLETE_PARENT, "Cannot add new content to a complete object", parent.pathname().asUTF8());
+		return 0;
+	}
+
 	ErrNum	start_literal_object()		// Create the anonymous Object for an object-literal value
 	{
 		Handle	slot = current_assignment();	// The Assignment this literal's value belongs to (see assignment_starts())
@@ -794,6 +824,9 @@ public:
 		Handle		supertype = super_path.is_empty() ? store.object() : lookup_path(context, super_path);
 		if (supertype.is_null())
 			return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
+		ErrNum	sterile_err = check_sterile_supertype(supertype);
+		if (sterile_err)
+			return sterile_err;
 
 		frame().handle = store.object(slot, "", supertype);
 		object_started() = true;
@@ -878,6 +911,12 @@ public:
 						: store.object();
 			if (supertype.is_null())
 				return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
+			ErrNum	sterile_err = check_sterile_supertype(supertype);
+			if (sterile_err)
+				return sterile_err;
+			ErrNum	complete_err = check_complete_parent(parent);
+			if (complete_err)
+				return complete_err;
 
 			frame().handle = store.object(parent, "", supertype);
 			object_started() = true;
@@ -1031,6 +1070,13 @@ public:
 		frame().handle = child;
 		if (frame().handle.is_null())
 		{
+			ErrNum	sterile_err = check_sterile_supertype(supertype);
+			if (sterile_err)
+				return sterile_err;
+			ErrNum	complete_err = check_complete_parent(parent);
+			if (complete_err)
+				return complete_err;
+
 			frame().handle = store.object(
 					parent,
 					last_name,

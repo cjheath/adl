@@ -14,6 +14,24 @@ class	Handle;
 class	Value;
 class	MemStore;
 
+ErrNum	error(ErrNum num, const char* why, StrVal what);	// forward declared: Handle::finish_assign()
+								// (defined before it, below) needs to call it too
+
+/*
+ * adl.adl re-declares Object's own true built-ins (Parent, Name, Super,
+ * Aspect, Is Sterile, Is Complete, Is Array - README "Variables") as real
+ * ADL fields, purely so they're visible/inheritable/typed from ADL. An
+ * assignment to one of these, found via inheritance on some object other
+ * than Object itself (see Handle::builtin_variable_override()), is wired
+ * to the engine's own internals instead of becoming an inert Assignment
+ * child disconnected from parent()/name()/super()/aspect()/the flags -
+ * see Handle::finish_builtin_assign().
+ */
+enum class BuiltinObjectVariable
+{
+	None, Parent, Name, Super, Aspect, IsSterile, IsComplete, IsArray
+};
+
 class	Handle
 {
 public:
@@ -107,6 +125,16 @@ protected:
 					// The Reference-specific narrowing rule check_final_violation()
 					// dispatches to for a Reference variable
 
+	BuiltinObjectVariable	builtin_variable_override(Handle variable);
+					// Is `variable` one of Object's own built-in fields, and is
+					// *this* (the assignment's context) something other than
+					// the Object that declares it - i.e. a genuine attempt to
+					// (re)assign an inherited occurrence, not the field's own
+					// default-restriction declaration (adl.adl's own
+					// "Parent -> Object;" inside Object's own definition)?
+	ErrNum		finish_builtin_assign(BuiltinObjectVariable kind, Value value, bool is_final);
+					// Handle an assignment identified by builtin_variable_override()
+
 private:
 	Ref<Object>	object;
 	Object&		o() { return *object; }
@@ -145,6 +173,26 @@ public:
 	bool		is_array() { return (flags & IsArray) != 0; }
 	bool		is_final() { return (flags & IsFinal) != 0; }
 	void		set_array() { flags |= IsArray; }
+	bool		is_sterile_final() { return (flags & IsSterileFinal) != 0; }
+	bool		is_complete_final() { return (flags & IsCompleteFinal) != 0; }
+	void		set_sterile(bool value, bool is_final)
+			{
+				if (value)
+					flags |= IsSterile;
+				else
+					flags &= ~IsSterile;
+				if (is_final)
+					flags |= IsSterileFinal;
+			}
+	void		set_complete(bool value, bool is_final)
+			{
+				if (value)
+					flags |= IsComplete;
+				else
+					flags &= ~IsComplete;
+				if (is_final)
+					flags |= IsCompleteFinal;
+			}
 
 	Handle		lookup(StrVal name);		// Search down one level
 	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
@@ -198,7 +246,9 @@ protected:
 		IsSterile = 0x1,
 		IsComplete = 0x2,
 		IsArray = 0x4,
-		IsFinal = 0x8
+		IsFinal = 0x8,		// Set on an Assignment: was *it* final?
+		IsSterileFinal = 0x10,	// Has Is Sterile been finally assigned on this Object?
+		IsCompleteFinal = 0x20	// Has Is Complete been finally assigned on this Object?
 	};
 	Handle		_parent;
 	StrVal		_name;
@@ -515,6 +565,12 @@ Handle::begin_assign(Handle variable)
 {
 	if (!variable.is_null())
 	{
+		if (builtin_variable_override(variable) != BuiltinObjectVariable::None)
+			return *this;	// No real Assignment needed - finish_assign() wires it natively instead;
+					// *this is just a harmless non-null placeholder (ADLStoreSink::assignment()
+					// silently bails out on a null slot, assuming variable/context resolution
+					// failed - it never actually gets used to store anything, see finish_assign())
+
 		for (Handle t = *this; !t.is_null(); t = t.super())
 		{
 			Handle	existing = t.assigned(variable);
@@ -540,6 +596,28 @@ Handle::finish_assign(Handle slot, Handle variable, Value value, bool is_final)
 {
 	if (!variable.is_null())
 	{
+		BuiltinObjectVariable	kind = builtin_variable_override(variable);
+		if (kind != BuiltinObjectVariable::None)
+			return finish_builtin_assign(kind, value, is_final);
+
+		/*
+		 * adl.adl's own comment on Is Complete: "No further contents may
+		 * be added." A brand new Assignment is content, same as a brand
+		 * new named/anonymous child (see ADLStoreSink::
+		 * check_complete_parent(), adlstore.h) - so this also blocks an
+		 * object-literal value from being attached to one, since that can
+		 * only happen via a new Assignment. Refining an *existing* local
+		 * Assignment (assigned(variable) already finds one - begin_assign()
+		 * reused it rather than creating a new one) is not new content,
+		 * so it's unaffected, whether or not this object is complete.
+		 */
+		if (is_complete() && assigned(variable).is_null())
+			return error(
+				ADLERR_COMPLETE_PARENT,
+				"Cannot add new content to a complete object",
+				pathname() + "." + variable.name()
+			);
+
 		ErrNum	err = check_final_violation(variable, value);
 		if (err)
 			return err;
@@ -636,6 +714,129 @@ Handle::check_reference_finality(Handle variable, Value value)
 				+ " or a subtype, not " + rejected.pathname()
 		);
 	return 0;
+}
+
+inline BuiltinObjectVariable
+builtin_object_variable_named(StrVal name)
+{
+	if (name == "Parent")		return BuiltinObjectVariable::Parent;
+	if (name == "Name")		return BuiltinObjectVariable::Name;
+	if (name == "Super")		return BuiltinObjectVariable::Super;
+	if (name == "Aspect")		return BuiltinObjectVariable::Aspect;
+	if (name == "Is Sterile")	return BuiltinObjectVariable::IsSterile;
+	if (name == "Is Complete")	return BuiltinObjectVariable::IsComplete;
+	if (name == "Is Array")		return BuiltinObjectVariable::IsArray;
+	return BuiltinObjectVariable::None;
+}
+
+BuiltinObjectVariable
+Handle::builtin_variable_override(Handle variable)
+{
+	Handle	field_owner = variable.parent();
+	if (field_owner.is_null() || field_owner != store()->object() || field_owner == *this)
+		return BuiltinObjectVariable::None;	// Not one of these fields, or it's their own declaration
+	return builtin_object_variable_named(variable.name());
+}
+
+/*
+ * `value` refers to True (README's Boolean/Enumeration built-ins) - looked
+ * up fresh each time rather than memoized, since this is a rare code path
+ * (only Is Sterile/Is Complete assignments reach it) and True isn't a
+ * bootstrap()-set built-in (it comes from adl.adl, like the fields above).
+ */
+static bool
+value_is_true(Handle context, Value value)
+{
+	if (value.handle.is_null())
+		return false;
+	Handle	true_object = context.top().lookup("True");
+	return !true_object.is_null() && value.handle == true_object;
+}
+
+/*
+ * An assignment to one of Object's own built-in fields, found via
+ * inheritance on some object other than Object itself (see
+ * builtin_variable_override()) - wired to the engine's internals instead
+ * of becoming a disconnected Assignment child (README "Variables"; was
+ * cpp/ToDo (a)(5)). Parent/Name/Super/Aspect/Is Array are each fixed once
+ * by the engine itself when this object is created or declared, so any
+ * such assignment either restates that same value (accepted, a no-op) or
+ * contradicts it (rejected, "like a final assignment" per your framing).
+ * Is Sterile/Is Complete instead follow the normal tentative/final
+ * assignment rules, but are stored directly as flags on this Object
+ * rather than as a generic Assignment child.
+ */
+ErrNum
+Handle::finish_builtin_assign(BuiltinObjectVariable kind, Value value, bool is_final)
+{
+	auto	same_or_reject = [&](Handle actual, Handle attempted, const char* label) -> ErrNum
+			{
+				if (attempted == actual)
+					return 0;
+				return error(
+					ADLERR_FINAL_VIOLATION,
+					"Assignment violates a final restriction",
+					pathname() + "." + label + " is already " + actual.pathname()
+						+ ", not " + attempted.pathname()
+				);
+			};
+
+	switch (kind)
+	{
+	case BuiltinObjectVariable::Parent:
+		return same_or_reject(parent(), value.handle, "Parent");
+	case BuiltinObjectVariable::Super:
+		return same_or_reject(super(), value.handle, "Super");
+	case BuiltinObjectVariable::Aspect:
+		return same_or_reject(aspect(), value.handle, "Aspect");
+
+	case BuiltinObjectVariable::Name:
+		if (value.string == name())
+			return 0;
+		return error(
+			ADLERR_FINAL_VIOLATION,
+			"Assignment violates a final restriction",
+			pathname() + ".Name is already '" + name() + "', not '" + value.string + "'"
+		);
+
+	case BuiltinObjectVariable::IsArray:
+	{
+		bool	attempted = value_is_true(*this, value);
+		if (attempted == is_array())
+			return 0;
+		return error(
+			ADLERR_FINAL_VIOLATION,
+			"Assignment violates a final restriction",
+			pathname() + ".Is Array is already " + (is_array() ? "True" : "False")
+		);
+	}
+
+	case BuiltinObjectVariable::IsSterile:
+	case BuiltinObjectVariable::IsComplete:
+	{
+		bool	is_sterile_kind = kind == BuiltinObjectVariable::IsSterile;
+		const char*	label = is_sterile_kind ? "Is Sterile" : "Is Complete";
+		for (Handle t = *this; !t.is_null(); t = t.super())
+		{
+			bool	already_final = is_sterile_kind ? t.object->is_sterile_final() : t.object->is_complete_final();
+			if (already_final)
+				return error(
+					ADLERR_FINAL_VIOLATION,
+					"Assignment violates a final restriction",
+					pathname() + "." + label + " was already finalised by " + t.pathname()
+				);
+		}
+		bool	attempted = value_is_true(*this, value);
+		if (is_sterile_kind)
+			object->set_sterile(attempted, is_final);
+		else
+			object->set_complete(attempted, is_final);
+		return 0;
+	}
+
+	default:
+		return 0;
+	}
 }
 
 Handle

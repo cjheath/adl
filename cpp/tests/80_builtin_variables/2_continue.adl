@@ -1,0 +1,23 @@
+// EXPECT: PASS
+// Object's own built-in variables (Parent, Name, Super, Aspect, Is
+// Sterile, Is Complete, Is Array - README "Variables") are now wired to
+// the engine's own internals, not left as disconnected ADL objects - was
+// cpp/ToDo (a)(5). An assignment that merely restates the value the
+// engine already assigned at creation time (Parent/Super/Aspect here) is
+// accepted as a harmless no-op.
+Foo: Object;
+Foo {
+	Parent = TOP;
+	Super = Object;
+}
+
+// Is Sterile/Is Complete instead follow the normal tentative/final
+// assignment rules (README "Tentative Assignment"), but are stored
+// directly as flags rather than as a generic Assignment child. Boolean
+// (adl.adl) already finalises Is Sterile = True; a fresh type can still
+// set its own, independently.
+Widget:;
+Widget {
+	Is Sterile ~= False;
+	Is Complete = True;
+}
