@@ -34,7 +34,10 @@ public:
 	Handle		aspect();
 	bool		is_sterile();
 	bool		is_complete();
-	StrVal		syntax();		// Effective (inherited) Syntax, fetched via store()->Syntax()
+	StrVal		syntax();		// Syntax that a value assigned to *this* must conform to, i.e.
+					// the effective (inherited) Syntax of super() - fetched via store()->Syntax()
+	StrVal		effective_syntax();	// This object's own effective (inherited) Syntax - what
+					// `Syntax = SomeType;` (README "Copying a Syntax") copies
 	bool		is_array();
 	void		set_array();		// Mark this object as accepting an array value
 	bool		is_assignment();
@@ -385,13 +388,21 @@ Handle::is_complete()
 inline StrVal
 Handle::syntax()
 {
+	Handle	s = super();
+	return s.is_null() ? "" : s.effective_syntax();
+}
+
+inline StrVal
+Handle::effective_syntax()
+{
 	Handle	syntax_variable = store()->Syntax();
 	if (syntax_variable.is_null())
 		return "";
 
-	// Walk the supertype chain looking for an inherited assignment to Syntax
+	// Walk this object's own supertype chain (starting at itself) looking
+	// for an assignment to Syntax - local, or inherited.
 	// Note: Syntax cannot be contextual, because that would invalidate existing assigned values and syntax for new assignments
-	for (Handle t = super(); !t.is_null(); t = t.super())
+	for (Handle t = *this; !t.is_null(); t = t.super())
 	{
 		Handle	a = t.assigned(syntax_variable);
 		if (!a.is_null())

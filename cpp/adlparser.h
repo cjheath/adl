@@ -112,6 +112,7 @@ public:
 	void	object_literal_starts() {}		// ':' seen for an object-literal value
 	void	object_literal_ends() {}		// supertype/?block/?assignment for the literal are complete
 	void	reference_literal() {}			// The last pathname is a value to assign to a reference variable
+	void	syntax_copy() {}			// The last pathname is a value to assign to a Regular-Expression variable
 	void	pegexp_literal(Source start, Source end) {}	// Contents of a pegexp between start and end
 	void	array_value_start() {}			// '[' seen; an array of values follows
 	void	array_value_element() {}		// One element's literal was just reported above
@@ -161,6 +162,7 @@ protected:
 	bool	array_value(Source& source, Type&); // '[' atomic_value *(',' atomic_value) ']'
 	bool	atomic_value(Source&, Type&);	// | '/' pegexp_sequence '/' | path_name | object_literal | matched_literal
 	bool	reference_literal(Source&, Type&);	// pathname
+	bool	syntax_copy(Source&, Type&);	// pathname, for a Regular-Expression variable: copy another object's Syntax
 	bool	object_literal(Source&);	// supertype ?block ?assignment
 	bool	matched_literal(Source&, Type&);
 	bool	space(Source&);			// Optional white-space
@@ -566,11 +568,15 @@ template<typename Source> bool ADLParser<Source>::array_value(Source& source, Ty
  *
  * Which of these is acceptable is determined by the variable being
  * assigned, not tried in some fixed order regardless of type: a Regular
- * Expression variable's value is a pegexp; a Reference variable's value
- * is a path_name or object literal; any other variable's value must
- * match its Syntax (matched_literal) - see ValueExpectation. There's no
- * "try each kind in turn" fallback: exactly one kind is ever attempted,
- * and failing it rejects the value outright.
+ * Expression variable's value is a pegexp, or a path_name naming another
+ * object whose own effective Syntax is copied onto this one (README
+ * "Copying a Syntax"); a Reference variable's value is a path_name or
+ * object literal; any other variable's value must match its Syntax
+ * (matched_literal) - see ValueExpectation. Each variable kind still has
+ * only its own fixed pair (or singleton) of acceptable forms, tried in a
+ * fixed order for that kind alone: there's no "try every kind in turn"
+ * fallback, so an unrecognized or wrongly-typed value is still rejected
+ * outright, never silently reinterpreted as some other kind.
  */
 template<typename Source> bool ADLParser<Source>::atomic_value(Source& source, Type& type)
 {
@@ -579,7 +585,7 @@ template<typename Source> bool ADLParser<Source>::atomic_value(Source& source, T
 	switch (sink.expected_value_kind(type))
 	{
 	case ExpectRegexp:
-		if (!pegexp_literal(probe))
+		if (!pegexp_literal(probe) && !syntax_copy(probe, type))
 			return false;
 		break;
 
@@ -607,6 +613,15 @@ template<typename Source> bool ADLParser<Source>::reference_literal(Source& sour
 	bool	ok = path_name(source);
 	if (ok)
 		sink.reference_literal();
+	return ok;
+}
+
+// pathname, for a Regular-Expression variable: copy another object's own Syntax
+template<typename Source> bool ADLParser<Source>::syntax_copy(Source& source, Type& type)
+{
+	bool	ok = path_name(source);
+	if (ok)
+		sink.syntax_copy();
 	return ok;
 }
 

@@ -1,0 +1,14 @@
+// Deliberately carries no EXPECT marker, for the same reason as
+// 41_reference_reject.adl and its siblings: this is correctly rejected
+// (see the printed "Syntax-copy target not found" diagnostic below), but
+// like every other semantic check that isn't yet wired through to fail
+// the parse, that's print-only and doesn't currently affect the exit
+// code. Mark this test properly once errors are propagated through a
+// proper ErrNum (see cpp/ToDo).
+TOP {
+	// Faulty: no such object exists anywhere findable from here, so
+	// there's nothing whose Syntax could be copied.
+	Widget: {
+		Syntax = NoSuchType;
+	}
+}

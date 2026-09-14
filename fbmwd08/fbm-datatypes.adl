@@ -4,8 +4,16 @@ Data Types: {
 	Text: Data Type;
 	Money: Data Type;
 
+	// Syntax is a Regular Expression variable, so assigning it another
+	// object's bare name/path copies that object's own effective Syntax
+	// onto this one (README "Copying a Syntax") - reusing adl.adl's
+	// built-in Integer/String/Decimal patterns directly, rather than
+	// retyping them here. Four dots ascend precisely to TOP (Integer
+	// Value -> Data Types -> Fact Based Model -> TOP), to reach the
+	// built-in Integer rather than the "Integer: Data Type;" declared
+	// just above, which would otherwise shadow it from here.
 	Integer Value: Data Value {
-		Syntax = ....Integer;	// Need to navigate precisely to avoid our own Integer
+		Syntax = ....Integer;
 		Data Type = Integer;
 	}
 	String Value: Data Value {
@@ -17,12 +25,27 @@ Data Types: {
 		Data Type = Money;
 	}
 
+	// Minimum/Maximum are inherited Reference fields (Data Value Range's
+	// own "-> Data Value;"), so narrowing them to a specific Data Value
+	// subtype is an assignment ("=", refining the final restriction, as
+	// tests/40_reference_narrow.adl's Employer/AcmeInc does), not a
+	// reopen with a new supertype (":") - that would try to change the
+	// field's supertype from Reference to Integer Value/String Value,
+	// which ADL correctly forbids.
 	Integer Range: Data Value Range {
-		Minimum: Integer Value;
-		Maximum: Integer Value;
+		Minimum = Integer Value;
+		Maximum = Integer Value;
 	}
 	String Range: Data Value Range {
-		Minimum: String Value;
-		Maximum: String Value;
+		Minimum = String Value;
+		Maximum = String Value;
 	}
 }
+
+// Reopen and immediately close Fact Based Model itself (the object this
+// file started inside, per fbmwd08.adl's own "Fact Based Model: {...}"),
+// purely so it - not Data Types above - becomes this file's own last
+// finalised top-level object, and so the default starting scope for
+// whatever file is loaded next (e.g. oilsupply.adl's "Oil Supply : Fact
+// Based Model {"): a sibling of Data Types, not its child.
+Fact Based Model;

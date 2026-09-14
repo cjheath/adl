@@ -271,6 +271,21 @@ be described by a Regular Expression), so it is a special
 built-in.
 </p>
 <p>
+<strong>Copying a Syntax:</strong> instead of a Regular
+Expression literal, Syntax may be assigned the name or
+path of another Object, which copies that Object's own
+effective Syntax onto this one. This is useful when the
+new Object isn't itself a subtype of the one whose literal
+values it should accept (ordinary supertype-based Syntax
+inheritance doesn't apply), so its Syntax is copied
+explicitly instead.
+<pre>
+Age: Integer Value {
+    Syntax = Integer;	// Copies Integer's own Syntax
+}
+</pre>
+</p>
+<p>
 Reference is also a special Variable. Assignment to a
 Reference requires an ADL path name for an object, or
 an object literal. See below.

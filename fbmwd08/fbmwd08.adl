@@ -247,10 +247,16 @@ Fact Based Model: {
 		-> Join Path;
 	}
 	Equality Constraint: Set Comparison Constraint {
-		=> Set Comparison Argument;
+		// Named explicitly (unlike Subset Constraint's fields below,
+		// which already were): a bare "=> Set Comparison Argument;"
+		// would be eponymously named "Set Comparison Argument" too,
+		// colliding with the inherited nested type of that same name
+		// declared just above, which the current ADL engine correctly
+		// rejects as an attempted supertype change.
+		Arguments => Set Comparison Argument;
 	}
 	Exclusion Constraint: Set Comparison Constraint {
-		=> Set Comparison Argument;
+		Arguments => Set Comparison Argument;
 		-> Mandatory Constraint;
 	}
 	Subset Constraint: Set Comparison Constraint {

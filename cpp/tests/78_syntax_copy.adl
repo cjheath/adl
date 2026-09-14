@@ -1,0 +1,18 @@
+// EXPECT: PASS
+// README "Copying a Syntax": a Regular-Expression variable (like every
+// Object's built-in Syntax) may be assigned another object's bare
+// name/path instead of a regexp literal - the target's own effective
+// Syntax is copied onto this one. Data Type isn't itself a subtype of
+// Integer (so ordinary supertype-based Syntax inheritance doesn't apply
+// here), but Integer Value still wants to accept the same literal values
+// Integer itself does.
+TOP {
+	Data Type: {}
+	Integer: {
+		Syntax = /|0|?[-+][1-9]*\d/
+	}
+	Integer Value: Data Type {
+		Syntax = Integer;
+	}
+	Age: Integer Value = 42;
+}

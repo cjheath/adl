@@ -1,30 +1,40 @@
+// Text/Integer/Money/Integer Value/String Value/Integer Range below are
+// all qualified as Data Types.X: they're declared inside Data Types (a
+// sibling of Oil Supply under Fact Based Model, see fbm-datatypes.adl),
+// not directly on Fact Based Model itself, so plain ascent from inside
+// Oil Supply can't reach them.
 Oil Supply : Fact Based Model {
 	// Value Types:
-	Refinery Name: Value Type { Maps To = Text; }
-	Region Name: Value Type { Maps To = Text; }
-	Product Name: Value Type { Maps To = Text; }
-	Year Nr: Value Type { Maps To = Integer; }
+	Refinery Name: Value Type { Maps To = Data Types.Text; }
+	Region Name: Value Type { Maps To = Data Types.Text; }
+	Product Name: Value Type { Maps To = Data Types.Text; }
+	Year Nr: Value Type { Maps To = Data Types.Integer; }
 	Month Nr: Value Type {
-		Maps To = Integer;
+		Maps To = Data Types.Integer;
 		: Value Type Constraint {
 			Value Type = Month Nr;
-			Data Value Range = [:Integer Range { Minimum = 1; Maximum = 12; }];
+			// Minimum/Maximum are References to a Data Value (narrowed to
+			// Integer Value), not raw numbers - so each bound is its own
+			// Integer Value object literal carrying the number, the same
+			// idiom used just below for Season/Transport Mode's String
+			// Value literals.
+			Data Value Range = [:Data Types.Integer Range { Minimum = :Data Types.Integer Value = 1; Maximum = :Data Types.Integer Value = 12; }];
 		}
 	}
 	Season: Value Type {
-		Maps To = Text;
+		Maps To = Data Types.Text;
 		: Value Type Constraint {
 			Value Type = Season;
-			Data Value = [:String Value = 'Spring', :String Value = 'Summer', :String Value = 'Autumn', :String Value = 'Winter'];
+			Data Value = [:Data Types.String Value = 'Spring', :Data Types.String Value = 'Summer', :Data Types.String Value = 'Autumn', :Data Types.String Value = 'Winter'];
 		}
 	}
-	Cost: Value Type { Maps To = Money; }
-	Quantity: Value Type { Maps To = Integer; }
+	Cost: Value Type { Maps To = Data Types.Money; }
+	Quantity: Value Type { Maps To = Data Types.Integer; }
 	Transport Mode: Value Type {
-		Maps To = Text;
+		Maps To = Data Types.Text;
 		: Value Type Constraint {
 			Value Type = Transport Mode;
-			Data Value = [:String Value = 'Rail', :String Value = 'Road', :String Value = 'Sea'];
+			Data Value = [:Data Types.String Value = 'Rail', :Data Types.String Value = 'Road', :Data Types.String Value = 'Sea'];
 		}
 	}
 

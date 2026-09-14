@@ -71,7 +71,8 @@ public:
 	Handle		aspect();
 	bool		is_sterile();
 	bool		is_complete();
-	PegexpValue	syntax();	// Effective (inherited) Syntax, resolved internally via the owning Store
+	PegexpValue	syntax();	// Syntax a value assigned to *this* must conform to (super()'s effective Syntax)
+	PegexpValue	effective_syntax();	// This object's own effective (inherited) Syntax
 	bool		is_array();
 	bool		is_reference();	// Is this object's type chain rooted at the built-in Reference?
 	bool		is_alias();	// Is this object's immediate super() the built-in Alias?
@@ -175,7 +176,8 @@ private:
 		Object,
 		Pegexp,
 		Match,
-		ArrayValue	// Not "Array": would shadow the ::Array<> template used throughout this class
+		ArrayValue,	// Not "Array": would shadow the ::Array<> template used throughout this class
+		SyntaxCopy	// A path naming another object, for a Regular-Expression variable: copy its own effective Syntax
 	};
 
 	struct	PathName
@@ -642,6 +644,13 @@ public:
 		value() = pegexp;		// excludes the delimiting '/'s, per Store::pegexp_literal's contract
 	}
 
+	void	syntax_copy()				// The last pathname is a value to assign to a Regular-Expression variable
+	{
+		value_type() = ValueType::SyntaxCopy;
+		value() = current_path.display();		// Retained for debug display only
+		current_path.consume(frame().reference_path);	// The structured path, resolved later in build_value()
+	}
+
 	void	array_value_start()			// '[' seen; an array of values follows
 	{
 		frame().array_elements.clear();
@@ -660,9 +669,11 @@ public:
 	/*
 	 * Which kind of value the variable being assigned expects (README
 	 * "Reference Variables"/"Regular Expression": "If the Variable is a
-	 * Regular Expression the value is a regexp. If the Variable is a
-	 * Reference, the value is a path_name or object literal. Otherwise,
-	 * the value is defined by the Syntax of the variable"). Resolves
+	 * Regular Expression the value is a regexp, or a path naming another
+	 * object whose own effective Syntax is copied onto this one (README
+	 * "Copying a Syntax"). If the Variable is a Reference, the value is a
+	 * path_name or object literal. Otherwise, the value is defined by the
+	 * Syntax of the variable"). Resolves
 	 * frame().handle now (like lookup_syntax(), below, for the same
 	 * reason: a bare "X.Y = value" with no ':' or '{' otherwise wouldn't
 	 * resolve it until after the value is parsed, but we need the
@@ -743,6 +754,16 @@ public:
 		case ValueType::Match:		return store.matched_literal(value());
 		case ValueType::ArrayValue:	return store.array_literal(frame().array_elements);
 		case ValueType::Object:		return store.reference_literal(frame().literal_handle);
+		case ValueType::SyntaxCopy:
+		{
+			Handle	target = lookup_path(context, frame().reference_path);
+			if (target.is_null())
+			{
+				error(ADLERR_REFERENCE_NOT_FOUND, "Syntax-copy target not found", frame().reference_path.display().asUTF8());
+				return store.pegexp_literal("");
+			}
+			return store.pegexp_literal(target.effective_syntax());
+		}
 		default:			return store.string_literal(value());
 		}
 	}
