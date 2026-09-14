@@ -1,0 +1,27 @@
+// EXPECT: PASS
+// README "Contextual Extension": "Make changes that are only seen from
+// the point of view (the Context) of the place where the object was
+// re-opened. From other places, the object will still appear
+// unchanged." Widget is found only by ascending from German (not
+// German's own child), so reopening it with a block is contextual -
+// Size only exists on German's own extension of Widget, not on the
+// real, global Widget.
+Widget: {
+	Colour: String;
+}
+German: {
+	Widget {
+		Size: String;
+	}
+}
+
+// Confirmed by hand (ADL_DEBUG=1): the real TOP.Widget still has only
+// Colour as a direct child; Size lives on an anonymous extension
+// (aspect=German) parented *on* Widget itself, findable only by
+// ascending from within German's own context, not from TOP.
+
+// A plain reopen of the *same* Widget from TOP's own scope - not
+// ascended, so not contextual - adds a real, globally-visible field.
+Widget {
+	Weight: String;
+}

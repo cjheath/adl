@@ -1,0 +1,30 @@
+// EXPECT: PASS
+// README "Contextual Extension"/"Contextual Aliasing": a trailing-dot
+// value assignment reached through an *inherited* field must extend the
+// instance actually being navigated to, not the supertype that happens
+// to declare the field. Adapted from README's full "Contextual Aliasing"
+// worked example (Person/Surname/joe smith/New Context), with the Alias
+// part removed - creating the alias on Person's own contextual extension
+// isn't visible to joe smith's lookup at all yet (see cpp/ToDo, "Whether/
+// how a contextual extension should apply through an Alias"), a separate,
+// deeper, not-yet-fixed gap. This test isolates the other half: once
+// Surname is found (by its real name, via ordinary inheritance from
+// Person), does "New Context.joe smith.Surname. = 'Schmidt';" correctly
+// extend joe smith - not Person?
+//
+// A real bug was found and fixed here: current_context() used to compute
+// the extension target as the found field's own *declaring* object
+// (Person, via handle.parent()) rather than the object this statement is
+// actually working within (joe smith, via the new Frame::scope_parent) -
+// so this assignment used to silently widen to a *global* extension of
+// Person, visible in principle to every Person, not just joe smith.
+Person: {
+	Surname: String;
+}
+New Context: {
+	joe smith: Person {
+		Surname ~= 'Smith';
+	}
+}
+New Context.joe smith.Surname.
+	= 'Schmidt';

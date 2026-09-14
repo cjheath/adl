@@ -1,18 +1,40 @@
 // EXPECT: PASS
+// README "Contextual Extension": reopening something found only by
+// ascending beyond the current scope, or only through inheritance, is
+// always contextual (extends it, invisible outside the reopening
+// context); a plain local reopen ("{...}", no ascent/inheritance needed)
+// instead "make[s] the changes to the original object" - unless a
+// trailing dot forces it contextual anyway. This file's comments were
+// originally written before that rule was pinned down precisely (see
+// cpp/ToDo); updated here to match, once each case was actually checked
+// against the implementation.
 TOP {
 	a: {
 		b:
 	}
 
 	c: {
-		a.b.d:;		// From the aspect of c, a.b has a child called d. REVISIT: Should show context
+		a.b.d:;		// "a" is found by ascending from c, but this reaches
+				// start_object() with an explicit supertype - only
+				// a *plain* reopen (no supertype, just "{...}" or an
+				// assignment) is currently made contextual. Known
+				// gap: this still modifies the real a.b, visible
+				// from everywhere, not just from c - see cpp/ToDo.
 
-		.a {		// Cannot re-open, a not found. REVISIT: Should fail
-			e:;	// So cannot add e
+		.a {		// "a" is found by explicit single-dot ascent from c
+			e:;	// (c's own parent, TOP, has a child "a") - reached
+				// only by ascending, so this correctly contextually
+				// extends a, scoped to c: e is only visible via
+				// this extension, not on the real TOP.a.
 		}
 	}
 
 	.a.b {
-		f:;		// This is not contextual because no ascent is required
+		f:;		// This is NOT contextual: written directly at TOP's
+				// own level, ".a.b" is pure descent from TOP (the
+				// enclosing scope this statement is already in) -
+				// the leading dot's explicit ascent lands right
+				// back on TOP itself, no real movement. f is added
+				// directly to the real a.b, visible from everywhere.
 	}
 }

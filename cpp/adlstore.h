@@ -213,6 +213,7 @@ private:
 		, obj_array(false)
 		, value_type(None)
 		, is_literal_value(literal)
+		, saw_block(false)
 		{}
 
 		// path name and ascent for current object:
@@ -240,6 +241,45 @@ private:
 		 * use start_literal_object() instead of the usual name-search path.
 		 */
 		bool		is_literal_value;
+
+		/*
+		 * Set by block_start() before it calls start_object(): a block
+		 * ('{') is about to follow this definition's name. Together with
+		 * object_path().sep == "." (a trailing dot - see path_name(),
+		 * adlparser.h), this is what start_object() uses to tell a
+		 * reopen *attempt* (README "Eponymous Naming": "the object is
+		 * not being re-opened (by { or .)") from true eponymous naming,
+		 * for a bare name not already a local/inherited child.
+		 */
+		bool		saw_block;
+
+		/*
+		 * Set by start_object() (whether or not saw_block is true) when
+		 * this definition's own path resolves to something contextual
+		 * (README "Contextual Extension" - reached only by ascending
+		 * beyond the enclosing scope, or only through inheritance, or a
+		 * trailing dot forced it): the Aspect it's contextual to (null
+		 * if not contextual). current_context() consults this so that a
+		 * plain *value assignment* through a trailing dot is contextual
+		 * too, not just a reopen with a block - README "contextual
+		 * definitions (objects, variables, aliases, or assignments)".
+		 */
+		Handle		contextual_aspect;
+
+		/*
+		 * Set by start_object(), alongside `handle`: the enclosing object
+		 * this definition's final path component was actually looked up
+		 * in (the local `parent` in start_object(), at the point `child`
+		 * was resolved) - *not* necessarily `handle.parent()`. Those
+		 * differ exactly when `child` was found through inheritance
+		 * (e.g. "Surname" accessed via a subtype that doesn't declare it
+		 * itself): `handle.parent()` is the *declaring* supertype, but
+		 * `scope_parent` is the object this statement is actually working
+		 * within. current_context() must redirect a contextual value
+		 * assignment's owner to an extension of *this*, not of the
+		 * field's unrelated declaring supertype.
+		 */
+		Handle		scope_parent;
 
 		/*
 		 * Set by assignment_starts() on the Frame for the variable whose
@@ -516,6 +556,7 @@ public:
 	ErrNum	block_start()				// enter the block given by the pathname and supertype
 	{
 		// printf("Enter block\n");
+		frame().saw_block = true;	// Before start_object(): see the comment on Frame::saw_block
 		return start_object();
 	}
 
@@ -716,12 +757,56 @@ public:
 
 	// Methods below here are not a required part of the Sink:
 
-	// The object one level up the stack from the current definition - the
-	// context an assignment, Reference restriction, or array element
-	// value is resolved/recorded from (see README "Resolving Names").
+	/*
+	 * current_context is the context from which an assignment, Reference
+	 * restriction, or array element value is resolved/recorded from.
+	 * Usually "the object one level up the stack from the current
+	 * definition" - correct for a plain bareword field name, but a
+	 * multi-component dotted path ("Three.Ordinal = Dritte;", or any
+	 * explicit ascent) resolves its *whole* navigation within this *one*
+	 * Frame - there's no separate Frame for "Three" - so "one level up"
+	 * would wrongly give whatever lexically encloses this statement,
+	 * not Three.
+	 *
+	 * Most callers call start_object() first, but reference_type()
+	 * deliberately calls this *before* start_object() (it needs the
+	 * target type resolved before the field itself exists, for the
+	 * eponymous case) when frame().handle/scope_parent are still null.
+	 * Fall back to the stack-based answer rather than use an unset Handle.
+	 * A reference field's own name is never a multi-component path anyway.
+	 *
+	 * Use scope_parent (the object this path was actually navigated
+	 * within), not handle.parent() (the *found* object's own declaring
+	 * parent): those differ when the final component was reached through
+	 * inheritance (e.g. "New Context.joe smith.Surname." - Surname is
+	 * declared on Person, but this statement is working within joe
+	 * smith, and that's what a contextual override must extend).
+	 */
 	Handle	current_context()
 	{
-		return stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object;
+		PathName&	path = frame().object_path;
+		Handle		raw = (path.names.length() > 1 || path.ascent > 0) && !frame().scope_parent.is_null()
+					? frame().scope_parent
+					: (stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object);
+
+		/*
+		 * start_object() already worked out whether *this* definition's own
+		 * path is contextual (ascended, * inherited, or trailing-dot-forced)
+		 * and left the answer in contextual_aspect. If `raw` is already an
+		 * extension (its own aspect() is set - e.g. this Frame is
+		 * nested *within* an already-contextually-reopened block, like
+		 * "Insert." inside a contextually-reopened "OperationNames
+		 * {...}"), it's already the right, aspect-specific owner -
+		 * redirecting *again* would create a meaningless extension of
+		 * an extension. Otherwise, if this path is itself contextual
+		 * (a flat dotted assignment like "Three.Ordinal. = Dritte;",
+		 * where `raw` is still the real, global Three), redirect to
+		 * German's own extension of it - the same overlay mechanism
+		 * used for a block reopen, just for a single assignment.
+		 */
+		if (!raw.is_null() && raw.aspect().is_null() && !frame().contextual_aspect.is_null())
+			return contextual_extension_of(raw, frame().contextual_aspect);
+		return raw;
 	}
 
 	/*
@@ -833,6 +918,37 @@ public:
 		return 0;
 	}
 
+	/*
+	 * README "Contextual Extension": find (or create) `target`'s own
+	 * contextual extension for `aspect` - the object that "changes...
+	 * only seen from the point of view (the Context) of the place where
+	 * the object was re-opened. From other places, the object will
+	 * still appear unchanged." Parented *on* target (like an Assignment
+	 * or anonymous object-literal value - anonymous, not reachable by
+	 * ordinary name lookup), with target as its own supertype too, so
+	 * anything not locally overridden here still resolves via the
+	 * normal supertype-chain walk (lookup_child()) straight through to
+	 * target itself.
+	 *
+	 * Naive linear scan for now - fine for the small number of aspects
+	 * any one object is likely to be extended under, but see cpp/ToDo's
+	 * Design note: a real per-Aspect index belongs here once an actual
+	 * application-facing query API (context folding / dynamic aspect
+	 * toggling) is designed, so it can share the same underlying index.
+	 */
+	Handle	contextual_extension_of(Handle target, Handle aspect)
+	{
+		Handle	existing;
+		target.each_child([&](Handle c)
+		{
+			if (existing.is_null() && !c.aspect().is_null() && c.aspect() == aspect)
+				existing = c;
+		});
+		if (!existing.is_null())
+			return existing;
+		return store.object(target, "", target, aspect);
+	}
+
 	ErrNum	start_object()
 	{
 		if (object_started())
@@ -926,6 +1042,19 @@ public:
 		Handle	context = parent;		// We might descend further
 
 		/*
+		 * Did we actually have to leave `context` (the enclosing scope
+		 * this whole definition starts from) to find the object we end
+		 * up reopening? *Not* the same question as "did `parent` change
+		 * during descent" - it always does, for a multi-component path,
+		 * even with no ascent at all (e.g. ".a.b {...}" written directly
+		 * at TOP level: the leading dot's explicit ascent lands right
+		 * back on TOP, since that's already the enclosing scope - no
+		 * real movement). Used below to decide contextuality (README
+		 * "Contextual Extension").
+		 */
+		bool	truly_ascended = false;
+
+		/*
 		 * Handle explicit ascent (up the lexical scopes) to find a parent if requested
 		 */
 		if (new_path.ascent > 0)		// 1 means use the current parent scope (2nd top on stack)
@@ -935,6 +1064,7 @@ public:
 			if (depth < 0)
 				depth = 0;
 			parent = stack[depth].handle;
+			truly_ascended = parent != context;
 			ADL_TRACE("Ascended to %s\n", stack[depth].display().asUTF8());
 		}
 
@@ -960,6 +1090,7 @@ public:
 					if (!may_ascend)
 						return error(ADLERR_PARENT_NOT_FOUND, "Parent object name not found", child_name.asUTF8());
 					parent = parent.parent();
+					truly_ascended = true;
 					may_ascend = false;
 					descent--;
 					continue;
@@ -1007,45 +1138,88 @@ public:
 			if (!child.is_null() && child.super() != supertype)
 				return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", object_pathname().asUTF8());
 		}
-#if	defined(CAN_USE_CONTEXTUAL_REOPEN)
-		/*
-		 * Placeholder for contextual re-opening (README "Contextual
-		 * Extension") - not implemented yet.
-		 */
-		else if (!child.is_null() && parent != context)
-		{
-			ADL_TRACE("Found child %s of parent %s from context %s with no supertype\n",
-				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
-				parent.is_null() ? "<none>" : parent.pathname().asUTF8(),
-				context.is_null() ? "<none>" : parent.pathname().asUTF8()
-			);
-			ADL_TRACE("REVISIT: Unsure how to proceed, so ignoring it\n");
-			return 0;
-		}
-#endif
-		else if (child.is_null() && may_ascend)
+		else
 		{
 			/*
-			 * Eponymous naming (README "Eponymous Naming").
-			 *
-			 * A bare name (no ':') that's not already a child of this object
-			 * (which would be re-opening) but *is* the name of some existing
-			 * type - found the same way as a supertype name - creates a new
-			 * child of that type, named the same as the type itself (it's eponymous)
-			 * E.g. inside "Event: { Date }", "Date" becomes a new Event child
-			 * named "Date" with supertype Date, as if we wrote "Date: Date;"
+			 * No explicit supertype given, so this isn't a fresh
+			 * creation - one of:
+			 *   (a) `child` was already found above by the plain,
+			 *       non-ascending lookup for the last path component;
+			 *   (b) an unambiguous reopen *attempt* not yet resolved -
+			 *       a trailing dot, or a block about to follow (README
+			 *       "Eponymous Naming": eponymous naming only applies
+			 *       when the object "is not being re-opened (by { or
+			 *       .)") - findable only by ascending, the same way a
+			 *       supertype name is;
+			 *   (c) neither of those: eponymous naming (a bare name, no
+			 *       block, no trailing dot), or a genuine failure.
 			 */
-			PathName	eponymous_path;
-			eponymous_path.names.push(child_name);
-			supertype = lookup_path(context, eponymous_path);
-			if (supertype.is_null())
+			bool	is_reopen_attempt = object_path().sep == "." || frame().saw_block;
+
+			if (child.is_null() && is_reopen_attempt)
+			{
+				PathName	target_path;
+				target_path.names.push(child_name);
+				child = lookup_path(context, target_path);
+				if (child.is_null())
+					return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
+				truly_ascended = true;	// Only reached because a plain, local
+							// lookup already failed - lookup_path()
+							// must have ascended to find it at all
+			}
+
+			if (!child.is_null())
+			{
+				/*
+				 * Reopening something is always contextual when it's
+				 * not really "yours", but is reached only by ascending
+				 * beyond `context` (`truly_ascended`), or reached only
+				 * through inheritance. If it could be local, a trailing
+				 * dot forces it to be contextual anyway
+				 *
+				 * It's recorded on the Frame either way (contextual_aspect),
+				 * for current_context() below to redirect a plain *value
+				 * assignment* to this same Aspect's own extension too. A
+				 * trailing dot on an assignment ("Three.Ordinal. = Dritte;")
+				 * is contextual the same way a reopen is.
+				 */
+				bool	ascended = truly_ascended;
+				bool	inherited = child.parent() != parent;
+				bool	forced = object_path().sep == ".";
+				frame().contextual_aspect = (ascended || forced) ? context : Handle();
+				if (frame().saw_block && (ascended || inherited || forced))
+				{
+					ADL_TRACE("Contextually extending %s from %s (ascended %d, inherited %d, forced %d)\n",
+						child.pathname().asUTF8(), context.pathname().asUTF8(), ascended, inherited, forced);
+					child = contextual_extension_of(child, context);
+				}
+			}
+			else if (may_ascend)
+			{
+				/*
+				 * Eponymous naming.
+				 *
+				 * A bare name (no ':', no block, no trailing dot) not
+				 * already a child of this object (which would be
+				 * re-opening) but *is* the name of some existing
+				 * type - found the same way as a supertype name -
+				 * creates a new child of that type, named the same as
+				 * the type itself (it's eponymous). E.g. inside
+				 * "Event: { Date }", "Date" becomes a new Event child
+				 * named "Date" with supertype Date, as if we wrote
+				 * "Date: Date;"
+				 */
+				PathName	eponymous_path;
+				eponymous_path.names.push(child_name);
+				supertype = lookup_path(context, eponymous_path);
+				if (supertype.is_null())
+					return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
+			}
+			else
+			{
+				// No supertype, no matching child, this is a failure.
 				return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
-		}
-		else if (child.is_null())
-		{
-			// No supertype, no matching child, this is a failure.
-			// object_started() = true;
-			return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
+			}
 		}
 
 		// At this point, we have set context, parent, and perhaps child and supertype
@@ -1068,6 +1242,7 @@ public:
 			return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", super_path.display().asUTF8());
 
 		frame().handle = child;
+		frame().scope_parent = parent;
 		if (frame().handle.is_null())
 		{
 			ErrNum	sterile_err = check_sterile_supertype(supertype);
@@ -1080,8 +1255,13 @@ public:
 			frame().handle = store.object(
 					parent,
 					last_name,
-					supertype,
-					context		// REVISIT: check that Aspect is correct
+					supertype
+					// No Aspect: an ordinary object's Aspect defaults to
+					// its Parent (README "Contextual Extension": "All
+					// objects actually have a Context [Aspect], which
+					// for most, it's the same as the Parent") - only a
+					// genuine contextual extension gets a real, distinct
+					// one, via contextual_extension_of() above.
 				);
 		}
 

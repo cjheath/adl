@@ -831,43 +831,46 @@ German:
 </pre>
 
 <tr>
-<th align="right" valign="top">Contextual Aliasing</th>
+<th align="right" valign="top">Contextual Instance Extension</th>
 <td valign="top">
-This is an extended example for contextual extension,
-showing how it works with aliasing.
+<p>
+This is a further example of contextual extension: overriding
+an inherited variable on one particular instance, from outside
+the context where the instance itself was defined.
+</p>
+<p>
+Aliasing and Contextual Extension each work on their own.
+Combining them - contextually aliasing an inherited variable,
+or contextually extending an object through an alias - doesn't
+work yet. Attempting it fails with a clear error rather than
+doing anything silently confusing.
+</p>
 </td>
 <td valign="top">
 <p>
-In New Context, Person.Surname is called Family Name,
-but this alias is contextual, it doesn't affect the
-widespread view of Surname. We can use Family Name
-to define a Person's Surname, and outside this
-context, that will be seen as a Surname.
-Note that joe smith's Given Name is assigned Final.
+Person has a Surname. In New Context, joe smith is a Person
+whose Surname is tentatively 'Smith', and whose Given Name is
+finally assigned 'Joseph'.
 </p>
 
 <p>
-Back in the top context for these declarations,
-New Context is re-opened and the Family Name 'Smith'
-(seen in the global context as Surname) is contextually
-re-assigned. Note that from the point of view of
-New Context, joe smith is still has a Family name of
-Smith (this assignment applies) but from the
-global context looking in, his Surname is Schmidt.
-The Given Name cannot be re-assigned (even contextually),
-since it had a final assignment already.
+Back in the top context for these declarations, New Context
+is re-opened and joe smith's Surname is contextually
+re-assigned. From the point of view of New Context, joe
+smith's Surname is still 'Smith' (this assignment applies only
+there); from the top context looking in, it's 'Schmidt'. Given
+Name cannot be re-assigned (even contextually), since it had a
+final assignment already.
 </p>
 <pre>
-Person {
+Person: {
     Surname: String;
+    Given Name: String;
 }
 New Context: {
-    Person. {
-	Family Name! Surname;
-    }
     joe smith: Person {
-	Family Name ~= "Smith";
-	Given Name = ["Joseph"];
+	Surname ~= 'Smith';
+	Given Name = 'Joseph';
     }
 }
 New Context.joe smith.Surname.

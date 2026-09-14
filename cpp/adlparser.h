@@ -262,10 +262,16 @@ template<typename Source> bool ADLParser<Source>::path_name(Source& source)
 			probe.advance();
 			sink.descend();
 			space(probe);
+			source = probe;		// The dot is consumed either way - even a
+						// trailing dot (README "Contextual Extension":
+						// a traversal *ending* with a dot) is real syntax,
+						// not leftover input for body() to trip over
 			if (!name(probe))
 			{
 				sink.pathname(true);
-				return true;	// Succeed without advancing on previous results
+				return true;	// Trailing dot: sink.descend() already fired
+						// with no name() to follow it - current_path.sep
+						// is left as "." for the Sink to notice
 			}
 			space(probe);
 			source = probe;		// Descent succeeded, try for more

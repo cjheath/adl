@@ -1,0 +1,40 @@
+// EXPECT: PASS
+// README "Contextual Extension": "contextual definitions (objects,
+// variables, aliases, or assignments) have a Context value" - a plain
+// *value assignment* through a trailing dot is contextual too, not just
+// a reopen with a block. This is README's own "3.Ordinal" worked
+// example, adapted (the built-in Number/Integer types only exist in
+// adl.adl, not this engine's own bootstrap; see cpp/ToDo).
+Three:;
+Three {
+	Ordinal: String;
+	Ordinal ~= 'third';
+}
+German: {
+	Three.Ordinal. = 'dritte';
+}
+// Confirmed by hand (ADL_DEBUG=1): the real TOP.Three.Ordinal keeps its
+// original, tentative 'third' - unchanged, visible from everywhere
+// except German. A search for the *current* value of Ordinal must be
+// context-aware: it's 'dritte' from within German's own context
+// (recorded on German's own extension of Three, found via the normal
+// supertype-chain fallback the same way an overridden field's value
+// would be), 'third' everywhere else.
+
+// README's second worked example: OperationNames's own fields, given
+// different names in the German context - both on the *same* reopen of
+// OperationNames (which is itself contextual, since it's found only by
+// ascending from German), each needing its own trailing dot to become
+// contextual too, since Insert/Delete are otherwise local to the
+// already-contextual OperationNames reopen (see cpp/ToDo - only a
+// reopen that isn't already itself an extension gets redirected).
+OperationNames: {
+	Insert: String ~= 'Insert';
+	Delete: String ~= 'Delete';
+}
+German {
+	OperationNames {
+		Insert. ~= 'Einfügen';
+		Delete. ~= 'Löschen';
+	}
+}

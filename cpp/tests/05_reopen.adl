@@ -18,17 +18,30 @@ TOP {
 			j: e;		// Ascend 1. Actual: fails - no 'e' is defined anywhere to find.
 		}
 
-		b.c {
-			k:;
-		}
+		b.c {			// Not contextual: "b" is a's own direct child, and
+			k:;		// this is written directly within a's own block -
+		}			// a true local reopen of a's own content.
 
 		l: {			// New scope for extension
 			m:;		// Something local
-			b.c {		// Contextually extend c
-				n: m;	// Anticipated: supertype found from lexical stack, not from c.
-					// Actual: fails - "Supertype name not found looking for m".
-				o: k;	// Anticipated: Faulty lookup, k should not be sought in b.c.
-					// Actual: succeeds - k is found in b.c.
+			b.c {		// Contextually extend c: "b" is found only by ascending
+					// from l (not l's own child), so this reopen extends
+					// c, scoped to l, rather than modifying the real a.b.c.
+				n: m;	// Anticipated: supertype found from lexical stack,
+					// not from c. Actual: still fails ("Supertype
+					// name not found looking for m") - a separate,
+					// deeper gap even now that the reopen above is
+					// correctly contextual: name resolution *within*
+					// the extension still only walks the *extended
+					// object's own* ancestry (c -> b -> a -> TOP),
+					// not l's own lexical scope where "m" actually
+					// lives - see cpp/ToDo.
+				o: k;	// k *is* correctly found (as c's own child,
+					// via the extension's fallback to c) - this
+					// isn't a bug: being contextually reopened
+					// doesn't hide c's own real content from
+					// within its own reopened block, it only
+					// affects what's visible from *outside* it.
 			}
 		}
 	}
