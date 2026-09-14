@@ -1,0 +1,24 @@
+// EXPECT: PASS
+// README "Eponymous Naming": "if just a name (no colon) is used, and the
+// name is of a[n] Object that's not already a child of this object, and
+// the Object is not being re-opened (by { or .), then a new child is
+// created having the same name as the supertype." This is the spec's
+// own example (Event/Date), adapted to use a locally-declared Date
+// Syntax (the built-in Number/Date types only exist in adl.adl, not
+// this engine's own bootstrap; see cpp/ToDo).
+//
+// "Date" inside "Event: { Date }" is not already a child of Event, but
+// is found by ascending to TOP (the same way a supertype name would be
+// resolved) - so a new Event child named "Date", with supertype Date,
+// gets created: exactly as if "Date: Date;" had been written directly.
+// Confirmed by hand (ADL_DEBUG=1) that the resulting tree shows
+// `Event : Object { Date : Date; }`.
+TOP {
+	Date: {
+		Syntax = /\d\d\d\d-\d\d-\d\d/
+	}
+	Event: {
+		Date
+	}
+	: Event { Date = 2001-03-19 }
+}

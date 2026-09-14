@@ -1,0 +1,17 @@
+// Deliberately carries no EXPECT marker, for the same reason as
+// 41_reference_reject.adl/72_alias_hide_reject.adl/
+// 74_finality_nonref_reject.adl: this is correctly rejected (see the
+// printed "Cannot find object to reopen" diagnostic below - "NoSuchType"
+// is neither a local/inherited child of Event nor findable as a type by
+// ascending to enclosing scopes, so eponymous naming has nothing to
+// create a child from), but like every other semantic check that isn't
+// yet wired through to fail the parse, that's print-only and doesn't
+// currently affect the exit code. Mark this test properly once errors
+// are propagated through a proper ErrNum (see cpp/ToDo).
+TOP {
+	Event: {
+		// Faulty: no such type exists anywhere findable from here, so
+		// this can be neither a re-open nor an eponymous declaration.
+		NoSuchType
+	}
+}

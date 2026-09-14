@@ -943,16 +943,15 @@ public:
 			if (!child.is_null() && child.super() != supertype)
 				return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", object_pathname().asUTF8());
 		}
-#if	defined(CAN_USE_EPONYMOUS_NAME_FROM_PARENTS)
+#if	defined(CAN_USE_CONTEXTUAL_REOPEN)
 		/*
-		 * These two cases are placeholders for eponymous naming and
-		 * contextual re-opening, neither of which is implemented yet -
-		 * see cpp/ToDo. Gating the whole `else if` (not just its body)
-		 * behind the feature macro matters: with an empty body but a
-		 * true condition, an `else if` still counts as "handled" and
-		 * skips the real `else if (child.is_null())` error case below,
-		 * which is what actually happened (silently creating a bogus
-		 * null-supertype object) until this was found and fixed.
+		 * Placeholder for contextual re-opening (README "Contextual
+		 * Extension") - not implemented yet, see cpp/ToDo (a)(2)/(3).
+		 * Gating the whole `else if` (not just its body) matters: with
+		 * an empty body but a true condition, an `else if` still counts
+		 * as "handled" and skips the real `else if (child.is_null())`
+		 * error case below - see (b)(22) for the bug that caused
+		 * (found when this and eponymous naming shared one macro).
 		 */
 		else if (!child.is_null() && parent != context)
 		{
@@ -964,21 +963,29 @@ public:
 			ADL_TRACE("REVISIT: Unsure how to proceed, so ignoring it\n");
 			return 0;
 		}
-		else if (child.is_null() && may_ascend)	// See if the name appears in a parent context
-		{
-			// Otherwise it was found elsewhere. Use eponymous naming
-			ADL_TRACE("No child %s of parent %s from context %s with no supertype\n",
-				child_name.isEmpty() ? "<anonymous>" : child_name.asUTF8(),
-				parent.is_null() ? "<none>" : parent.pathname().asUTF8(),
-				context.is_null() ? "<none>" : parent.pathname().asUTF8()
-			);
-			ADL_TRACE("Could be eponymous, or a contextual re-opening of a parent's child\n");
-			ADL_TRACE("REVISIT: Unsure how to proceed, so ignoring it\n");
-			return 0;
-
-			// supertype = frame().handle;
-		}
 #endif
+		else if (child.is_null() && may_ascend)
+		{
+			/*
+			 * Eponymous naming (README "Eponymous Naming"): a bare
+			 * name (no ':', no block - the shape that got us into
+			 * this branch at all) that's not already a child of this
+			 * object (child.is_null(), just confirmed) but *is* the
+			 * name of some existing type - found the same way a
+			 * supertype name is (search here, then ascend to
+			 * enclosing scopes; lookup_path()'s own ascend-on-first-
+			 * failure logic does this without any special-casing) -
+			 * creates a new child of that type, named the same as the
+			 * type itself. E.g. inside "Event: { Date }", "Date"
+			 * becomes a new Event child named "Date" with supertype
+			 * Date, exactly as if "Date: Date;" had been written.
+			 */
+			PathName	eponymous_path;
+			eponymous_path.names.push(child_name);
+			supertype = lookup_path(context, eponymous_path);
+			if (supertype.is_null())
+				return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
+		}
 		else if (child.is_null())
 		{
 			// No supertype, no matching child, this is a failure.
