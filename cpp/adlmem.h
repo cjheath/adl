@@ -823,7 +823,7 @@ Handle::finish_builtin_assign(BuiltinObjectVariable kind, Value value, bool is_f
 				return error(
 					ADLERR_FINAL_VIOLATION,
 					"Assignment violates a final restriction",
-					pathname() + "." + label + " was already finalised by " + t.pathname()
+					pathname() + "." + label + " was already " + (is_sterile_kind ? "sterilised" : "finalised") + " by " + t.pathname()
 				);
 		}
 		bool	attempted = value_is_true(*this, value);
