@@ -61,6 +61,12 @@ int main(int argc, const char** argv)
 	ADLMemStoreSink	sink(store);		// Use the adapter
 	bool		show_all = false;
 
+	/*
+	 * Usually each ADL file starts with root_object set to the last object finalised in the previous file.
+	 * -T says to start the next file again at TOP, not the previous file's last object.
+	 */
+	bool		fresh_top = false;
+
 	const char*	program_name = argv[0];
 	bool		ok = true;
 	for (--argc, ++argv; ok && argc > 0; argc--, argv++)
@@ -71,7 +77,12 @@ int main(int argc, const char** argv)
 			show_all = true;
 			continue;
 		}
-		sink.root_object = sink.last_object();
+		if (0 == strcmp(filename, "-T"))
+		{
+			fresh_top = true;
+			continue;
+		}
+		sink.root_object = fresh_top ? store.top() : sink.last_object();
 		ok = load_file(sink, filename);
 	}
 

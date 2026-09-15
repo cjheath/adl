@@ -1184,7 +1184,14 @@ public:
 				 * is contextual the same way a reopen is.
 				 */
 				bool	ascended = truly_ascended;
-				bool	inherited = child.parent() != parent;
+				/*
+				 * child == parent happens only via the is_outermost
+				 * same-name continuation special case above. There,
+				 * "child" is not a descendant of "parent" at all, it
+				 * *is* parent. Don't start a contextual extension
+				 * of the continued object if we reopened it by name.
+				 */
+				bool	inherited = child != parent && child.parent() != parent;
 				bool	forced = object_path().sep == ".";
 				frame().contextual_aspect = (ascended || forced) ? context : Handle();
 				if (frame().saw_block && (ascended || inherited || forced))
