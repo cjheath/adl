@@ -1,0 +1,12 @@
+// EXPECT: PASS
+// Integer's Syntax now accepts a hex form (0x.../0X...) alongside the
+// existing decimal forms - added for the lvgl/ project's Style Part
+// enum (bit-flag-ish cons.
+// The hex branch must be listed before the bare "0" branch.
+Hex Integer Probe: {
+	Lower Case: Integer ~= 0x030000;
+	Upper Case: Integer ~= 0X1A;
+	Plain Decimal Still Works: Integer ~= 196608;
+	Negative Still Works: Integer ~= -5;
+	Bare Zero Still Works: Integer ~= 0;
+}

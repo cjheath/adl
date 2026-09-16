@@ -1,0 +1,22 @@
+// EXPECT: PASS
+// A Syntax mismatch inside a reopened block used to cascade into "can't
+// find closing }" failures for every enclosing block (confirmed against
+// real LVGL-generated output, see ../ToDo's Bugs section item 8) - the
+// bad assignment below would previously have taken the whole Wrapper
+// block down with it, silently losing B's real value too. Now it reports
+// one real error and recovers, so B's own assignment still lands
+// correctly right after it - checked by hand with ADL_DEBUG=1, not by
+// this test's exit code alone (run_tests.sh only checks exit code, and
+// this recovery deliberately still exits 0, matching the exit code of
+// every other semantic check in this codebase per the Standing Note at
+// the top of ../ToDo).
+TOP {
+	Number:;
+	Digits: Number {
+		Syntax = /[1-9]*\d/
+	}
+	Wrapper: Object {
+		A: Digits = 'nope';	// Faulty: a quoted string doesn't match Digits' Syntax
+		B: Digits = 42;		// Must still parse correctly after the bad one
+	}
+}

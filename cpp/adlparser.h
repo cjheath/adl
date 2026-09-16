@@ -165,6 +165,7 @@ protected:
 	bool	syntax_copy(Source&, Type&);	// pathname, for a Regular-Expression variable: copy another object's Syntax
 	bool	object_literal(Source&);	// supertype ?block ?assignment
 	bool	matched_literal(Source&, Type&);
+	void	recover_to_boundary(Source&);	// Skip to next ';'/'}' after a bad value, honoring quoting/escaping
 	bool	space(Source&);			// Optional white-space
 	// White-space is free above here, explicit below
 	bool	symbol(Source&);		// [_\a] *[_\w]
@@ -667,7 +668,26 @@ template<typename Source> bool ADLParser<Source>::matched_literal(Source& source
 
 		auto	match = pegexp.match_here(psource, &context);
 		if (match.is_failure())
-			return false;		// The Syntax is known, so don't fall back to the built-in hack
+		{
+			/*
+			 * The Syntax is known and the value doesn't match it at all. This
+			 * used to be silently treated as an empty value (assignment_starts()
+			 * already created the Assignment slot via begin_assign() before
+			 * the value was even attempted, and there was no recovery, so a
+			 * bare `return false` here either left that slot empty with no
+			 * error - see cpp/ToDo's Bugs section item 8 - or, if reached
+			 * from inside a reopened block, corrupted that block's own
+			 * closing-brace search and cascaded outward through every
+			 * enclosing block). Report a real error, then recover by
+			 * skipping to the next statement/block boundary so a single bad
+			 * value doesn't take the rest of the file down with it.
+			 */
+			error("Value doesn't match its declared Syntax", "a valid literal", source);
+			Source	start(source);
+			recover_to_boundary(source);
+			sink.matched_literal(start, start);	// Record an empty value, having reported why
+			return true;				// Recovered - let the caller finish this assignment normally
+		}
 
 		off_t	consumed = match.to.source.bytes_from(match.from.source);
 		Source	start(source);
@@ -691,6 +711,26 @@ template<typename Source> bool ADLParser<Source>::matched_literal(Source& source
 		return numeric_literal(source);
 
 	return false;
+}
+
+// Skip to the next ';' or '}' (or EOF) after a bad value, honoring backslash-escaping and quote-nesting
+// so a stray ';'/'}' inside the bad value's own text doesn't end the skip prematurely.
+template<typename Source> void ADLParser<Source>::recover_to_boundary(Source& source)
+{
+	bool	in_quote = false;
+	UCS4	ch;
+	while ((ch = source.peek_char()) != UCS4_NONE
+	       && (in_quote || (ch != ';' && ch != '}')))
+	{
+		source.advance();
+		if (ch == '\\')
+		{
+			if (source.peek_char() != UCS4_NONE)
+				source.advance();
+		}
+		else if (ch == '\'')
+			in_quote = !in_quote;
+	}
 }
 
 // Value matches the Type syntax for a string

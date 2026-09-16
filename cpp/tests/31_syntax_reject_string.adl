@@ -1,4 +1,13 @@
-// EXPECT: FAIL
+// EXPECT: PASS
+// A Syntax mismatch now reports a real error ("Value doesn't match its
+// declared Syntax") and recovers (skips to the next ;/} and records an
+// empty value) rather than cascading into a "can't find closing }" parse
+// failure - matching the exit code of every other semantic check in this
+// codebase (see the Standing Note at the top of ../ToDo: reported via
+// error(), but nothing yet reads the returned ADLERR_* code, so exit
+// code alone can't distinguish this from success). EXPECT: PASS here
+// checks recovery works (adlmem doesn't crash or hang); the real error
+// text is confirmed separately, not by this test's exit code.
 TOP {
 	Number:;
 	Digits: Number {

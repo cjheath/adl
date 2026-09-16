@@ -7,7 +7,7 @@ TOP {
 	True: Boolean;
 
 	String: {
-		Syntax ~= /'*(|\\[befntr']|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])'/
+		Syntax ~= /'*(|\\[befntr'\\]|\\[0-7][0-7][0-7]|\\0|\\x[0-9A-F][0-9A-F]|\\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\\'])'/
 	}
 	Object {
 		Parent -> Object;		// The container of this object
@@ -38,7 +38,7 @@ TOP {
 		Maximum: .
 	}
 	Integer: Number {
-		Syntax ~= /|0|?[-+][1-9]*\d/;
+		Syntax ~= /|0[xX]+[0-9A-Fa-f]|0|?[-+][1-9]*\d/;
 	}
 	Decimal: Number {
 		Syntax ~= /?[-+](|0|[1-9]*\d)?(\.*\d)/;

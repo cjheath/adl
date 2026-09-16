@@ -1,4 +1,7 @@
-// EXPECT: FAIL
+// EXPECT: PASS
+// A Syntax mismatch now reports a real error and recovers instead of
+// cascading into a "can't find closing }" parse failure - see
+// 31_syntax_reject_string.adl's own header comment for the full reasoning.
 TOP {
 	Number:;
 	Digits: Number {
