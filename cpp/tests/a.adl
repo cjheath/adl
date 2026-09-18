@@ -1,4 +1,8 @@
-// This is only a scanner test. It will not compile to a Store.
+// EXPECT: FAIL
+// Hostile input for the grammar rather than a language-behaviour test: a
+// compound name with a leading ascent, a trailing-dot supertype, "=>", "~=",
+// and stray names and operators, deliberately not valid ADL. Nothing here
+// compiles to a Store. Ensure that the parser fails this one.
 TOP {
 
 	..a	// First name of a compound name

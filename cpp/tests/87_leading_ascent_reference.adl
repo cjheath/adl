@@ -1,14 +1,5 @@
-// Deliberately carries no EXPECT marker: this is a crash regression test,
-// not a language-behaviour test. Minimized by afl-tmin from an AFL++
-// campaign against the Contextual Extension work (see cpp/ToDo): a bare,
-// nameless Reference Shorthand field ("-> X") with an explicit leading
-// ascent segfaulted, because ADLStoreSink::reference_type() (adlstore.h)
-// deliberately calls current_context() *before* start_object() has
-// resolved frame().handle (needed to look up the reference's target type
-// before the field itself exists) - current_context()'s own new
-// multi-component/explicit-ascent path dereferenced that still-null
-// Handle. Fixed by falling back to the old, stack-based answer whenever
-// frame().handle isn't resolved yet, rather than assuming it always is.
-// Correctly fails to resolve ("Top object must be called TOP", since
-// this isn't wrapped in "TOP {...}") but must not crash.
+// EXPECT: FAIL
+// A bare, nameless Reference Shorthand field with an explicit leading ascent:
+// ".->b". It is not wrapped in "TOP {...}", so it correctly fails to resolve
+// with "Top object must be called TOP".
 .->b

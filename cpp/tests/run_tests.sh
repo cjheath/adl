@@ -5,6 +5,11 @@
 # comment anywhere in the file (ADL's own // comment syntax). A file with
 # neither marker is skipped, not counted as a pass or a failure.
 #
+# A run that dies from a signal is a failure whatever the marker says. The
+# shell reports 128+signal for that, so a test whose expectation is FAIL
+# (a crash regression test, say) cannot be satisfied by crashing - which is
+# the one thing its exit code alone could not distinguish.
+#
 # A tests/<name>/ subdirectory of *.adl files is instead loaded together,
 # in filename order, as one multi-file test - see the second loop below.
 #
@@ -35,6 +40,12 @@ for adl in tests/*.adl; do
 
 	output=$(./adlmem -a "$adl" 2>&1)
 	rc=$?
+	if [ "$rc" -ge 128 ]; then
+		printf 'CRASH %s (killed by signal %d)\n' "$adl" $((rc - 128))
+		printf '%s\n' "$output" | tail -8 | sed 's/^/      /'
+		fail=$((fail + 1))
+		continue
+	fi
 	actual=$([ "$rc" -eq 0 ] && echo pass || echo fail)
 
 	if [ "$actual" = "$expect" ]; then
@@ -81,6 +92,12 @@ for dir in tests/*/; do
 
 	output=$(./adlmem "${args[@]}" 2>&1)
 	rc=$?
+	if [ "$rc" -ge 128 ]; then
+		printf 'CRASH %s (killed by signal %d)\n' "$dir" $((rc - 128))
+		printf '%s\n' "$output" | tail -8 | sed 's/^/      /'
+		fail=$((fail + 1))
+		continue
+	fi
 	actual=$([ "$rc" -eq 0 ] && echo pass || echo fail)
 
 	if [ "$actual" = "$expect" ]; then
