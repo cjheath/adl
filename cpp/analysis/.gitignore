@@ -3,3 +3,4 @@
 # form. out/tables.txt is the printable result and is worth keeping.
 build/
 out/raw.json
+__pycache__
