@@ -81,9 +81,7 @@ public:
 	bool		hides(StrVal name);	// Does one of this object's own aliases hide the inherited `name`?
 
 	Handle		lookup(StrVal name);		// Search down one level
-	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
-	void		each_child(std::function<void (Handle child)> operation) const;	// Every child, named or anonymous
-	void		each_assignment(std::function<void (Handle assignment)> operation) const;	// Only this object's own local Assignments
+	Array<Handle>&	children();			// Every child, named or anonymous; caller filters
 	// Shortcut methods:
 	ErrNum		assign(Handle variable, Value value, bool is_final);	// Create/refine an Assignment;
 					// ADLERR_FINAL_VIOLATION if this violates a final Reference restriction
@@ -189,11 +187,13 @@ private:
 
 		int		ascent;
 		StringArray	names;
-		StrVal		sep;	// Next separator to use while building ("", " " or ".")
+
+		// Next separator to use while building ("", " " or ".")
+		const char*	sep;
 
 		void		clear()
 				{ ascent = 0; names.clear(); sep = ""; }
-		bool		is_empty()
+		bool		is_empty() const
 				{ return ascent == 0 && names.length() == 0; }
 		void		consume(PathName& target)
 				{ target = *this; clear(); }
@@ -324,6 +324,10 @@ private:
 	// Access the current ADL Frame:
 	Frame&		frame() { return stack.last_mut(); }
 
+	// The parent frame (enclosing the current one). Read-only, so const&
+	const Frame&	enclosing_frame() const
+			{ return stack.asElements()[stack.length()-2]; }
+
 	// Read/write access to members of the current frame:
 	PathName&	object_path()
 			{ return frame().object_path; }
@@ -387,7 +391,7 @@ public:
 	ErrNum	definition_ends()
 	{
 		ErrNum	err = start_object();
-		ADL_TRACE("-------- Definition Ends for %s\n", stack.last().handle.pathname().asUTF8());
+		ADL_TRACE("-------- Definition Ends for %s\n", stack.last_mut().handle.pathname().asUTF8());
 		last_closed = stack.pull().handle;	// This can be used as a starting point for the next input file
 		current_path.clear();
 		return err;
@@ -403,9 +407,9 @@ public:
 		last_source = end;
 		StrVal	n(start.peek(), (int)(end-start));
 
-		if (current_path.sep != " ")			// "" or ".", start new name in pathname
+		if (' ' != current_path.sep[0])			// "" or ".", start new name in pathname
 			current_path.names.push(n);
-		else if (current_path.sep != ".")
+		else
 		{
 			// Materialize pull() from StrRef to StrVal so we can append
 			StrVal	prev = current_path.names.pull();
@@ -787,7 +791,7 @@ public:
 		PathName&	path = frame().object_path;
 		Handle		raw = (path.names.length() > 1 || path.ascent > 0) && !frame().scope_parent.is_null()
 					? frame().scope_parent
-					: (stack.length() >= 2 ? stack.elem(stack.length()-2).handle : root_object);
+					: (stack.length() >= 2 ? enclosing_frame().handle : root_object);
 
 		/*
 		 * start_object() already worked out whether *this* definition's own
@@ -820,7 +824,7 @@ public:
 	 */
 	Handle	current_assignment()
 	{
-		return stack.length() >= 2 ? stack.elem(stack.length()-2).pending_assignment : Handle();
+		return stack.length() >= 2 ? enclosing_frame().pending_assignment : Handle();
 	}
 
 	// Turn the current Frame's parsed literal into a Store Value.
@@ -858,11 +862,18 @@ public:
 	// Join the display values of the object names in the stack frames:
 	StrVal	object_pathname()
 	{
-		return stack.template map<StringArray, StrVal>(
-			[&](const Frame& f) -> const StrVal
-			{ return f.object_path.display(); }
-		).join(".");
+		StringArray	parts;
+		const Frame*	frames = stack.asElements();	// No per-element copies
+		for (int i = 0; i < stack.length(); i++)
+			parts.push(frames[i].object_path.display());
+		return parts.join(".");
 	}
+
+	// These two error recur three times each:
+	ErrNum	reopen_not_found()
+			{ return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8()); }
+	ErrNum	supertype_not_found()
+			{ return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", supertype_path().display().asUTF8()); }
 
 	/*
 	 * Making an object Sterile prevents definition of any further subtypes.
@@ -908,7 +919,7 @@ public:
 		PathName&	super_path = supertype_path();
 		Handle		supertype = super_path.is_empty() ? store.object() : lookup_path(context, super_path);
 		if (supertype.is_null())
-			return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
+			return supertype_not_found();
 		ErrNum	sterile_err = check_sterile_supertype(supertype);
 		if (sterile_err)
 			return sterile_err;
@@ -938,14 +949,13 @@ public:
 	 */
 	Handle	contextual_extension_of(Handle target, Handle aspect)
 	{
-		Handle	existing;
-		target.each_child([&](Handle c)
+		Array<Handle>&	kids = target.children();
+		for (int i = 0; i < kids.length(); i++)
 		{
-			if (existing.is_null() && !c.aspect().is_null() && c.aspect() == aspect)
-				existing = c;
-		});
-		if (!existing.is_null())
-			return existing;
+			Handle	a = kids[i].aspect();
+			if (!a.is_null() && a == aspect)
+				return kids[i];
+		}
 		return store.object(target, "", target, aspect);
 	}
 
@@ -974,7 +984,7 @@ public:
 		 * Search for names in the parent frame, or root_object, otherwise we must reopen TOP
 		 */
 		bool		is_outermost = stack.length() == 1;	// We've entered but not initialised this frame
-		Handle		parent = is_outermost ? root_object : stack.elem(stack.length()-2).handle;
+		Handle		parent = is_outermost ? root_object : enclosing_frame().handle;
 		bool		may_ascend = true;	// A path may ascend only once, either implicitly or explicitly
 		int		descent = 0;		// Start with the first name
 
@@ -1026,7 +1036,7 @@ public:
 						? lookup_path(parent, super_path)
 						: store.object();
 			if (supertype.is_null())
-				return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
+				return supertype_not_found();
 			ErrNum	sterile_err = check_sterile_supertype(supertype);
 			if (sterile_err)
 				return sterile_err;
@@ -1133,7 +1143,7 @@ public:
 			else
 				supertype = store.object();
 			if (supertype.is_null())
-				return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", super_path.display().asUTF8());
+				return supertype_not_found();
 
 			if (!child.is_null() && child.super() != supertype)
 				return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", object_pathname().asUTF8());
@@ -1154,7 +1164,7 @@ public:
 			 *   (c) neither of those: eponymous naming (a bare name, no
 			 *       block, no trailing dot), or a genuine failure.
 			 */
-			bool	is_reopen_attempt = object_path().sep == "." || frame().saw_block;
+			bool	is_reopen_attempt = ('.' == object_path().sep[0]) || frame().saw_block;
 
 			if (child.is_null() && is_reopen_attempt)
 			{
@@ -1162,7 +1172,7 @@ public:
 				target_path.names.push(child_name);
 				child = lookup_path(context, target_path);
 				if (child.is_null())
-					return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
+					return reopen_not_found();
 				truly_ascended = true;	// Only reached because a plain, local
 							// lookup already failed - lookup_path()
 							// must have ascended to find it at all
@@ -1192,7 +1202,7 @@ public:
 				 * of the continued object if we reopened it by name.
 				 */
 				bool	inherited = child != parent && child.parent() != parent;
-				bool	forced = object_path().sep == ".";
+				bool	forced = '.' == object_path().sep[0];
 				frame().contextual_aspect = (ascended || forced) ? context : Handle();
 				if (frame().saw_block && (ascended || inherited || forced))
 				{
@@ -1220,12 +1230,12 @@ public:
 				eponymous_path.names.push(child_name);
 				supertype = lookup_path(context, eponymous_path);
 				if (supertype.is_null())
-					return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
+					return reopen_not_found();
 			}
 			else
 			{
 				// No supertype, no matching child, this is a failure.
-				return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8());
+				return reopen_not_found();
 			}
 		}
 
@@ -1306,18 +1316,21 @@ public:
 	}
 
 	// Lookup the entire path, ascending to the parent where necessary
-	Handle	lookup_path(Handle parent, PathName path)
+	// Takes PathName by const reference: PathName holds a StringArray and a
+	// StrVal, both refcounted, so passing by value cost a copy per call.
+	Handle	lookup_path(Handle parent, const PathName& path)
 	{
 		ADL_TRACE("lookup_path(%s, %s)\n", path.display().asUTF8(), parent.pathname().asUTF8());
 		assert(!path.is_empty());
 		if (path.is_empty())
 			return 0;	// No ascent, no path.
 
-		bool	no_implicit_ascent = path.ascent > 0;
-		if (path.ascent)
+		int	ascent = path.ascent;		// Consumed here; `path` stays read-only
+		bool	no_implicit_ascent = ascent > 0;
+		if (ascent)
 		{
-			path.ascent--;	// First . indicates just parent
-			while (!parent.is_null() && path.ascent-- > 0)
+			ascent--;	// First . indicates just parent
+			while (!parent.is_null() && ascent-- > 0)
 				parent = parent.parent();
 		}
 		if (parent.is_null())

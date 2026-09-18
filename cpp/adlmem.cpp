@@ -98,10 +98,13 @@ int main(int argc, const char** argv)
 StrVal inspect(ADL::Value v)
 {
 	if (v.elements.length() > 0)
-		return "[" + v.elements.map<StringArray, StrVal>(
-			[&](const ADL::Value& e) -> const StrVal
-			{ return inspect(e); }
-		).join(", ") + "]";
+	{
+		StringArray	parts;
+		const ADL::Value*	elems = v.elements.asElements();
+		for (int i = 0; i < v.elements.length(); i++)
+			parts.push(inspect(elems[i]));
+		return "[" + parts.join(", ") + "]";
+	}
 	if (v.handle.is_null())
 		return "\""+v.string+"\"";
 	// Avoid infinite recursion using pathname, not by re-expanding the subtree.
@@ -118,6 +121,17 @@ StrVal inspect(ADL::Handle h, int depth)
 	auto	v = h.value();
 	Array<ADL::Handle>&	c = h.children();
 	StrVal	indent = StrVal("\t")*depth;
+	StrVal	body;
+	if (c.length() > 0)					// Children
+	{
+		StringArray	parts;
+		const ADL::Handle*	kids = c.asElements();
+		for (int i = 0; i < c.length(); i++)
+			parts.push(inspect(kids[i], depth+1));
+		body = " {\n\t" + indent + parts.join("\n\t"+indent) + "\n" + indent + "}";
+	}
+	else
+		body = ";";
 
 	return	h.name()					// Object name
 		+ (!super.is_null() ? " : "+super.name() : ":")	// Supertype
@@ -125,16 +139,7 @@ StrVal inspect(ADL::Handle h, int depth)
 		   ? (h.is_final() ? "=" : "~") + inspect(v)	// Assigned value
 		   : ""
 		  )
-		+ (c.length() > 0					// Children
-		   ?	" {\n\t"
-			+ indent
-		 	+ c.template map<StringArray, StrVal>(
-				[&](const ADL::Handle& h) -> const StrVal
-				{ return inspect(h, depth+1); }
-			).join("\n\t"+indent)
-			+ "\n" + indent + "}"
-		   : ";"
-		);
+		+ body;
 }
 
 void p(ADL::Handle h)

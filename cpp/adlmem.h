@@ -65,9 +65,6 @@ public:
 	bool		hides(StrVal name);	// Does one of this object's own aliases hide the inherited `name`?
 
 	Handle		lookup(StrVal name);	// Search down one level
-	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
-	void		each_child(std::function<void (Handle child)> operation) const;	// Every child, named or anonymous
-	void		each_assignment(std::function<void (Handle assignment)> operation) const;	// Only this object's own local Assignments
 	// Shortcut methods:
 	ErrNum		assign(Handle variable, Value value, bool is_final);	// Create/refine an Assignment
 	Handle		assigned(Handle variable);	// Search for an assignment
@@ -124,6 +121,19 @@ protected:
 	ErrNum		check_reference_finality(Handle variable, Value value);
 					// The Reference-specific narrowing rule check_final_violation()
 					// dispatches to for a Reference variable
+
+	Handle		find_assignment_inherited(Handle variable);
+					// Nearest assignment to `variable` anywhere in this
+					// context's own supertype chain, or null. This walk was
+					// written out twice (in both checks above); it lives here
+					// once so it is emitted once.
+	ErrNum		final_violation(StrVal label, StrVal rest);
+					// The single place that builds an "Assignment violates a
+					// final restriction" message - "<this>.<label> <rest>" -
+					// so the code, the why-string and the variable-path prefix
+					// are emitted once rather than at every rejecting branch.
+	ErrNum		same_or_reject(Handle actual, Handle attempted, StrVal label);
+					// No-op if `attempted` is already `actual`, else reject.
 
 	BuiltinObjectVariable	builtin_variable_override(Handle variable);
 					// Is `variable` one of Object's own built-in fields, and is
@@ -195,18 +205,6 @@ public:
 			}
 
 	Handle		lookup(StrVal name);		// Search down one level
-	void		each(std::function<void (Handle child)> operation) const;	// Named, non-Assignment children
-	void		each_child(std::function<void (Handle child)> operation) const	// Every child, named or anonymous
-			{
-				for (int i = 0; i < children.length(); i++)
-					operation(children[i]);
-			}
-	void		each_assignment(std::function<void (Handle assignment)> operation) const
-			{		// Only this object's own local Assignments
-				for (int i = 0; i < children.length(); i++)
-					if (children[i].is_assignment())
-						operation(children[i]);
-			}
 
 	// Only meaningful when this Object is an Assignment:
 	Handle		variable() { return _var; }
@@ -529,24 +527,6 @@ Handle::lookup(StrVal name)		// Search down one level
 	return object->lookup(name);
 }
 
-void
-Handle::each(std::function<void (Handle child)> operation) const
-{		// Named, non-Assignment children
-	object->each(operation);
-}
-
-void
-Handle::each_child(std::function<void (Handle child)> operation) const
-{		// Every child, named or anonymous
-	object->each_child(operation);
-}
-
-void
-Handle::each_assignment(std::function<void (Handle assignment)> operation) const
-{		// Only this object's own local Assignments
-	object->each_assignment(operation);
-}
-
 // Shortcut methods:
 ErrNum
 Handle::assign(Handle variable, Value value, bool is_final)
@@ -642,6 +622,44 @@ error(ErrNum num, const char* why, StrVal what)
 }
 
 /*
+ * The supertype-chain walk shared by check_final_violation() and
+ * check_reference_finality(): the nearest Assignment to `variable` on this
+ * context or anywhere up its supertype chain, or null if there is none.
+ * Written out twice before; it lives here so it is emitted once.
+ */
+Handle
+Handle::find_assignment_inherited(Handle variable)
+{
+	Handle	existing;
+	for (Handle t = *this; !t.is_null() && existing.is_null(); t = t.super())
+		existing = t.assigned(variable);
+	return existing;
+}
+
+/*
+ * Every "Assignment violates a final restriction" message has the same
+ * shape - "<this>.<label> <rest>" - under the same code and why-string.
+ * Built here once, so the rejecting branches don't each carry a copy.
+ */
+ErrNum
+Handle::final_violation(StrVal label, StrVal rest)
+{
+	return error(
+		ADLERR_FINAL_VIOLATION,
+		"Assignment violates a final restriction",
+		pathname() + "." + label + " " + rest
+	);
+}
+
+ErrNum
+Handle::same_or_reject(Handle actual, Handle attempted, StrVal label)
+{
+	if (attempted == actual)
+		return 0;
+	return final_violation(label, StrVal("is already ") + actual.pathname() + ", not " + attempted.pathname());
+}
+
+/*
  * Would assigning `value` to `variable` in this context violate an
  * existing final assignment (local, or inherited via this context's own
  * supertype chain)? A Reference variable gets the narrowing exception,
@@ -655,15 +673,12 @@ Handle::check_final_violation(Handle variable, Value value)
 	if (variable.is_reference())
 		return check_reference_finality(variable, value);
 
-	Handle	existing;
-	for (Handle t = *this; !t.is_null() && existing.is_null(); t = t.super())
-		existing = t.assigned(variable);
+	Handle	existing = find_assignment_inherited(variable);
 
 	if (!existing.is_null() && existing.is_final())
-		return error(
-			ADLERR_FINAL_VIOLATION,
-			"Assignment violates a final restriction",
-			pathname() + "." + variable.name() + " was already finalised by " + existing.parent().pathname()
+		return final_violation(
+			variable.name(),
+			"was already finalised by " + existing.parent().pathname()
 		);
 	return 0;
 }
@@ -677,9 +692,7 @@ Handle::check_final_violation(Handle variable, Value value)
 ErrNum
 Handle::check_reference_finality(Handle variable, Value value)
 {
-	Handle	existing;
-	for (Handle t = *this; !t.is_null() && existing.is_null(); t = t.super())
-		existing = t.assigned(variable);
+	Handle	existing = find_assignment_inherited(variable);
 
 	if (existing.is_null() || !existing.is_final())
 		return 0;
@@ -769,18 +782,6 @@ value_is_true(Handle context, Value value)
 ErrNum
 Handle::finish_builtin_assign(BuiltinObjectVariable kind, Value value, bool is_final)
 {
-	auto	same_or_reject = [&](Handle actual, Handle attempted, const char* label) -> ErrNum
-			{
-				if (attempted == actual)
-					return 0;
-				return error(
-					ADLERR_FINAL_VIOLATION,
-					"Assignment violates a final restriction",
-					pathname() + "." + label + " is already " + actual.pathname()
-						+ ", not " + attempted.pathname()
-				);
-			};
-
 	switch (kind)
 	{
 	case BuiltinObjectVariable::Parent:
@@ -793,38 +794,27 @@ Handle::finish_builtin_assign(BuiltinObjectVariable kind, Value value, bool is_f
 	case BuiltinObjectVariable::Name:
 		if (value.string == name())
 			return 0;
-		return error(
-			ADLERR_FINAL_VIOLATION,
-			"Assignment violates a final restriction",
-			pathname() + ".Name is already '" + name() + "', not '" + value.string + "'"
-		);
+		return final_violation("Name", StrVal("is already '") + name() + "', not '" + value.string + "'");
 
 	case BuiltinObjectVariable::IsArray:
 	{
 		bool	attempted = value_is_true(*this, value);
 		if (attempted == is_array())
 			return 0;
-		return error(
-			ADLERR_FINAL_VIOLATION,
-			"Assignment violates a final restriction",
-			pathname() + ".Is Array is already " + (is_array() ? "True" : "False")
-		);
+		return final_violation("Is Array", StrVal("is already ") + (is_array() ? "True" : "False"));
 	}
 
 	case BuiltinObjectVariable::IsSterile:
 	case BuiltinObjectVariable::IsComplete:
 	{
 		bool	is_sterile_kind = kind == BuiltinObjectVariable::IsSterile;
-		const char*	label = is_sterile_kind ? "Is Sterile" : "Is Complete";
+		StrVal	label = is_sterile_kind ? "Is Sterile" : "Is Complete";
 		for (Handle t = *this; !t.is_null(); t = t.super())
 		{
 			bool	already_final = is_sterile_kind ? t.object->is_sterile_final() : t.object->is_complete_final();
 			if (already_final)
-				return error(
-					ADLERR_FINAL_VIOLATION,
-					"Assignment violates a final restriction",
-					pathname() + "." + label + " was already " + (is_sterile_kind ? "sterilised" : "finalised") + " by " + t.pathname()
-				);
+				return final_violation(label,
+					StrVal("was already ") + (is_sterile_kind ? "sterilised" : "finalised") + " by " + t.pathname());
 		}
 		bool	attempted = value_is_true(*this, value);
 		if (is_sterile_kind)
@@ -901,14 +891,6 @@ Object::lookup(StrVal name)		// Search down one level
 		if (!children[i].is_assignment() && name == children[i].name())
 			return children[i];
 	return 0;
-}
-
-void
-Object::each(std::function<void (Handle child)> operation) const	// Children iterator?
-{
-	for (int i = 0; i < children.length(); i++)
-		if (!children[i].is_assignment())
-			operation(children[i]);
 }
 
 // Make new Values:
