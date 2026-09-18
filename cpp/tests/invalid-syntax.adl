@@ -1,3 +1,14 @@
+// EXPECT: FAIL
+// A doubled colon where the supertype path belongs ("foo::") is not valid
+// syntax, so this file must not parse.
+//
+// Confirmed: the parser reports "block looking for closing }" at line 2 and
+// consumes 0 of 56 bytes, and adlmem exits 1 on that byte-count mismatch.
+// Note what catches it is the mismatch, not the parser's own return value -
+// parse() still returns true and prints "Success" (see cpp/ToDo's Standing
+// note on errors not propagating). The abandoned attempt does leave a
+// partial side effect in the store: a bare `foo : Object` with no supertype
+// and none of its children, visible if you run this with -a.
 TOP {
 	foo:: {
 		bar {

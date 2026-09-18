@@ -1,9 +1,8 @@
 // EXPECT: PASS
 // README "Aliasing": an inherited object may be renamed using "!". This is
 // the spec's own example (Person/Employee/Surname/Family Name), adapted to
-// use a Reference-typed Surname (README's own example assigns a String,
-// but the built-in type hierarchy - String, Number, etc. - only exists in
-// adl.adl, not in this engine's own bootstrap; see cpp/ToDo). Assigning via
+// use a Reference-typed Surname (README's own example assigns a String).
+// Assigning via
 // the *new* name ("Family Name") must resolve through the alias to the
 // real, inherited object (Person.Surname) - confirmed by hand (ADL_DEBUG=1)
 // to show "Found as TOP.Person.Surname" for this assignment's variable, not

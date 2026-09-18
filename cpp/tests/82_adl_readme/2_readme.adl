@@ -1,1 +1,65 @@
-../../examples/readme.adl
+ReadMe: {
+	Person:;
+	Employee: Person;
+	Person.Family Name: String;
+	Person: {
+		Given Name: String[];
+	}
+
+	Employee {
+		Employee Number: Integer;
+	}
+
+	Person {
+		Given Name: String {
+			Max Length = 48;
+		}[];
+	}
+	Person {
+		Family Name: String;
+	}
+	Person.Family Name.Max Length = 24;
+
+	js : Person {
+		Given Name = ['John'];
+		Family Name = 'Smith';
+	}
+
+	Company:;
+	Project: { Project Name: String }
+	Acme Inc: Company;
+	Employment: {
+	    Company -> Company;
+	    Person -> Person;
+	    Task: Reference[] = Project;
+	    // Task => Project;
+	}
+	: Employment {
+	    Company = Acme Inc;
+	    Person = js;
+	    Task = :Project{Project Name = 'Sekrit'}
+	}
+
+	Event: {
+		Date
+	}
+	: Event { Date = 2001-03-19 }
+
+	: Employee {
+		Given Name = ['John'];
+		Family Name = 'Smith';
+		Employee Number = 42317;
+	}
+
+	Forty Two : Integer = 42;
+
+	Product: {
+		Discount: Decimal;
+	}
+	Baking Product : Product {
+		Discount ~= 8.5
+	}
+	Bread Slicer: Baking Product {
+		Discount = 10;
+	}
+}

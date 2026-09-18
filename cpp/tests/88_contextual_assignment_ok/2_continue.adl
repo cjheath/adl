@@ -3,8 +3,7 @@
 // variables, aliases, or assignments) have a Context value" - a plain
 // *value assignment* through a trailing dot is contextual too, not just
 // a reopen with a block. This is README's own "3.Ordinal" worked
-// example, adapted (the built-in Number/Integer types only exist in
-// adl.adl, not this engine's own bootstrap; see cpp/ToDo).
+// example.
 Three:;
 Three {
 	Ordinal: String;

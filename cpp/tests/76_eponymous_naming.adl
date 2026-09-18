@@ -4,8 +4,7 @@
 // the Object is not being re-opened (by { or .), then a new child is
 // created having the same name as the supertype." This is the spec's
 // own example (Event/Date), adapted to use a locally-declared Date
-// Syntax (the built-in Number/Date types only exist in adl.adl, not
-// this engine's own bootstrap; see cpp/ToDo).
+// Syntax.
 //
 // "Date" inside "Event: { Date }" is not already a child of Event, but
 // is found by ascending to TOP (the same way a supertype name would be

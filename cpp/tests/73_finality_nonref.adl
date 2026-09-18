@@ -3,8 +3,7 @@
 // is tentative by defining it using the tentative assignment operator ~=.
 // A tentative assignment may be re-assigned in a subtype" - this is the
 // spec's own example (Baking Product/Bread Slicer/Discount), adapted to
-// use a locally-declared Digits Syntax (the built-in Number type only
-// exists in adl.adl, not in this engine's own bootstrap; see cpp/ToDo).
+// use a locally-declared Digits Syntax.
 // Finality enforcement for *non*-Reference variables (Handle::
 // check_final_violation(), adlmem.h) - previously only References were
 // checked (see 40_reference_narrow.adl/41_reference_reject.adl) - see
