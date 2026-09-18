@@ -9,6 +9,7 @@
 #include	<error.h>
 #include	<fcntl.h>
 #include	<pegexp.h>
+#include	<strval.h>	// Sources hand the Sink a fragment as a StrVal
 
 #include	<stdio.h>	// Only used for the stub Source and Sink
 
@@ -44,16 +45,24 @@ public:
 			data += peeked_bytes;
 			peeked_bytes = 0;
 		}
-	off_t	operator-(const ADLSourceUTF8Ptr start) const
-		{ return data - start.data; }
+	off_t	bytes_from(const ADLSourceUTF8Ptr& start) const
+		{ return data - start.data; }		// How far we have come, for progress
+							// No chars_from(): this Source does not track
+							// characters, and nothing generic needs them.
 	int	line_number() const
 		{ return _line_number; }
 	int	column() const
 		{ return _column; }
 	const char*	peek() const
 		{ return data; }
+	StrVal	fragment(const ADLSourceUTF8Ptr& end) const	// From here to `end`
+		{	// A fresh string: this Source does not own its bytes, so nothing can be shared
+			return StrVal(peek(), (int)(end.bytes_from(*this)));
+		}
+	static ADLSourceUTF8Ptr	over(StrVal& s)		// A Source seeing the whole of `s`
+		{ return ADLSourceUTF8Ptr(s.asUTF8()); }
 	void	print_from(const ADLSourceUTF8Ptr& start) const
-		{ printf("%.*s", (int)(*this - start), start.data); }
+		{ printf("%.*s", (int)(bytes_from(start)), start.data); }
 	void	print_ahead() const
 		{ printf("`%.*s`...\n", 20, data); }
 };
@@ -119,7 +128,7 @@ public:
 	void	array_value_end() {}			// ']' seen; the reported elements are now the whole value
 
 	Source	lookup_syntax(Source type)		// Return Source of a Pegexp string to use in matching
-		{ return Source(""); }
+		{ return Source(); }
 	ValueExpectation	expected_value_kind(Source type)	// What kind of value does the variable being assigned expect?
 		{ return ExpectMatch; }			// No object model here to consult; this always fails
 						// cleanly (lookup_syntax() above always returns empty), which is
@@ -691,7 +700,7 @@ template<typename Source> bool ADLParser<Source>::matched_literal(Source& source
 
 		off_t	consumed = match.to.source.bytes_from(match.from.source);
 		Source	start(source);
-		while (source - start < consumed)
+		while (source.bytes_from(start) < consumed)
 		{
 			source.peek_char();
 			source.advance();
@@ -769,7 +778,8 @@ template<typename Source> bool ADLParser<Source>::numeric_literal(Source& source
 
 	while ((ch = probe.peek_char()) && ('0' <= ch && ch <= '9' || '-' == ch || '+' == ch || ch == '.'))
 		probe.advance();
-	bool	ok = probe-source > 0;
+	bool	ok = probe.bytes_from(source) > 0;	// Anything consumed? A numeric
+							// token is ASCII, so that is its length too.
 	if (ok)
 		sink.numeric_literal(source, probe);
 	source = probe;

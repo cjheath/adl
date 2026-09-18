@@ -158,11 +158,12 @@ public:
 /*
  * This Sink builds an ADLStoreStub using the events passed from the Parser.
  */
-template<typename _Store = ADLStoreStub<>>
+template<typename _Store = ADLStoreStub<>, typename _Source = ADLSourceUTF8Ptr>
 class ADLStoreSink
 {
 public:
-	using	Source = ADLSourceUTF8Ptr;		// REVISIT: This must work with other Sources also
+	using	Source = _Source;		// Either ADLSourceUTF8Ptr or ADLSourceStrVal: the
+						// latter makes every fragment a slice of the input
 private:
 	using	Store = _Store;
 	using	Handle = typename Store::Handle;
@@ -405,7 +406,7 @@ public:
 	void	name(Source start, Source end)		// A name exists between start and end
 	{
 		last_source = end;
-		StrVal	n(start.peek(), (int)(end-start));
+		StrVal	n(start.fragment(end));
 
 		if (' ' != current_path.sep[0])			// "" or ".", start new name in pathname
 			current_path.names.push(n);
@@ -633,7 +634,7 @@ public:
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
 	{
 		last_source = end;
-		StrVal	string(start.peek(), (int)(end-start));
+		StrVal	string(start.fragment(end));
 		value_type() = ValueType::String;
 		value() = string;
 	}
@@ -641,7 +642,7 @@ public:
 	void	numeric_literal(Source start, Source end)	// Contents of a number between start and end
 	{
 		last_source = end;
-		StrVal	number(start.peek(), (int)(end-start));
+		StrVal	number(start.fragment(end));
 		value_type() = ValueType::Number;
 		value() = number;
 	}
@@ -649,7 +650,7 @@ public:
 	void	matched_literal(Source start, Source end)	// Contents of a matched value between start and end
 	{
 		last_source = end;
-		StrVal	match(start.peek(), (int)(end-start));
+		StrVal	match(start.fragment(end));
 		value_type() = ValueType::Match;
 		value() = match;
 	}
@@ -686,7 +687,7 @@ public:
 	void	pegexp_literal(Source start, Source end)	// Contents of a pegexp between start and end
 	{
 		last_source = end;
-		StrVal	pegexp(start.peek(), (int)(end-start));
+		StrVal	pegexp(start.fragment(end));
 		value_type() = ValueType::Pegexp;
 		value() = pegexp;		// excludes the delimiting '/'s, per Store::pegexp_literal's contract
 	}
@@ -750,13 +751,13 @@ public:
 					// is parsed, but we need the variable's type to look up its Syntax.
 		Handle	var = frame().handle;
 		if (var.is_null())
-			return Source("");
+			return Source();
 
 		current_syntax = var.syntax();	// Own a copy: syntax() returns a temporary StrVal,
 						// and the Source we return below points into it.
 		if (current_syntax.isEmpty())
-			return Source("");
-		return Source(current_syntax.asUTF8());
+			return Source();
+		return Source::over(current_syntax);
 	}
 
 	// Methods below here are not a required part of the Sink:
@@ -1366,7 +1367,7 @@ public:
 		return parent;
 	}
 
-	friend void p(const ADLStoreSink<Store>::Frame& f);	// Allow a debugger to poke around
+	friend void p(const ADLStoreSink<_Store, _Source>::Frame& f);	// Allow a debugger to poke around
 };
 
 #endif /* ADLSTORE_H */

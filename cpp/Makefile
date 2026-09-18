@@ -20,6 +20,7 @@ DEBUG	=	-O2 $(COPT)
 HDRS	=	\
 		adlparser.h \
 		adlstore.h \
+		adlstrval.h \
 		adlmem.h
 
 SRCS	=	
@@ -47,8 +48,14 @@ lib:
 %:	%.cpp $(LIB) Makefile
 	$(CXX) $(DEBUG) $(CXXFLAGS) -Iinclude -Itest -o $@ $< $(LIB) $(LIBS)
 
-adlmem:		adlparser.h adlstore.h adlmem.h $(STRPP_HDRS)
-adl_scan:	adlparser.h $(STRPP_HDRS)
+adlmem:		$(HDRS) $(STRPP_HDRS)
+adl_scan:	$(HDRS) $(STRPP_HDRS)
+
+# adlmem against the older byte-pointer Source, which copies every fragment
+# instead of slicing one. Not part of the suite build: it exists so both
+# Sources stay working, and analysis/ builds and compares them.
+adlmem_utf8ptr:	adlmem.cpp $(HDRS) $(STRPP_HDRS)
+	$(CXX) $(DEBUG) $(CXXFLAGS) -DADL_SOURCE_UTF8PTR -o $@ adlmem.cpp $(LIBS)
 
 doc:	../docs/adl-rr.html
 ../docs/adl-rr.html: px adl.px
@@ -65,10 +72,15 @@ test:	tests
 tests:	bins
 	@tests/run_tests.sh
 
+# Code size, stack, memory and Store sharing across the revisions that produced
+# this tree - see analysis/README.md. Takes about a minute.
+analysis:
+	@cd analysis && $(MAKE)
+
 clean:
-	rm -f $(BINS) $(OBJS)
+	rm -f $(BINS) adlmem_utf8ptr $(OBJS)
 	rm -rf *.dSYM
 
 clobber:	clean
 
-.PHONY:	all bins lib doc test tests clean clobber strpp px
+.PHONY:	all bins lib doc test tests clean clobber strpp px analysis

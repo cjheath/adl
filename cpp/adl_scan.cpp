@@ -40,7 +40,7 @@ int main(int argc, const char** argv)
 	ADLSourceUTF8Ptr	source(text);
 
 	bool			ok = adl.parse(source);
-	off_t			bytes_parsed = source - text;
+	off_t			bytes_parsed = source.peek() - text;
 
 	printf("%s, parsed %lld of %lld bytes\n", ok ? "Success" : "Failed", bytes_parsed, file_size);
 	exit(ok ? 0 : 1);
