@@ -5,13 +5,10 @@ Measure the ADL parser across the revisions that produced the current tree.
 Four variants, each assembled from git rather than edited by hand, so the
 whole comparison can be re-run from a clean checkout:
 
-  base   before either tranche - the parser allocated a fresh string per
-         fragment, and strpp's Array mishandled slices
-  t1     after tranche 1 - Array slices fixed; fragments still copied
-  t2     after tranche 2 - the parser takes its input as a StrVal, so
-         fragments are substr() slices of one pinned body
-  now    the current tree - t2 plus the StrVal copy fix (an empty string no
-         longer allocates when copied)
+  a commit   named by its abbreviated commit, so a column says which revision
+             produced the number without a lookup
+  head       the working tree, when either repository has changes that no
+             commit produced - named `head` rather than claiming a commit
 
 For each variant and each workload it measures:
 
@@ -58,17 +55,78 @@ OUT = os.path.join(ANALYSIS, 'out')
 sys.path.insert(0, TOOLS)
 import sections                                                     # noqa: E402
 
-Variant = namedtuple('Variant', 'name adl_rev strpp_rev overlay input_strval desc')
+Variant = namedtuple('Variant', 'name adl_rev strpp_rev strval_source desc')
 
-# strpp_rev '0bc0394~1' is the commit before the Array slice fix, which is what
-# tranche 1 was about; 'WORKTREE' overlays the working tree's strval.h on the
-# committed headers, which is exactly what the StrVal copy fix changed.
-VARIANTS = [
-    Variant('base', '6c83f6f', '0bc0394~1', None,       False, 'before either tranche'),
-    Variant('t1',   'baaa6b5', '0bc0394',   None,       False, 'after tranche 1 (Array slices)'),
-    Variant('t2',   None,      '0bc0394',   None,       True,  'after tranche 2 (StrVal source)'),
-    Variant('now',  None,      '0bc0394',   'strval.h', True,  'current tree (+ StrVal copy fix)'),
+# The revisions the work started from. strpp '0bc0394~1' is the commit before
+# the Array slice fix, which is what tranche 1 was about.
+HISTORICAL = [
+    ('6c83f6f', '0bc0394~1', False, 'before either tranche'),
+    ('baaa6b5', '0bc0394',   False, 'after tranche 1 (Array slices)'),
 ]
+
+# What decides a variant's name, and whether the head is committed. An
+# uncommitted head is named `head`, so a table column never claims a commit
+# that did not produce it.
+MEASURED_FILES = ['cpp/adlparser.h', 'cpp/adlstore.h', 'cpp/adlmem.h',
+                  'cpp/adlmem.cpp', 'cpp/adlstrval.h', 'cpp/adl_scan.cpp',
+                  'cpp/Makefile']
+
+
+def git(root, *args):
+    p = subprocess.run(['git', '-C', root] + list(args), capture_output=True, text=True)
+    if p.returncode != 0:
+        raise SystemExit(f"git {' '.join(args)} in {root} failed: {p.stderr.strip()[:200]}")
+    return p.stdout.strip()
+
+
+def strpp_headers_used():
+    """
+    The strpp headers the ADL sources actually include.
+
+    Only these decide whether the head is uncommitted. An edit to some other
+    strpp file cannot change what is measured here, and letting it name the
+    head `head` would understate what produced these numbers - which is the
+    opposite of the point of naming them at all.
+    """
+    used = set()
+    for f in sorted(os.listdir(CPP)):
+        if not f.endswith(('.h', '.cpp')):
+            continue
+        text = open(os.path.join(CPP, f), errors='replace').read()
+        for m in re.finditer(r'#include\s+[<"]([^>"]+)[>"]', text):
+            if os.path.exists(os.path.join(STRPP, 'include', m.group(1))):
+                used.add(m.group(1))
+    return sorted(used)
+
+
+def head_variant():
+    """
+    The working tree, named by the commit it is - or `head` when either repo
+    has changes that no commit produced, in which case it is the working tree
+    that gets measured rather than a commit.
+    """
+    adl_dirty = bool(git(ADL_ROOT, 'status', '--porcelain', '--', *MEASURED_FILES))
+    strpp_dirty = bool(git(STRPP, 'status', '--porcelain', '--',
+                           *[f'include/{h}' for h in strpp_headers_used()]))
+    adl_sha = git(ADL_ROOT, 'rev-parse', '--short', 'HEAD')
+    strpp_sha = git(STRPP, 'rev-parse', '--short', 'HEAD')
+    if adl_dirty or strpp_dirty:
+        dirty_in = ' and '.join(x for x, d in (('adl', adl_dirty), ('strpp', strpp_dirty)) if d)
+        return Variant('head', None, None, True,
+                       f"the working tree, uncommitted changes in {dirty_in} "
+                       f"(adl {adl_sha}, strpp {strpp_sha})")
+    return Variant(adl_sha, adl_sha, strpp_sha, True,
+                   f"the current tree: {adl_sha} with strpp {strpp_sha}")
+
+
+def variants():
+    out = [Variant(name, name, strpp, src, desc)
+           for name, strpp, src, desc in HISTORICAL]
+    out.append(head_variant())
+    return out
+
+
+VARIANTS = variants()
 
 WORKLOADS = OrderedDict([
     ('readme',  ['adl.adl', '../readme.adl']),
@@ -144,14 +202,17 @@ def assemble(v):
                 continue        # not present at that revision
             open(os.path.join(adl, f), 'wb').write(p.stdout)
 
-    # strpp: every header at the variant's revision, plus any overlay
-    listing = run(['git', '-C', STRPP, 'ls-tree', '--name-only', '--full-tree',
-                   '-r', v.strpp_rev, 'include']).stdout.decode().split()
-    for rel in listing:
-        copy_or_extract(STRPP, v.strpp_rev, STRPP, rel, strpp)
-    if v.overlay:
-        shutil.copy(os.path.join(STRPP, 'include', v.overlay),
-                    os.path.join(strpp, v.overlay))
+    # strpp: every header at the variant's revision, or the working tree's
+    if v.strpp_rev is None:
+        inc = os.path.join(STRPP, 'include')
+        for f in sorted(os.listdir(inc)):
+            if f.endswith('.h'):
+                shutil.copy(os.path.join(inc, f), os.path.join(strpp, f))
+    else:
+        listing = run(['git', '-C', STRPP, 'ls-tree', '--name-only', '--full-tree',
+                       '-r', v.strpp_rev, 'include']).stdout.decode().split()
+        for rel in listing:
+            copy_or_extract(STRPP, v.strpp_rev, STRPP, rel, strpp)
     return root, adl, strpp
 
 
@@ -181,7 +242,7 @@ def make_flavours(v, root, adl, strpp):
              os.path.join(bodies, 'strval.h')])
     drv = os.path.join(bodies, 'adlmem_bodies.cpp')
     shutil.copy(os.path.join(plain, 'adlmem_plain.cpp'), drv)
-    checked([sys.executable, tools[0], 'driver', drv, '1' if v.input_strval else '0'])
+    checked([sys.executable, tools[0], 'driver', drv, '1' if v.strval_source else '0'])
     return plain, stack, bodies
 
 
@@ -233,6 +294,15 @@ def build(v, root, adl, strpp, plain, stack, bodies):
     gxx([os.path.join(bodies, 'adlmem_bodies.cpp'), support],
         os.path.join(bin_dir, v.name + '_bodies'), BASE_OPT, [bodies, adl, strpp, TOOLS])
 
+    # The same driver built against the other Source, where this revision has
+    # the switch at all. Older revisions have only the byte-pointer Source, so
+    # for them there is nothing to compare - they *are* it.
+    alt = None
+    if 'ADL_SOURCE_UTF8PTR' in open(os.path.join(plain, 'adlmem_plain.cpp')).read():
+        alt = os.path.join(bin_dir, v.name + '_utf8ptr')
+        gxx(['-DADL_SOURCE_UTF8PTR', os.path.join(plain, 'adlmem_plain.cpp'), support],
+            alt, BASE_OPT, [plain, adl, strpp])
+
     # object code, for the per-TU __text figures
     objtext = {}
     for opt in OPTS:
@@ -242,7 +312,7 @@ def build(v, root, adl, strpp, plain, stack, bodies):
         if p.returncode != 0:
             raise SystemExit(f"object compile failed: {p.stderr.decode()[:500]}")
         objtext[opt] = sections.object_text(o)
-    return outs, objtext
+    return outs, objtext, alt
 
 
 # ---------------------------------------------------------------- running
@@ -280,6 +350,14 @@ def parse_stack(out):
     return int(m.group(1)) if m else None
 
 
+def summary_unit(out):
+    """The unit the driver reports progress in - 'lines' for the StrVal Source,
+    'bytes' for the byte-pointer one. Reading it back is how the body walk
+    knows it patched for the right Source, rather than trusting a flag."""
+    m = re.search(rb'^(?:Success|Failed), (?:parsed|processed) \d+ of \d+ (\w+)', out, re.M)
+    return m.group(1).decode() if m else None
+
+
 def consumed_all(out):
     """Every file reached its end: the line-based success criterion, or the
     byte-based one for the variants that predate it."""
@@ -305,6 +383,7 @@ def measure(v, root, files, want):
                 cwd=CPP)
         r['exit'] = p.returncode
         r['summaries'], r['consumed'] = consumed_all(p.stdout + p.stderr)
+        r['unit'] = summary_unit(p.stdout + p.stderr)
         r['hash'], r['dump'] = tree_dump(p.stdout + p.stderr)
 
     if 'peak' in want:
@@ -438,7 +517,7 @@ def build_tables(m):
     doc.append("")
     doc.append("Generated by analysis/scripts/analyse.py. Variants, assembled from git:")
     for v in VARIANTS:
-        doc.append(f"  {v.name:<6}{v.desc}")
+        doc.append(f"  {v.name:<8}{v.desc}")
     doc.append("")
     doc.append("Code size and stack are per variant; memory and sharing are per variant and")
     doc.append("workload. 'peak' is the high-water mark of live bytes, 'store' the live bytes")
@@ -467,15 +546,17 @@ def build_tables(m):
     doc.append(table(rows, ['variant', 'suite p/f/s'] + [f'{w} parses' for w in WORKLOADS],
                      "Correctness"))
 
+    first = VARIANTS[0].name
     rows = []
     for w in WORKLOADS:
-        base = m['runs']['base'][w]['hash']
+        base = m['runs'][first][w]['hash']
         row = [w, base]
         for v in VARIANTS[1:]:
             h = m['runs'][v.name][w]['hash']
             row.append('identical' if h == base else 'DIFFERS')
         rows.append(row)
-    doc.append(table(rows, ['workload', 'base tree hash'] + [f'{v.name} vs base' for v in VARIANTS[1:]],
+    doc.append(table(rows, ['workload', f'{first} tree hash'] +
+                     [f'{v.name} vs {first}' for v in VARIANTS[1:]],
                      "Tree dumps byte-identical (the correctness invariant the series held to)"))
 
     # -- memory
@@ -485,9 +566,10 @@ def build_tables(m):
             p = m['runs'][v.name][w]['peak']
             rows.append([v.name, f"{p['peak']:,}", f"{p['store']:,}",
                          f"{p['allocs']:,}", f"{p['bytes']:,}"])
-        b = m['runs']['base'][w]['peak']
-        n = m['runs']['now'][w]['peak']
-        rows.append(['now vs base', delta(n['peak'], b['peak']), delta(n['store'], b['store']),
+        b = m['runs'][first][w]['peak']
+        n = m['runs'][VARIANTS[-1].name][w]['peak']
+        rows.append([f'{VARIANTS[-1].name} vs {first}',
+                     delta(n['peak'], b['peak']), delta(n['store'], b['store']),
                      delta(n['allocs'], b['allocs']), delta(n['bytes'], b['bytes'])])
         doc.append(table(rows, ['variant', 'peak', 'store', 'allocs', 'bytes allocated'],
                          f"Dynamic memory - adl.adl + {w} ({sum(os.path.getsize(os.path.join(CPP,f)) for f in WORKLOADS[w]):,} bytes)"))
@@ -527,15 +609,32 @@ def build_tables(m):
         t, d, tot = m['flash'][v.name]
         row += [f"{tot:,}"]
         rows.append(row)
-    rows.append(['now vs base'] + [delta(m['objtext']['now'][o], m['objtext']['base'][o])
-                                   for o in OPTS] +
-                [delta(m['flash']['now'][2], m['flash']['base'][2])])
+    last = VARIANTS[-1].name
+    rows.append([f'{last} vs {first}'] +
+                [delta(m['objtext'][last][o], m['objtext'][first][o]) for o in OPTS] +
+                [delta(m['flash'][last][2], m['flash'][first][2])])
     doc.append(table(rows, ['variant'] + [f'{o} __text' for o in OPTS] + [f'{BASE_OPT} __TEXT+__DATA'],
                      "Code size, bytes"))
 
     doc.append(table([[v.name, m['flash'][v.name][0], m['flash'][v.name][1]]
                       for v in VARIANTS],
                      ['variant', '__TEXT', '__DATA'], f"Linked image at {BASE_OPT}"))
+
+    # -- both Sources still work
+    rows = []
+    for v in VARIANTS:
+        alt = m['utf8ptr'].get(v.name)
+        if not alt:
+            # No switch at this revision: the only Source it has IS the
+            # byte-pointer one, so there is nothing to compare it against.
+            rows.append([v.name, 'n/a'] + ['-'] * len(WORKLOADS))
+            continue
+        rows.append([v.name, 'builds'] +
+                    [('identical' if alt[w] == m['runs'][v.name][w]['hash'] else 'DIFFERS')
+                     for w in WORKLOADS])
+    doc.append(table(rows, ['variant', '-DADL_SOURCE_UTF8PTR'] +
+                     [f'{w} tree vs default' for w in WORKLOADS],
+                     "Both Sources still work (adlmem.cpp's default vs the switch)"))
 
     return '\n'.join(doc) + '\n'
 
@@ -550,7 +649,11 @@ def main():
 
     cases = discover_suite()
     m = dict(runs={v.name: {} for v in VARIANTS}, suite={}, objtext={}, flash={},
-             suite_stack={}, ladder={})
+             suite_stack={}, ladder={}, utf8ptr={})
+
+    # The body walk is patched differently for the two Sources, so check the
+    # binary agrees with the flag rather than discovering it in the numbers.
+    want_unit = {v.name: ('lines' if v.strval_source else 'bytes') for v in VARIANTS}
 
     for v in VARIANTS:
         print(f"[{v.name}] {v.desc}", flush=True)
@@ -558,7 +661,7 @@ def main():
         log("assembled")
         plain, stack, bodies = make_flavours(v, root, adl, strpp)
         log("instrumented")
-        outs, objtext = build(v, root, adl, strpp, plain, stack, bodies)
+        outs, objtext, alt = build(v, root, adl, strpp, plain, stack, bodies)
         m['objtext'][v.name] = objtext
         log("built")
 
@@ -589,10 +692,28 @@ def main():
         for w, files in WORKLOADS.items():
             m['runs'][v.name][w] = measure(v, root, files, ('plain', 'peak', 'bodies', 'stack'))
             r = m['runs'][v.name][w]
+            got = r.get('unit')
+            if got and got != want_unit[v.name]:
+                raise SystemExit(
+                    f"{v.name}/{w}: the driver reports {got}, but the body walk was "
+                    f"patched for {want_unit[v.name]} - fix strval_source for this "
+                    f"variant before trusting any of these numbers")
             pk = r['peak']
             bd = r['bodies']
             log(f"{w}: peak {pk['peak']:,} store {pk['store']:,} allocs {pk['allocs']:,} "
                 f"bodies {bd['bodies']:,} on_input {bd['on_input']:,}")
+
+        if alt:
+            m['utf8ptr'][v.name] = {}
+            for w, files in WORKLOADS.items():
+                p = run([alt] + load_args(files), cwd=CPP)
+                h, _ = tree_dump(p.stdout + p.stderr)
+                m['utf8ptr'][v.name][w] = h
+            log("byte-pointer Source: builds, tree " +
+                ('identical to the default build'
+                 if all(m['utf8ptr'][v.name][w] == m['runs'][v.name][w]['hash']
+                        for w in WORKLOADS) else 'DIFFERS from the default build'))
+
 
     with open(os.path.join(OUT, 'raw.json'), 'w') as fh:
         json.dump({k: (v if not isinstance(v, dict) or 'dump' not in v else

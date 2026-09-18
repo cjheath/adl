@@ -42,13 +42,20 @@ The variants
 -------------
 
 Each is assembled from git into `build/<variant>/`, so nothing is edited by
-hand and the comparison is reproducible:
+hand and the comparison is reproducible. A variant is named by the commit it
+is - its abbreviated SHA - so a table column says which revision produced the
+number without a lookup:
 
-  base   `6c83f6f` with strpp before the Array slice fix - the starting point
-  t1     `baaa6b5` - after tranche 1, the Array fix; fragments still copied
-  t2     the working tree's C++ with strpp's `0bc0394` - after tranche 2, the
-         parser takes its input as a StrVal and fragments are slices of it
-  now    as t2, plus the working tree's `strval.h` - the StrVal copy fix
+  6c83f6f  before either tranche, with strpp `0bc0394~1`
+  baaa6b5  after tranche 1, the Array slice fix, with strpp `0bc0394`
+  <sha>    whatever HEAD is, with whatever strpp HEAD is
+
+The head names itself: its abbreviated commit when both trees are clean, or
+`head` when either has changes that no commit produced - in which case it is
+the working tree that gets measured, and claiming a commit for it would
+understate what produced the numbers. Only the strpp headers the ADL sources
+actually include decide that (`strpp_headers_used()`), so an edit to an
+unrelated strpp file does not rename the head.
 
 Two normalisations are applied to the older variants, both recorded in
 `tools/instrument.py` rather than left in a hand-edited copy:
@@ -57,6 +64,20 @@ Two normalisations are applied to the older variants, both recorded in
     it. That is the test driver's business, not the library's, and on a large
     corpus it would swamp the comparison, so every variant frees its buffer.
   - the stack probe needs one line at the parser's recursion point.
+
+The Source switch
+------------------
+
+`adlmem.cpp` takes its Source and Sink from a `#define`, so the older
+byte-pointer Source can still be built:
+
+    -DADL_SOURCE_UTF8PTR    the byte-pointer Source; every fragment is copied
+    (default)               the StrVal Source; every fragment is a slice
+
+The last table reports the head built both ways, which is the check that
+"both Sources still work" is true rather than merely intended. The variants
+before the switch existed report `n/a`: they are the byte-pointer Source, so
+there is nothing to compare them against.
 
 Layout
 -------

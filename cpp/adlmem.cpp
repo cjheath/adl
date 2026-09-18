@@ -70,17 +70,18 @@ bool load_file(ADLMemStoreSink& sink, const char* filename)
 			total_lines++;
 
 	/*
-	 * A Source views its input; it never owns it, so `raw` has to outlive the
-	 * parse either way. In the StrVal form the fragments are slices of
-	 * `text`, which owns its own copy of the file and keeps it alive; in the
-	 * byte-pointer form every fragment is a copy, so once the parse is done
-	 * nothing refers to `raw` and it is freed below.
+	 * A Source views its input, it never owns it - but how long the input has
+	 * to stay alive differs, and so does the peak, which is one of the things
+	 * being measured. The byte-pointer form keeps the buffer for the whole
+	 * parse; the StrVal form copies the file into a body of its own, so `raw`
+	 * is finished with as soon as that exists.
 	 */
 #if	defined(ADL_SOURCE_UTF8PTR)
-	ADLMemSource			source(raw);
+	ADLMemSource			source(raw);			// views raw
 #else
-	StrVal				text(raw, (StrValIndex)file_size);
+	StrVal				text(raw, (StrValIndex)file_size);	// owns a copy
 	ADLMemSource			source(&text);
+	delete [] raw;							// now finished with
 #endif
 
 	ADLParser<ADLMemStoreSink>	adl(sink);		// a Parser to feed the Sink
@@ -97,13 +98,13 @@ bool load_file(ADLMemStoreSink& sink, const char* filename)
 	long long			consumed = source.peek() - raw;
 	long long			total = file_size;
 	const char*			unit = "bytes";
+	delete [] raw;					// Every fragment was a copy, so
+							// nothing refers to it now
 #else
 	long long			consumed = source.line_number()-1;
 	long long			total = total_lines;
 	const char*			unit = "lines";
 #endif
-	delete [] raw;					// Finished with: fragments are slices
-							// of `text`, or copies of `raw`
 	printf("%s, processed %lld of %lld %s\n", ok ? "Success" : "Failed", consumed, total, unit);
 
 	return consumed == total;

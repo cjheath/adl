@@ -3,3 +3,5 @@ adl_scan
 adl-rr.html
 CMakeLists-hide.txt
 examples/
+adlmem
+adlmem_utf8ptr
