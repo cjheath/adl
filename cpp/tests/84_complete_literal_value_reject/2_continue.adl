@@ -1,0 +1,18 @@
+// EXPECT: FAIL
+// Rejected: the same rule as the first-assignment case, and an object-literal
+// value can only ever attach to a new Assignment - there is nothing existing
+// to attach to - so it is rejected the same way rather than treated specially.
+// Size is declared plain (": Reference;"), not via the "-> Object" shorthand:
+// that shorthand's own implicit default-restriction assignment would already
+// count as Size's first local Assignment, made before completeness, which
+// would muddy the example.
+Widget: {
+	Colour: String;
+	Size: Reference;
+}
+Widget { Is Complete = True; }
+
+// Faulty: an object-literal value can only attach to a new Assignment.
+Widget {
+	Size = :Object{};
+}

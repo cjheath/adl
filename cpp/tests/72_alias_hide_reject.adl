@@ -1,11 +1,6 @@
-// Deliberately carries no EXPECT marker, for the same reason as
-// 41_reference_reject.adl: this is correctly rejected (see the printed
-// "Can't find name looking for Surname" diagnostic below - Employee's
-// unnamed alias "! Surname;" hides it from here down), but like every
-// other semantic check in start_object(), that's print-only and doesn't
-// currently affect the exit code - the parse still fully succeeds
-// grammatically. Mark this test properly once errors are propagated
-// through a proper ErrNum (see cpp/ToDo).
+// EXPECT: FAIL
+// Rejected: Employee's unnamed alias "! Surname;" hides Person.Surname from
+// here down, so "Employee.Surname" cannot be resolved.
 TOP {
 	Person: {
 		Surname:;

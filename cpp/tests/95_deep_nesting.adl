@@ -29,7 +29,7 @@ TOP {
 																							level23: {
 																								level24: {
 																									level25: {
-																										leaf: String;
+																										leaf: Object;
 																									}
 																								}
 																							}

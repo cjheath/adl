@@ -1,0 +1,14 @@
+// EXPECT: FAIL
+// Rejected: an undefined name in supertype position - "e" is defined nowhere,
+// so there is nothing to ascend to and find. Correct behaviour: an
+// unresolvable supertype is an error.
+TOP {
+	a: {
+		b: {
+			c:;
+		}
+		b.c.d: {
+			j: e;		// Ascend 1. No 'e' is defined anywhere to find.
+		}
+	}
+}

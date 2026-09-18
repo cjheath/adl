@@ -28,26 +28,6 @@ inline bool adl_debug_enabled()
 }
 #define	ADL_TRACE(...)	do { if (adl_debug_enabled()) printf(__VA_ARGS__); } while (0)
 
-/*
- * Error numbers for the ADL Store/Sink layer. See strval.h's STRERR_*
- * definitions and error.h's ErrNum for the scheme these follow: a 16-bit
- * message-set number (allocated to this subsystem) plus a message code
- * within that set. A default-constructed/zero ErrNum means "no error".
- */
-#define	ADLERR_SET			1024
-#define	ADLERR_TOP_NAME			ErrNum(ADLERR_SET, 1)	// The outermost object must be named TOP
-#define	ADLERR_TOP_SUPER		ErrNum(ADLERR_SET, 2)	// TOP's supertype, if given, must be Object
-#define	ADLERR_NO_PARENT		ErrNum(ADLERR_SET, 3)	// A child was skipped because its parent is missing
-#define	ADLERR_PARENT_NOT_FOUND		ErrNum(ADLERR_SET, 4)	// A name on the way to the parent wasn't found
-#define	ADLERR_SUPERTYPE_NOT_FOUND	ErrNum(ADLERR_SET, 5)	// The named supertype wasn't found
-#define	ADLERR_SUPERTYPE_CHANGED	ErrNum(ADLERR_SET, 6)	// Re-opening an object may not change its supertype
-#define	ADLERR_REOPEN_NOT_FOUND		ErrNum(ADLERR_SET, 7)	// No supertype and no existing object to reopen
-#define	ADLERR_NAME_NOT_FOUND		ErrNum(ADLERR_SET, 8)	// A name in a path could not be found at all
-#define	ADLERR_REFERENCE_NOT_FOUND	ErrNum(ADLERR_SET, 9)	// A Reference's target path could not be found
-#define	ADLERR_FINAL_VIOLATION		ErrNum(ADLERR_SET, 10)	// An assignment violates an existing final restriction
-#define	ADLERR_ALIAS_NOT_FOUND		ErrNum(ADLERR_SET, 11)	// An Alias's target path could not be found
-#define	ADLERR_STERILE_SUPERTYPE	ErrNum(ADLERR_SET, 12)	// Is Sterile forbids a new subtype of this object
-#define	ADLERR_COMPLETE_PARENT		ErrNum(ADLERR_SET, 13)	// Is Complete forbids new content in this object
 
 /*
  * An ADLStoreStub relies on a Value and a Handle to an object.
@@ -77,6 +57,9 @@ public:
 	PegexpValue	effective_syntax();	// This object's own effective (inherited) Syntax
 	bool		is_array();
 	bool		is_reference();	// Is this object's type chain rooted at the built-in Reference?
+	bool		is_regular_expression();	// Is it rooted at the built-in Regular Expression?
+						// (ADLStoreSink::expected_value_kind() needs this, and the
+						// contract declared every other predicate of the same kind.)
 	bool		is_alias();	// Is this object's immediate super() the built-in Alias?
 	bool		hides(StrVal name);	// Does one of this object's own aliases hide the inherited `name`?
 
@@ -228,6 +211,9 @@ private:
 		ValueType	value_type;	// Type of value assigned
 		StrVal		value;		// Value assigned (display text; see reference_path for a Reference)
 
+		// If there was an error storing this Frame's value, this code will be set:
+		ErrNum		value_error = 0;
+
 		// path name and ascent for a Reference value (only meaningful when value_type == Reference)
 		PathName	reference_path;
 
@@ -357,12 +343,13 @@ public:
 	Handle	last_object() const
 	{ return last_closed; }
 
-	// Grammar-level errors from the Parser itself (unrelated to the Store's
-	// own semantic ErrNum scheme below - the Parser has no code to report)
-	// still call this 3-arg form; it just prints, like it always has.
-	void	error(const char* why, const char* what = 0, const Source& where = Source())
+	// The Parser's own grammar-level errors come in here. They carry
+	// ADLERR_SYNTAX - the input doesn't match the grammar, as opposed to
+	// violating the object model - so every error path returns a code the
+	// Parser can count rather than only printing.
+	ErrNum	error(const char* why, const char* what = 0, const Source& where = Source())
 	{
-		error(ErrNum(), why, what, where);
+		return error(ADLERR_SYNTAX, why, what, where);
 	}
 
 	ErrNum	error(ErrNum num, const char* why, const char* what = 0, const Source& where = Source())
@@ -628,7 +615,8 @@ public:
 		if (final_err)
 			return error(final_err, "Assignment violates a final restriction", object_pathname().asUTF8());
 
-		return 0;
+		// A bad/missing value was reported above; return it here.
+		return frame().value_error;
 	}
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
@@ -741,6 +729,10 @@ public:
 			return ExpectReference;
 		if (var.is_regular_expression())
 			return ExpectRegexp;
+		// An array variable's value is an array literal, or a single element.
+		// This allows the fallback.
+		if (var.is_array())
+			return ExpectArray;
 		return ExpectMatch;
 	}
 
@@ -851,7 +843,7 @@ public:
 			Handle	target = lookup_path(context, frame().reference_path);
 			if (target.is_null())
 			{
-				error(ADLERR_REFERENCE_NOT_FOUND, "Syntax-copy target not found", frame().reference_path.display().asUTF8());
+				frame().value_error = error(ADLERR_REFERENCE_NOT_FOUND, "Syntax-copy target not found", frame().reference_path.display().asUTF8());
 				return store.pegexp_literal("");
 			}
 			return store.pegexp_literal(target.effective_syntax());

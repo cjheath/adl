@@ -1,0 +1,22 @@
+// EXPECT: FAIL
+// Explicit ascent. cpp/ToDo's (a)(3) records both cases as known wrong: the
+// first is expected to succeed, so this marker flips to PASS once ascend
+// counting is fixed. The second is unresolved - see the note on h1.
+TOP {
+	a: {
+		b: {
+			c:;
+		}
+		b.c.d: {
+			// b is a.b, so two ascents from inside a.b.c.d reach a, where b
+			// lives. Anticipated: succeeds. Actual: "Can't find name looking
+			// for b".
+			h: ..b;
+			// Three ascents go past a. Whether "b is not at the top level"
+			// should be an error, or whether the search should stop at the
+			// last scope that could hold it, is not settled - recorded here
+			// so the current behaviour is at least pinned.
+			h1: ...b;	// Faulty ascend: b is not at the top level
+		}
+	}
+}

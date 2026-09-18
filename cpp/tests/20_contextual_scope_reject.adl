@@ -1,0 +1,20 @@
+// EXPECT: FAIL
+// Rejected: a supertype reached through the *reopening* context's own lexical
+// scope - cpp/ToDo's (a)(2)(b), the deepest of the contextual-extension gaps.
+// Resolution walks the extended object's ancestry (c -> b -> a -> TOP) and
+// never l's scope, where "m" actually lives, so this fails with "Supertype
+// name not found looking for m". Closing that gap flips this marker to PASS.
+TOP {
+	a: {
+		b: {
+			c:;
+		}
+		l: {			// New scope for extension
+			m:;				// Something local
+			b.c {		// Contextually extend c
+				n: m;	// Anticipated: supertype found from lexical stack,
+						// not from c. Actual: still fails.
+			}
+		}
+	}
+}

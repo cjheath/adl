@@ -1,10 +1,6 @@
-// Deliberately carries no EXPECT marker, for the same reason as
-// 41_reference_reject.adl/72_alias_hide_reject.adl: this is correctly
-// rejected (see the printed "violates a final restriction" diagnostic
-// below), but like every other semantic check that isn't yet wired
-// through to fail the parse, that's print-only and doesn't currently
-// affect the exit code. Mark this test properly once errors are
-// propagated through a proper ErrNum (see cpp/ToDo).
+// EXPECT: FAIL
+// Rejected: Bread Slicer.Discount was already finalised by Baking Product, and
+// there is no narrowing exception for a non-Reference variable.
 TOP {
 	Digits: {
 		Syntax = /\d/

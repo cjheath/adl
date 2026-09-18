@@ -1,15 +1,11 @@
-// EXPECT: PASS
-// A Syntax mismatch inside a reopened block used to cascade into "can't
-// find closing }" failures for every enclosing block (confirmed against
-// real LVGL-generated output, see ../ToDo's Bugs section item 8) - the
-// bad assignment below would previously have taken the whole Wrapper
-// block down with it, silently losing B's real value too. Now it reports
-// one real error and recovers, so B's own assignment still lands
-// correctly right after it - checked by hand with ADL_DEBUG=1, not by
-// this test's exit code alone (run_tests.sh only checks exit code, and
-// this recovery deliberately still exits 0, matching the exit code of
-// every other semantic check in this codebase per the Standing Note at
-// the top of ../ToDo).
+// EXPECT: FAIL
+// A Syntax mismatch inside a reopened block is an error, so this fails.
+//
+// What it checks, and what the exit code cannot: the mismatch reports one error
+// and recovers rather than cascading into "can't find closing }" for every
+// enclosing block (../ToDo's Bugs item 8), so B's own assignment still lands
+// right after it - confirmed by hand with ADL_DEBUG=1. run_tests.sh compares
+// exit codes only, so the tree it recovers to is not asserted here.
 TOP {
 	Number:;
 	Digits: Number {

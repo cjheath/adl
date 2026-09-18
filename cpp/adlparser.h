@@ -13,6 +13,33 @@
 
 #include	<stdio.h>	// Only used for the stub Source and Sink
 
+/*
+ * Error numbers for ADL, shared by the Parser and the Store/Sink layer. See
+ * strval.h's STRERR_* definitions and error.h's ErrNum for the scheme these
+ * follow: a 16-bit message-set number (allocated to this subsystem) plus a
+ * message code within that set. A default-constructed/zero ErrNum means
+ * "no error".
+ *
+ * The Parser and the Store/Sink layer share them, and adlstore.h includes
+ * this header, so every consumer sees the whole set. The Parser's own
+ * grammar diagnostics carry ADLERR_SYNTAX.
+ */
+#define	ADLERR_SET			1024
+#define	ADLERR_TOP_NAME			ErrNum(ADLERR_SET, 1)	// The outermost object must be named TOP
+#define	ADLERR_TOP_SUPER		ErrNum(ADLERR_SET, 2)	// TOP's supertype, if given, must be Object
+#define	ADLERR_NO_PARENT		ErrNum(ADLERR_SET, 3)	// A child was skipped because its parent is missing
+#define	ADLERR_PARENT_NOT_FOUND		ErrNum(ADLERR_SET, 4)	// A name on the way to the parent wasn't found
+#define	ADLERR_SUPERTYPE_NOT_FOUND	ErrNum(ADLERR_SET, 5)	// The named supertype wasn't found
+#define	ADLERR_SUPERTYPE_CHANGED	ErrNum(ADLERR_SET, 6)	// Re-opening an object may not change its supertype
+#define	ADLERR_REOPEN_NOT_FOUND		ErrNum(ADLERR_SET, 7)	// No supertype and no existing object to reopen
+#define	ADLERR_NAME_NOT_FOUND		ErrNum(ADLERR_SET, 8)	// A name in a path could not be found at all
+#define	ADLERR_REFERENCE_NOT_FOUND	ErrNum(ADLERR_SET, 9)	// A Reference's target path could not be found
+#define	ADLERR_FINAL_VIOLATION		ErrNum(ADLERR_SET, 10)	// An assignment violates an existing final restriction
+#define	ADLERR_ALIAS_NOT_FOUND		ErrNum(ADLERR_SET, 11)	// An Alias's target path could not be found
+#define	ADLERR_STERILE_SUPERTYPE	ErrNum(ADLERR_SET, 12)	// Is Sterile forbids a new subtype of this object
+#define	ADLERR_COMPLETE_PARENT		ErrNum(ADLERR_SET, 13)	// Is Complete forbids new content in this object
+#define	ADLERR_SYNTAX			ErrNum(ADLERR_SET, 14)	// The input doesn't match the ADL grammar
+
 class	ADLSourceUTF8Ptr
 {
 	const UTF8*	data;
@@ -72,14 +99,16 @@ public:
  * (grammar comment on atomic_value(), below): a Regular Expression
  * variable's value is a pegexp; a Reference variable's value is a
  * path_name or object literal; any other variable's value must match its
- * Syntax. There's no "don't know, try anything" case: a Sink that can't
+ * Syntax, unless it's an array variable, whose value is an array literal -
+ * or a single element, which value() wraps. There's no "don't know, try
+ * anything" case: a Sink that can't
  * determine the variable's type (e.g. because it failed to resolve at
  * all) has nothing valid to fall back to either, so it should report
  * whichever of these is closest to correct and let that kind's own
  * parsing fail normally, rather than accepting a value no real check was
  * ever run against.
  */
-enum ValueExpectation { ExpectMatch, ExpectReference, ExpectRegexp };
+enum ValueExpectation { ExpectMatch, ExpectReference, ExpectRegexp, ExpectArray };
 
 /*
  * This is an API stub. During parsing, these methods get called.
@@ -93,33 +122,34 @@ public:
 
 	ADLSinkStub() {}
 
-	void	error(const char* why, const char* what, const Source& where)
+	ErrNum	error(const char* why, const char* what = 0, const Source& where = Source())
 		{
 			printf("At line %d:%d, %s MISSING %s: ", where.line_number(), where.column(), why, what);
 			where.print_ahead();
+			return ADLERR_SYNTAX;
 		}
 
 	void	definition_starts() {}			// A declaration just started
-	void	definition_ends() {}			// This declaration just ended
+	ErrNum	definition_ends() { return ErrNum(); }	// This declaration just ended
 	void	ascend() {}				// Go up one scope level to look for a name
 	void	name(Source start, Source end) {}	// A name exists between start and end
 	void	descend() {}				// Go down one level from the last name
 	void	pathname(bool ok) {}			// The sequence *ascend name *(descend name) is complete
 	void	object_name() {}			// The last pathname was for a new object
-	void	supertype() {}				// Last pathname was a supertype
-	void	reference_type(bool is_multi) {}	// Last pathname was a reference
+	ErrNum	supertype() { return ErrNum(); }	// Last pathname was a supertype
+	ErrNum	reference_type(bool is_multi) { return ErrNum(); }	// Last pathname was a reference
 	void	reference_done(bool ok) {}		// Reference completed
-	void	alias() {}				// Last pathname is an alias
-	void	block_start() {}			// enter the block given by the pathname and supertype
+	ErrNum	alias() { return ErrNum(); }		// Last pathname is an alias
+	ErrNum	block_start() { return ErrNum(); }	// enter the block given by the pathname and supertype
 	void	block_end() {}				// exit the block given by the pathname and supertype
-	void	is_array() {}				// This definition is an array
-	void	assignment_starts(bool is_final) {}	// '=' or '~=' just seen; about to parse its value
-	void	assignment(bool is_final) {}		// The value(s) are assigned to the current definition
+	ErrNum	is_array() { return ErrNum(); }		// This definition is an array
+	ErrNum	assignment_starts(bool is_final) { return ErrNum(); }	// '=' or '~=' just seen; about to parse its value
+	ErrNum	assignment(bool is_final) { return ErrNum(); }	// The value(s) are assigned to the current definition
 	void	string_literal(Source start, Source end) {}	// Contents of a string between start and end
 	void	numeric_literal(Source start, Source end) {}	// Contents of a number between start and end
 	void	matched_literal(Source start, Source end) {}	// Contents of a matched value between start and end
 	void	object_literal_starts() {}		// ':' seen for an object-literal value
-	void	object_literal_ends() {}		// supertype/?block/?assignment for the literal are complete
+	ErrNum	object_literal_ends() { return ErrNum(); }	// supertype/?block/?assignment for the literal are complete
 	void	reference_literal() {}			// The last pathname is a value to assign to a reference variable
 	void	syntax_copy() {}			// The last pathname is a value to assign to a Regular-Expression variable
 	void	pegexp_literal(Source start, Source end) {}	// Contents of a pegexp between start and end
@@ -150,8 +180,11 @@ public:
 
 	bool	parse(Source&);			// ?BOM *definition
 
+	// Count how many errors this Parser has seen
+	unsigned	total_errors() const		{ return error_count; }
+
 	void	error(const char* why, const char* what, const Source& where)
-		{ sink.error(why, what, where); }
+		{ record_error(sink.error(why, what, where)); }
 
 protected:
 	bool	definition(Source&);		// &. !'}' ?path_name body ?';'
@@ -194,7 +227,14 @@ protected:
 	bool	string_literal(Source&);
 	bool	numeric_literal(Source&);
 
-	Sink&	sink;
+	// If ErrNum is non-zero, increment the error count
+	void	record_error(ErrNum err)	{ if (err) error_count++; }	// ErrNum's
+						// int conversion makes `if (err)` the only
+						// unambiguous test: err != 0 matches both it and
+						// error.h's operator!=(int)
+
+	Sink&		sink;
+	unsigned	error_count = 0;
 };
 
 // ?BOM *definition
@@ -239,7 +279,7 @@ template<typename Source> bool ADLParser<Source>::definition(Source& source)
 		space(probe);
 	}
 
-	sink.definition_ends();
+	record_error(sink.definition_ends());
 
 	// There was a body, so advance:
 	source = probe;
@@ -366,7 +406,7 @@ template<typename Source> bool ADLParser<Source>::reference(Source& source)
 		error("reference", "typename", probe);
 		return false;
 	}
-	sink.reference_type(ch == '=');
+	record_error(sink.reference_type(ch == '='));
 
 	bool	has_block = block(probe);
 	bool	has_assignment = assignment(probe, type);
@@ -394,7 +434,7 @@ template<typename Source> bool ADLParser<Source>::alias_from(Source& source)
 	bool	ok = EOB(probe);
 	if (ok)
 	{
-		sink.alias();
+		record_error(sink.alias());
 		source = probe;
 	}
 	return ok;
@@ -412,7 +452,7 @@ template<typename Source> bool ADLParser<Source>::supertype(Source& source)
 
 	Source	start(probe);
 	bool	has_path_name = path_name(probe);
-	sink.supertype();
+	record_error(sink.supertype());
 	// printf("Found supertype path_name `"); probe.print_from(start); printf("`\n");
 	space(probe);
 
@@ -431,7 +471,7 @@ template<typename Source> bool ADLParser<Source>::block(Source& source)
 	probe.advance();
 	space(probe);
 
-	sink.block_start();
+	record_error(sink.block_start());
 
 	// Zero or more definitions:
 	while (definition(probe))
@@ -468,7 +508,7 @@ template<typename Source> bool ADLParser<Source>::post_body(Source& source, Type
 			return false;	// '[' with no ']'
 		}
 		probe.advance();
-		sink.is_array();
+		record_error(sink.is_array());
 		space(probe);
 		is_array = true;
 	}
@@ -497,7 +537,7 @@ template<typename Source> bool ADLParser<Source>::final_assignment(Source& sourc
 	probe.advance();
 	space(probe);
 
-	sink.assignment_starts(true);
+	record_error(sink.assignment_starts(true));
 	bool	has_value = value(probe, type);
 	if (!has_value)
 	{
@@ -505,7 +545,7 @@ template<typename Source> bool ADLParser<Source>::final_assignment(Source& sourc
 		return false;	// Assignment must have a value
 	}
 
-	sink.assignment(true);
+	record_error(sink.assignment(true));
 	space(probe);
 	source = probe; 
 	return true;
@@ -527,12 +567,12 @@ template<typename Source> bool ADLParser<Source>::tentative_assignment(Source& s
 	probe.advance();
 	space(probe);
 
-	sink.assignment_starts(false);
+	record_error(sink.assignment_starts(false));
 	bool	has_value = value(probe, type);
 	if (!has_value)
 		return false;	// Assignment must have a value
 
-	sink.assignment(false);
+	record_error(sink.assignment(false));
 	space(probe);
 	source = probe; 
 	return true;
@@ -598,7 +638,9 @@ template<typename Source> bool ADLParser<Source>::atomic_value(Source& source, T
 {
 	Source	probe(source);
 
-	switch (sink.expected_value_kind(type))
+	ValueExpectation	kind = sink.expected_value_kind(type);
+
+	switch (kind)
 	{
 	case ExpectRegexp:
 		if (!pegexp_literal(probe) && !syntax_copy(probe, type))
@@ -610,6 +652,13 @@ template<typename Source> bool ADLParser<Source>::atomic_value(Source& source, T
 			return false;
 		break;
 
+	case ExpectArray:		// An array variable: its Syntax is the element type's,
+					// so a lone element is matched in the case below
+		// If we aren't looking at [, this is not an array literal,
+		// but we might accept a single value of the correct type.
+		if (probe.peek_char() == '[')
+			return false;
+		// fall through
 	case ExpectMatch:
 	default:
 	{
@@ -660,7 +709,7 @@ template<typename Source> bool ADLParser<Source>::object_literal(Source& source)
 	supertype(source);			// Always succeeds now that we've seen ':'
 	bool	has_block = block(source);
 	bool	has_assignment = assignment(source, type);
-	sink.object_literal_ends();		// Create the object (if not already), and pop its Frame
+	record_error(sink.object_literal_ends());	// Create the object (if not already), and pop its Frame
 	return true;
 }
 

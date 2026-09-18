@@ -1,0 +1,9 @@
+// EXPECT: FAIL
+// Rejected: "Parent" is set once by the engine when the object is created and
+// behaves like a final assignment, so Foo's real parent (TOP) cannot be
+// renamed to Boolean.
+Foo: Object;
+
+Foo {
+	Parent = Boolean;
+}

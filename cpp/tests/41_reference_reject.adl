@@ -1,10 +1,6 @@
-// Deliberately carries no EXPECT marker: this is rejected (see the
-// printed "violates a final restriction" diagnostic below), but like
-// every other semantic check in start_object()/assignment() (e.g.
-// "Cannot change supertype"), that's print-only and doesn't currently
-// affect the exit code - the parse still fully succeeds grammatically.
-// Mark this test properly once errors are propagated through a proper
-// ErrNum (see cpp/ToDo).
+// EXPECT: FAIL
+// Rejected: a final Reference restriction inherited from Employment may only
+// be narrowed to the declared target or a subtype of it, and Dog is neither.
 TOP {
 	Company:;
 	Dog:;

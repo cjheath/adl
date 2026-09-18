@@ -1,0 +1,7 @@
+// EXPECT: FAIL
+// Rejected: adl.adl already finalised "Is Sterile = True" on Boolean, and a
+// tentative or final re-assignment is refused even to the same subtype -
+// there is no narrowing exception for a non-Reference variable.
+Boolean {
+	Is Sterile = False;
+}

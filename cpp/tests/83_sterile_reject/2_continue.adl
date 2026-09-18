@@ -1,14 +1,8 @@
-// Deliberately carries no EXPECT marker, for the same reason as
-// 41_reference_reject.adl and its siblings: this is correctly rejected
-// (see the printed "Cannot create a new subtype of a sterile object"
-// diagnostic below), but like every other semantic check that isn't yet
-// wired through to fail the parse, that's print-only and doesn't
-// currently affect the exit code. Mark this test properly once errors
-// are propagated through a proper ErrNum (see cpp/ToDo).
-//
-// README "Enumerations": "Making an object Sterile prevents definition
-// of any further subtypes." Colour declares its alternatives first, then
-// becomes sterile - matching adl.adl's own Boolean/True/False idiom.
+// EXPECT: FAIL
+// Rejected: Colour is sterile, so no new subtype of it may be created. The
+// same failure is reported twice - once position-less from the object model,
+// once positioned by the Sink - and the Parser counts each report, so a single
+// rejected definition can count as more than one error.
 Colour: Enumeration;
 Red: Colour;
 Colour { Is Sterile = True; }

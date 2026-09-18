@@ -1,4 +1,9 @@
 // EXPECT: PASS
+// Re-opening, in the forms that work: a plain reopen of an object declared in
+// the same block, and a *contextual* extension reached only by ascending from
+// an inner scope. The cases that fail are separate tests, each with its own
+// marker: 05_supertype_undefined_reject, 05_double_ascent_reject and
+// 20_contextual_scope_reject.
 TOP {
 	a: {
 		b: {
@@ -8,40 +13,27 @@ TOP {
 		// Reopen b.c and add d with contents:
 		b.c.d: {		// New a.b.c.d
 			f: b.c;		// Contains an f
-			f1: c;		// Anticipated: Faulty lookup (supertype should not be sought in b).
-					// Actual: succeeds - b is searched anyway.
+			f1: c;			// Anticipated: faulty lookup (supertype should not be sought
+					//           in b). Actual: succeeds - b is searched anyway.
+					//           A wrong *success*, so an exit code cannot express it.
 			g: b;		// Supertype ascends implicitly
-			h: ..b;		// Anticipated: supertype ascends explicitly and succeeds.
-					// Actual: fails - "Can't find name looking for b".
-			h1: ...b;	// Faulty ascend, b is not at the top level
 			i: f;		// No ascend
-			j: e;		// Ascend 1. Actual: fails - no 'e' is defined anywhere to find.
 		}
 
 		b.c {			// Not contextual: "b" is a's own direct child, and
-			k:;		// this is written directly within a's own block -
-		}			// a true local reopen of a's own content.
+			k:;			// this is written directly within a's own block -
+		}				// a true local reopen of a's own content.
 
 		l: {			// New scope for extension
-			m:;		// Something local
+			m:;				// Something local
 			b.c {		// Contextually extend c: "b" is found only by ascending
-					// from l (not l's own child), so this reopen extends
-					// c, scoped to l, rather than modifying the real a.b.c.
-				n: m;	// Anticipated: supertype found from lexical stack,
-					// not from c. Actual: still fails ("Supertype
-					// name not found looking for m") - a separate,
-					// deeper gap even now that the reopen above is
-					// correctly contextual: name resolution *within*
-					// the extension still only walks the *extended
-					// object's own* ancestry (c -> b -> a -> TOP),
-					// not l's own lexical scope where "m" actually
-					// lives - see cpp/ToDo.
-				o: k;	// k *is* correctly found (as c's own child,
-					// via the extension's fallback to c) - this
-					// isn't a bug: being contextually reopened
-					// doesn't hide c's own real content from
-					// within its own reopened block, it only
-					// affects what's visible from *outside* it.
+						// from l (not l's own child), so this reopen extends
+						// c, scoped to l, rather than modifying the real a.b.c.
+				o: k;	// k *is* correctly found (as c's own child, via the
+						// extension's fallback to c) - this isn't a bug: being
+						// contextually reopened doesn't hide c's own real content
+						// from within its own reopened block, it only affects
+						// what's visible from *outside* it.
 			}
 		}
 	}

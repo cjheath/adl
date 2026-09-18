@@ -4,7 +4,7 @@
 // assigned* variable in place (begin_assign() reuses that local
 // Assignment rather than creating a new one), is unaffected. A variable's
 // very first assignment is new content, even if the variable itself was
-// declared earlier - see 84_complete_reject for that case.
+// declared earlier - see 84_complete_first_assignment_reject for that case.
 
 // True/False (adl.adl) are existing subtypes of the already-sterile
 // Boolean; reopening them is not "a new subtype".

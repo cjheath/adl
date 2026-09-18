@@ -105,9 +105,17 @@ bool load_file(ADLMemStoreSink& sink, const char* filename)
 	long long			total = total_lines;
 	const char*			unit = "lines";
 #endif
-	printf("%s, processed %lld of %lld %s\n", ok ? "Success" : "Failed", consumed, total, unit);
 
-	return consumed == total;
+	/*
+	 * We succeed when: the grammar ran to completion, the whole input
+	 * was consumed, and nothing was rejected along the way.
+	 */
+	bool	clean = ok && consumed == total && adl.total_errors() == 0;
+	printf("%s, processed %lld of %lld %s, %u %s\n",
+		clean ? "Success" : "Failed", consumed, total, unit,
+		adl.total_errors(), adl.total_errors() == 1 ? "error" : "errors");
+
+	return clean;
 }
 
 int main(int argc, const char** argv)

@@ -1,0 +1,13 @@
+// EXPECT: FAIL
+// Rejected: Widget is complete, so "No further contents may be added" - a new
+// field cannot be introduced.
+Widget: {
+	Colour: String;
+	Size: Reference;
+}
+Widget { Is Complete = True; }
+
+// Faulty: Weight may not be added as a new field.
+Widget {
+	Weight: String;
+}

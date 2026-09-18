@@ -1,0 +1,16 @@
+// EXPECT: PASS
+// The documented scalar-for-array form: an array variable may take a single
+// element rather than an array literal (README, "Allow assigning non-array
+// (single element) to an array variable"). An element matches its element
+// type; it is not treated as a malformed array literal.
+//
+// The exit code asserts only that the value is accepted. What the tree holds
+// was checked by hand, as this suite's convention: the Assignment stores the
+// scalar "5", where adl.rb stores a one-element array.
+TOP {
+	Number:;
+	Digits: Number {
+		Syntax = /[1-9]*\d/
+	}
+	Lone: Digits[] = 5;
+}

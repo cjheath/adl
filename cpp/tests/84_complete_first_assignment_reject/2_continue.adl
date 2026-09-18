@@ -1,0 +1,14 @@
+// EXPECT: FAIL
+// Rejected: a variable's very first assignment is new content - a brand new
+// Assignment - even though Colour itself was declared before Widget became
+// complete.
+Widget: {
+	Colour: String;
+	Size: Reference;
+}
+Widget { Is Complete = True; }
+
+// Faulty: Colour's first assignment is new content.
+Widget {
+	Colour = 'Red';
+}
