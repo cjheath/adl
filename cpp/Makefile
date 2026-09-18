@@ -8,6 +8,8 @@ CXXFLAGS =	-std=c++17 $(COPT)
 STRPP	=	../../strpp
 PX	=	../../px
 
+STRPP_HDRS	=	$(wildcard $(STRPP)/include/*.h)
+
 COPT	=	-I. -I$(STRPP)/include -DHAVE_PTHREADS
 
 DEBUG	=	-O2 $(COPT)
@@ -45,8 +47,8 @@ lib:
 %:	%.cpp $(LIB) Makefile
 	$(CXX) $(DEBUG) $(CXXFLAGS) -Iinclude -Itest -o $@ $< $(LIB) $(LIBS)
 
-adlmem:		adlparser.h adlstore.h adlmem.h
-adl_scan:	adlparser.h
+adlmem:		adlparser.h adlstore.h adlmem.h $(STRPP_HDRS)
+adl_scan:	adlparser.h $(STRPP_HDRS)
 
 doc:	../docs/adl-rr.html
 ../docs/adl-rr.html: px adl.px
