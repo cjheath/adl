@@ -24,6 +24,8 @@
 #include	<adlstore.h>
 #include	<adlmem.h>
 #include	<adlstrval.h>
+#include	<adl_display.h>		// The only place that prints what was reported
+
 
 StrVal inspect(ADL::Handle, int depth = 0);
 void p(ADL::Handle h);
@@ -59,7 +61,7 @@ typedef	ADLStrValSink<ADL::MemStore>	ADLMemStoreSink;
 typedef	ADLSourceStrVal			ADLMemSource;
 #endif
 
-bool load_file(ADLMemStoreSink& sink, const char* filename)
+bool load_file(ADLMemStoreSink& sink, const char* filename, bool last_file)
 {
 	off_t				file_size;
 	char*				raw = slurp_file(filename, &file_size);
@@ -88,32 +90,72 @@ bool load_file(ADLMemStoreSink& sink, const char* filename)
 	bool				ok = adl.parse(source);
 
 	/*
+	 * Where the first message was reported, read before the drain empties the
+	 * buffer. The parser recovers and carries on, so where it finally stopped
+	 * says nothing about how much of the input was good: the first error is
+	 * the place parsing stopped being clean, and the text successfully parsed
+	 * is what lies before it.
+	 */
+	int				first_line = 0;
+	int				first_column = 0;
+	(void)adl_first_error_position(first_line, first_column);
+
+	/*
 	 * How far the parse got, and out of what. The StrVal Source counts
 	 * characters, since that is what its slices are indexed in; the
 	 * byte-pointer one has only bytes. Either way the criterion is that the
 	 * whole input was consumed, which is what makes tests/invalid-syntax.adl
-	 * fail: parse() returns true having read none of it.
+	 * fail: parse() returns true having read none of it. Up to the first
+	 * error, that reach is measured in this flavour's own unit: lines for the
+	 * StrVal Source, bytes for the byte-pointer one, which cannot be counted
+	 * in the other's terms.
 	 */
 #if	defined(ADL_SOURCE_UTF8PTR)
 	long long			consumed = source.peek() - raw;
 	long long			total = file_size;
 	const char*			unit = "bytes";
+	long long			successful = first_line > 0
+						? adl_bytes_before((const UTF8*)raw, first_line, first_column)
+						: consumed;
 	delete [] raw;					// Every fragment was a copy, so
 							// nothing refers to it now
 #else
 	long long			consumed = source.line_number()-1;
 	long long			total = total_lines;
 	const char*			unit = "lines";
+	long long			successful = first_line > 0 ? first_line-1 : consumed;
 #endif
 
 	/*
-	 * We succeed when: the grammar ran to completion, the whole input
-	 * was consumed, and nothing was rejected along the way.
+	 * Show what the parse reported, and count it in the same act: the buffer
+	 * is the only record of what was reported, so the display and the count
+	 * cannot disagree.
 	 */
-	bool	clean = ok && consumed == total && adl.total_errors() == 0;
-	printf("%s, processed %lld of %lld %s, %u %s\n",
-		clean ? "Success" : "Failed", consumed, total, unit,
-		adl.total_errors(), adl.total_errors() == 1 ? "error" : "errors");
+	unsigned	errors = adl_display_errors(filename);
+
+	/*
+	 * We succeed when: the grammar ran to completion, the whole input
+	 * was consumed, and nothing was rejected along the way. What is reported
+	 * is then how far the input got before the first error, which is where
+	 * parsing stopped being clean - not how far it recovered afterwards.
+	 *
+	 * A sequence of files is one parse continuing from where the last left
+	 * off, and it is the last of them that the reader is depending on, so a
+	 * success is announced only for that one. A failure is announced wherever
+	 * it happens - that is the file the run stopped on.
+	 */
+	bool	clean = ok && consumed == total && errors == 0;
+	if (!clean || last_file)
+	{
+		if (errors > 0 && first_line > 0)
+			printf("Failed, parsed %lld of %lld %s before the first error at %d:%d, %u %s\n",
+				successful, total, unit, first_line, first_column,
+				errors, errors == 1 ? "error" : "errors");
+		else
+			printf("%s, processed %lld of %lld %s, %u %s\n",
+				clean ? "Success" : "Failed", consumed, total, unit,
+				errors, errors == 1 ? "error" : "errors");
+	}
 
 	return clean;
 }
@@ -123,6 +165,7 @@ int main(int argc, const char** argv)
 	ADL::MemStore	store;			// Use the memory store
 	ADLMemStoreSink	sink(store);		// Use the adapter
 	bool		show_all = false;
+	bool		dump_always = false;	// -d: dump the Store even after errors
 
 	/*
 	 * Usually each ADL file starts with root_object set to the last object finalised in the previous file.
@@ -130,9 +173,20 @@ int main(int argc, const char** argv)
 	 */
 	bool		fresh_top = false;
 
+	/*
+	 * Which file the run is judged by: the last one named. Counted before the
+	 * loop eats its arguments, and by the same rule the loop uses to tell a
+	 * filename from an option.
+	 */
+	int		last_file = 1;
+	for (int i = 1; i < argc; i++)
+		if (strcmp(argv[i], "-a") && strcmp(argv[i], "-T") && strcmp(argv[i], "-d"))
+			last_file = i;
+
 	const char*	program_name = argv[0];
 	bool		ok = true;
-	for (--argc, ++argv; ok && argc > 0; argc--, argv++)
+	int		arg_index = 1;
+	for (--argc, ++argv; ok && argc > 0; argc--, argv++, arg_index++)
 	{
 		const char*	filename = *argv;
 		if (0 == strcmp(filename, "-a"))
@@ -145,14 +199,27 @@ int main(int argc, const char** argv)
 			fresh_top = true;
 			continue;
 		}
+		if (0 == strcmp(filename, "-d"))
+		{
+			dump_always = true;
+			continue;
+		}
 		sink.root_object = fresh_top ? store.top() : sink.last_object();
-		ok = load_file(sink, filename);
+		ok = load_file(sink, filename, arg_index == last_file);
 	}
+
+	/*
+	 * Dumping the Store is for a parse that reported nothing: after errors,
+	 * what it holds is whatever partial state the parse recovered to, which
+	 * is not what a reader wants to see. -d asks for the tree anyway.
+	 */
+	if (!ok && !dump_always)
+		return 1;
 
 	ADL::MemStore::Handle	last = show_all ? store.top() : sink.last_object();
 
 	p(last);
-	exit(ok ? 0 : 1);
+	return 0;
 }
 
 /*

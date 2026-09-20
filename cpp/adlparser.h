@@ -7,38 +7,12 @@
 
 #include	<char_encoding.h>
 #include	<error.h>
+#include	<adl_msg.h>	// The reporting function of each message
 #include	<fcntl.h>
 #include	<pegexp.h>
 #include	<strval.h>	// Sources hand the Sink a fragment as a StrVal
 
-#include	<stdio.h>	// Only used for the stub Source and Sink
-
-/*
- * Error numbers for ADL, shared by the Parser and the Store/Sink layer. See
- * strval.h's STRERR_* definitions and error.h's ErrNum for the scheme these
- * follow: a 16-bit message-set number (allocated to this subsystem) plus a
- * message code within that set. A default-constructed/zero ErrNum means
- * "no error".
- *
- * The Parser and the Store/Sink layer share them, and adlstore.h includes
- * this header, so every consumer sees the whole set. The Parser's own
- * grammar diagnostics carry ADLERR_SYNTAX.
- */
-#define	ADLERR_SET			1024
-#define	ADLERR_TOP_NAME			ErrNum(ADLERR_SET, 1)	// The outermost object must be named TOP
-#define	ADLERR_TOP_SUPER		ErrNum(ADLERR_SET, 2)	// TOP's supertype, if given, must be Object
-#define	ADLERR_NO_PARENT		ErrNum(ADLERR_SET, 3)	// A child was skipped because its parent is missing
-#define	ADLERR_PARENT_NOT_FOUND		ErrNum(ADLERR_SET, 4)	// A name on the way to the parent wasn't found
-#define	ADLERR_SUPERTYPE_NOT_FOUND	ErrNum(ADLERR_SET, 5)	// The named supertype wasn't found
-#define	ADLERR_SUPERTYPE_CHANGED	ErrNum(ADLERR_SET, 6)	// Re-opening an object may not change its supertype
-#define	ADLERR_REOPEN_NOT_FOUND		ErrNum(ADLERR_SET, 7)	// No supertype and no existing object to reopen
-#define	ADLERR_NAME_NOT_FOUND		ErrNum(ADLERR_SET, 8)	// A name in a path could not be found at all
-#define	ADLERR_REFERENCE_NOT_FOUND	ErrNum(ADLERR_SET, 9)	// A Reference's target path could not be found
-#define	ADLERR_FINAL_VIOLATION		ErrNum(ADLERR_SET, 10)	// An assignment violates an existing final restriction
-#define	ADLERR_ALIAS_NOT_FOUND		ErrNum(ADLERR_SET, 11)	// An Alias's target path could not be found
-#define	ADLERR_STERILE_SUPERTYPE	ErrNum(ADLERR_SET, 12)	// Is Sterile forbids a new subtype of this object
-#define	ADLERR_COMPLETE_PARENT		ErrNum(ADLERR_SET, 13)	// Is Complete forbids new content in this object
-#define	ADLERR_SYNTAX			ErrNum(ADLERR_SET, 14)	// The input doesn't match the ADL grammar
+#include	<adl_err.h>	// ADL's error numbers: the public half of the generated pair
 
 class	ADLSourceUTF8Ptr
 {
@@ -88,10 +62,18 @@ public:
 		}
 	static ADLSourceUTF8Ptr	over(StrVal& s)		// A Source seeing the whole of `s`
 		{ return ADLSourceUTF8Ptr(s.asUTF8()); }
-	void	print_from(const ADLSourceUTF8Ptr& start) const
-		{ printf("%.*s", (int)(bytes_from(start)), start.data); }
-	void	print_ahead() const
-		{ printf("`%.*s`...\n", 20, data); }
+	// The text between two positions, and the text ahead of one. Both answer
+	// a StrVal: no Source prints anything, and a display that wants to show
+	// what was found asks for it here.
+	StrVal	from(const ADLSourceUTF8Ptr& start) const
+		{ return StrVal(start.data, (StrValIndex)bytes_from(start)); }
+	StrVal	ahead(int max_bytes) const
+		{
+			int	n = 0;
+			while (n < max_bytes && data[n] != '\0')
+				n++;
+			return StrVal(data, (StrValIndex)n);
+		}
 };
 
 /*
@@ -113,6 +95,13 @@ enum ValueExpectation { ExpectMatch, ExpectReference, ExpectRegexp, ExpectArray 
 /*
  * This is an API stub. During parsing, these methods get called.
  * If Syntax lookup is required, you need to save enough data to implement it.
+ *
+ * Reporting is split, and neither side sees the other's: the Parser reports
+ * the grammar's expectations itself, through the functions adl_msg.h
+ * generates, and a Sink reports the messages its own operations fail with,
+ * answering an ErrNum that nothing counts any longer - the buffer counts. A
+ * Sink can therefore no longer intercept a grammar diagnostic. Nothing in
+ * this header prints: see adl_display.h.
  */
 template<typename _Source = ADLSourceUTF8Ptr>
 class ADLSinkStub
@@ -121,13 +110,6 @@ public:
 	using	Source = _Source;
 
 	ADLSinkStub() {}
-
-	ErrNum	error(const char* why, const char* what = 0, const Source& where = Source())
-		{
-			printf("At line %d:%d, %s MISSING %s: ", where.line_number(), where.column(), why, what);
-			where.print_ahead();
-			return ADLERR_SYNTAX;
-		}
 
 	void	definition_starts() {}			// A declaration just started
 	ErrNum	definition_ends() { return ErrNum(); }	// This declaration just ended
@@ -180,12 +162,6 @@ public:
 
 	bool	parse(Source&);			// ?BOM *definition
 
-	// Count how many errors this Parser has seen
-	unsigned	total_errors() const		{ return error_count; }
-
-	void	error(const char* why, const char* what, const Source& where)
-		{ record_error(sink.error(why, what, where)); }
-
 protected:
 	bool	definition(Source&);		// &. !'}' ?path_name body ?';'
 	bool	path_name(Source&);		// *'.' ?(name *('.' name))
@@ -227,14 +203,7 @@ protected:
 	bool	string_literal(Source&);
 	bool	numeric_literal(Source&);
 
-	// If ErrNum is non-zero, increment the error count
-	void	record_error(ErrNum err)	{ if (err) error_count++; }	// ErrNum's
-						// int conversion makes `if (err)` the only
-						// unambiguous test: err != 0 matches both it and
-						// error.h's operator!=(int)
-
 	Sink&		sink;
-	unsigned	error_count = 0;
 };
 
 // ?BOM *definition
@@ -247,7 +216,7 @@ template<typename Source> bool ADLParser<Source>::parse(Source& source)
 	space(probe);
 	while (definition(probe))
 		;
-	// printf("PARSE ends at '%d': ", probe.peek_char()); probe.print_ahead();
+	// printf("PARSE ends at '%d': ", probe.peek_char()); probe.ahead(20);
 	source = probe;
 	return true;
 }
@@ -279,7 +248,7 @@ template<typename Source> bool ADLParser<Source>::definition(Source& source)
 		space(probe);
 	}
 
-	record_error(sink.definition_ends());
+	sink.definition_ends();
 
 	// There was a body, so advance:
 	source = probe;
@@ -403,10 +372,10 @@ template<typename Source> bool ADLParser<Source>::reference(Source& source)
 	Type	type(probe);
 	if (!path_name(probe))
 	{
-		error("reference", "typename", probe);
+		ErrorADL_ExpectTypename(probe.line_number(), probe.column());
 		return false;
 	}
-	record_error(sink.reference_type(ch == '='));
+	sink.reference_type(ch == '=');
 
 	bool	has_block = block(probe);
 	bool	has_assignment = assignment(probe, type);
@@ -434,7 +403,7 @@ template<typename Source> bool ADLParser<Source>::alias_from(Source& source)
 	bool	ok = EOB(probe);
 	if (ok)
 	{
-		record_error(sink.alias());
+		sink.alias();
 		source = probe;
 	}
 	return ok;
@@ -452,7 +421,7 @@ template<typename Source> bool ADLParser<Source>::supertype(Source& source)
 
 	Source	start(probe);
 	bool	has_path_name = path_name(probe);
-	record_error(sink.supertype());
+	sink.supertype();
 	// printf("Found supertype path_name `"); probe.print_from(start); printf("`\n");
 	space(probe);
 
@@ -471,7 +440,7 @@ template<typename Source> bool ADLParser<Source>::block(Source& source)
 	probe.advance();
 	space(probe);
 
-	record_error(sink.block_start());
+	sink.block_start();
 
 	// Zero or more definitions:
 	while (definition(probe))
@@ -480,7 +449,7 @@ template<typename Source> bool ADLParser<Source>::block(Source& source)
 	// Must end with }
 	if ('}' != probe.peek_char())
 	{
-		error("block", "closing }", probe);
+		ErrorADL_ExpectClosingBrace(probe.line_number(), probe.column());
 		return false;
 	}
 	probe.advance();
@@ -504,11 +473,11 @@ template<typename Source> bool ADLParser<Source>::post_body(Source& source, Type
 
 		if (']' != probe.peek_char())
 		{
-			error("array_indicator", "closing ]", probe);
+			ErrorADL_ExpectClosingBracket(probe.line_number(), probe.column());
 			return false;	// '[' with no ']'
 		}
 		probe.advance();
-		record_error(sink.is_array());
+		sink.is_array();
 		space(probe);
 		is_array = true;
 	}
@@ -537,15 +506,15 @@ template<typename Source> bool ADLParser<Source>::final_assignment(Source& sourc
 	probe.advance();
 	space(probe);
 
-	record_error(sink.assignment_starts(true));
+	sink.assignment_starts(true);
 	bool	has_value = value(probe, type);
 	if (!has_value)
 	{
-		error("final_assignment", "value", probe);
+		ErrorADL_ExpectValue(probe.line_number(), probe.column());
 		return false;	// Assignment must have a value
 	}
 
-	record_error(sink.assignment(true));
+	sink.assignment(true);
 	space(probe);
 	source = probe; 
 	return true;
@@ -561,18 +530,18 @@ template<typename Source> bool ADLParser<Source>::tentative_assignment(Source& s
 
 	if ('=' != probe.peek_char())
 	{
-		error("tentative_assignment", "= after ~", probe);
+		ErrorADL_ExpectTildeAssign(probe.line_number(), probe.column());
 		return false;	// '~' with no '='
 	}
 	probe.advance();
 	space(probe);
 
-	record_error(sink.assignment_starts(false));
+	sink.assignment_starts(false);
 	bool	has_value = value(probe, type);
 	if (!has_value)
 		return false;	// Assignment must have a value
 
-	record_error(sink.assignment(false));
+	sink.assignment(false);
 	space(probe);
 	source = probe; 
 	return true;
@@ -709,7 +678,7 @@ template<typename Source> bool ADLParser<Source>::object_literal(Source& source)
 	supertype(source);			// Always succeeds now that we've seen ':'
 	bool	has_block = block(source);
 	bool	has_assignment = assignment(source, type);
-	record_error(sink.object_literal_ends());	// Create the object (if not already), and pop its Frame
+	sink.object_literal_ends();	// Create the object (if not already), and pop its Frame
 	return true;
 }
 
@@ -740,7 +709,7 @@ template<typename Source> bool ADLParser<Source>::matched_literal(Source& source
 			 * skipping to the next statement/block boundary so a single bad
 			 * value doesn't take the rest of the file down with it.
 			 */
-			error("Value doesn't match its declared Syntax", "a valid literal", source);
+			ErrorADL_ExpectMatchingLiteral(StrVal(type.peek()), source.line_number(), source.column());
 			Source	start(source);
 			recover_to_boundary(source);
 			sink.matched_literal(start, start);	// Record an empty value, having reported why
@@ -810,7 +779,7 @@ template<typename Source> bool ADLParser<Source>::string_literal(Source& source)
 	}
 	if (UCS4_NONE == ch)
 	{
-		error("string_literal", "closing '", probe);
+		ErrorADL_ExpectClosingQuote(probe.line_number(), probe.column());
 		return false;
 	}
 	sink.string_literal(start, probe);
@@ -918,7 +887,7 @@ template<typename Source> bool ADLParser<Source>::pegexp_literal(Source& source)
 
 	if ('/' != probe.peek_char())
 	{
-		error("Pegexp", "closing /", probe);
+		ErrorADL_ExpectClosingSlash(probe.line_number(), probe.column());
 		return false;
 	}
 	sink.pegexp_literal(start, probe);
@@ -943,7 +912,7 @@ template<typename Source> bool ADLParser<Source>::pegexp_sequence(Source& source
 				ok = true;
 			if (!ok)
 			{
-				error("pegexp_sequence", "atom", probe);
+				ErrorADL_ExpectRegexpAtom(probe.line_number(), probe.column());
 				return false;
 			}
 		}
@@ -994,13 +963,13 @@ template<typename Source> bool ADLParser<Source>::pegexp_group(Source& source)
 
 	if (!pegexp_sequence(probe))
 	{
-		error("pegexp_group", "sequence", probe);
+		ErrorADL_ExpectRegexpSequence(probe.line_number(), probe.column());
 		return false;
 	}
 	
 	if (')' != probe.peek_char())
 	{
-		error("pegexp_group", "closing )", probe);
+		ErrorADL_ExpectClosingParen(probe.line_number(), probe.column());
 		return false;
 	}
 	probe.advance();
@@ -1140,14 +1109,14 @@ template<typename Source> bool ADLParser<Source>::pegexp_class(Source& source)
 		probe.advance(), ch = probe.peek_char();
 	if (!pegexp_class_part(probe))
 	{
-		error("pegexp_class", "valid class", probe);
+		ErrorADL_ExpectRegexpClassBody(probe.line_number(), probe.column());
 		return false;
 	}
 	while (pegexp_class_part(probe))
 		;
 	if (']' != probe.peek_char())
 	{
-		error("pegexp_class", "]", probe);
+		ErrorADL_ExpectRegexpClassClose(probe.line_number(), probe.column());
 		return false;
 	}
 	probe.advance();
@@ -1165,7 +1134,7 @@ template<typename Source> bool ADLParser<Source>::pegexp_class_part(Source& sour
 		return false;
 	if (!pegexp_class_char(probe))
 	{
-		error("pegexp_class_part", "valid class character", probe);
+		ErrorADL_ExpectRegexpClassPart(probe.line_number(), probe.column());
 		return false;
 	}
 	ch = probe.peek_char();

@@ -14,7 +14,6 @@ class	Handle;
 class	Value;
 class	MemStore;
 
-ErrNum	error(ErrNum num, const char* why, StrVal what);	// forward declared: Handle::finish_assign()
 								// (defined before it, below) needs to call it too
 
 /*
@@ -127,11 +126,12 @@ protected:
 					// context's own supertype chain, or null. This walk was
 					// written out twice (in both checks above); it lives here
 					// once so it is emitted once.
-	ErrNum		final_violation(StrVal label, StrVal rest);
-					// The single place that builds an "Assignment violates a
-					// final restriction" message - "<this>.<label> <rest>" -
-					// so the code, the why-string and the variable-path prefix
-					// are emitted once rather than at every rejecting branch.
+	ErrNum		final_violation(StrVal label, StrVal prior, StrVal attempted);
+					// The single place that reports an assignment that a final
+					// restriction forbids: the attribute, what it already
+					// holds, and what this assignment tried to put there
+					// instead. Emitted once rather than at every rejecting
+					// branch.
 	ErrNum		same_or_reject(Handle actual, Handle attempted, StrVal label);
 					// No-op if `attempted` is already `actual`, else reject.
 
@@ -296,7 +296,17 @@ public:
 	using	Handle = ADL::Handle;
 	using	Value = ADL::Value;
 
-	MemStore() : _top(0) {}
+	MemStore() : _top(0), _line(0), _column(0) {}
+
+	/*
+	 * Where the Sink last saw something in the input. This layer has no
+	 * Source of its own, so the Sink tells it (see ADLStoreSink::
+	 * note_position) and the messages raised here carry that position - 0,
+	 * 0 meaning the Sink never had one to tell.
+	 */
+	void	located_at(int line, int column)	{ _line = line; _column = column; }
+	int	line() const				{ return _line; }
+	int	column() const				{ return _column; }
 	Handle		top()
 			{ if (_top.is_null()) bootstrap(); return _top; }
 	Handle		object()
@@ -352,6 +362,8 @@ public:
 
 protected:
 	void		bootstrap();
+	int		_line;			// Where the Sink last was: line, column
+	int		_column;
 	Handle		_top;
 	Handle		_object;
 	Handle		_syntax_variable;
@@ -592,10 +604,9 @@ Handle::finish_assign(Handle slot, Handle variable, Value value, bool is_final)
 		 * so it's unaffected, whether or not this object is complete.
 		 */
 		if (is_complete() && assigned(variable).is_null())
-			return error(
-				ADLERR_COMPLETE_PARENT,
-				"Cannot add new content to a complete object",
-				pathname() + "." + variable.name()
+			return ErrorADL_CompleteParent(
+				pathname(), variable.name(),
+				store()->line(), store()->column()
 			);
 
 		ErrNum	err = check_final_violation(variable, value);
@@ -605,20 +616,6 @@ Handle::finish_assign(Handle slot, Handle variable, Value value, bool is_final)
 
 	slot.object->set_assignment(variable, value, is_final);
 	return 0;
-}
-
-/*
- * A position-less counterpart to ADLStoreSink::error() (adlstore.h): this
- * layer (the object model, not the parser) has no Source/line-number to
- * report, only the names of the variable/context/value involved in the
- * failure - the Sink's own error() call, back at the site that receives
- * this ErrNum, still prints the parse position that goes with it.
- */
-ErrNum
-error(ErrNum num, const char* why, StrVal what)
-{
-	printf("%s: %s\n", why, what.asUTF8());
-	return num;
 }
 
 /*
@@ -642,12 +639,11 @@ Handle::find_assignment_inherited(Handle variable)
  * Built here once, so the rejecting branches don't each carry a copy.
  */
 ErrNum
-Handle::final_violation(StrVal label, StrVal rest)
+Handle::final_violation(StrVal label, StrVal prior, StrVal attempted)
 {
-	return error(
-		ADLERR_FINAL_VIOLATION,
-		"Assignment violates a final restriction",
-		pathname() + "." + label + " " + rest
+	return ErrorADL_FinalViolation(
+		pathname(), label, prior, attempted,
+		store()->line(), store()->column()
 	);
 }
 
@@ -656,7 +652,7 @@ Handle::same_or_reject(Handle actual, Handle attempted, StrVal label)
 {
 	if (attempted == actual)
 		return 0;
-	return final_violation(label, StrVal("is already ") + actual.pathname() + ", not " + attempted.pathname());
+	return final_violation(label, actual.pathname(), attempted.pathname());
 }
 
 /*
@@ -678,7 +674,8 @@ Handle::check_final_violation(Handle variable, Value value)
 	if (!existing.is_null() && existing.is_final())
 		return final_violation(
 			variable.name(),
-			"was already finalised by " + existing.parent().pathname()
+			existing.parent().pathname(),
+			value.handle.is_null() ? value.string : value.handle.pathname()
 		);
 	return 0;
 }
@@ -720,11 +717,10 @@ Handle::check_reference_finality(Handle variable, Value value)
 		ok = same_or_subtype(rejected = value.handle);
 
 	if (!ok)
-		return error(
-			ADLERR_FINAL_VIOLATION,
-			"Reference assignment violates a final restriction",
-			pathname() + "." + variable.name() + " must be " + old_target.pathname()
-				+ " or a subtype, not " + rejected.pathname()
+		return ErrorADL_ReferenceFinalViolation(
+			pathname() + "." + variable.name(),
+			old_target.pathname(), rejected.pathname(),
+			store()->line(), store()->column()
 		);
 	return 0;
 }
@@ -794,14 +790,15 @@ Handle::finish_builtin_assign(BuiltinObjectVariable kind, Value value, bool is_f
 	case BuiltinObjectVariable::Name:
 		if (value.string == name())
 			return 0;
-		return final_violation("Name", StrVal("is already '") + name() + "', not '" + value.string + "'");
+		return final_violation("Name", name(), value.string);
 
 	case BuiltinObjectVariable::IsArray:
 	{
 		bool	attempted = value_is_true(*this, value);
 		if (attempted == is_array())
 			return 0;
-		return final_violation("Is Array", StrVal("is already ") + (is_array() ? "True" : "False"));
+		return final_violation("Is Array", is_array() ? "True" : "False",
+				attempted ? "True" : "False");
 	}
 
 	case BuiltinObjectVariable::IsSterile:
@@ -813,8 +810,8 @@ Handle::finish_builtin_assign(BuiltinObjectVariable kind, Value value, bool is_f
 		{
 			bool	already_final = is_sterile_kind ? t.object->is_sterile_final() : t.object->is_complete_final();
 			if (already_final)
-				return final_violation(label,
-					StrVal("was already ") + (is_sterile_kind ? "sterilised" : "finalised") + " by " + t.pathname());
+				return final_violation(label, t.pathname(),
+					value_is_true(*this, value) ? "True" : "False");
 		}
 		bool	attempted = value_is_true(*this, value);
 		if (is_sterile_kind)

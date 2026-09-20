@@ -76,9 +76,19 @@ public:
 			// CHARACTER distance that indexes a StrVal, never the byte one.
 			return base ? base->substr(char_pos, end.chars_from(*this)) : StrVal();
 		}
-	void	print_from(const ADLSourceStrVal& start) const
-		{ StrValIndex b; const char* cp = start.fragment(*this).asUTF8(b); printf("%.*s", (int)b, cp); }
-	void	print_ahead() const { printf("`%.*s`...\n", 20, p); }
+	// The text between two positions, and the text ahead of one; both answer
+	// a StrVal, since no Source prints anything. from() slices the base, so
+	// nothing is copied; ahead() is a short copy, because the base continues
+	// past the character it stops at.
+	StrVal	from(const ADLSourceStrVal& start) const
+		{ return start.fragment(*this); }
+	StrVal	ahead(int max_bytes) const
+		{
+			int	n = 0;
+			while (n < max_bytes && p[n] != '\0')
+				n++;
+			return StrVal(p, (StrValIndex)n);
+		}
 };
 
 template<typename _Store = ADLStoreStub<>>

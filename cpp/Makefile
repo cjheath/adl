@@ -18,6 +18,9 @@ DEBUG	=	-O2 $(COPT)
 # DEBUG	=	-g -DTRACK_RESULTS $(COPT)
 
 HDRS	=	\
+		adl_err.h \
+		adl_msg.h \
+		adl_display.h \
 		adlparser.h \
 		adlstore.h \
 		adlstrval.h \

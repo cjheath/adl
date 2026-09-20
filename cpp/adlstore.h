@@ -119,6 +119,9 @@ public:
 	using	Handle = _Handle;
 	using	Value = _Value;
 
+	// Where the Sink is: a stub has no use for it
+	void	located_at(int, int) {}
+
 	// Access built-ins quickly:
 	Handle		top() { return Handle(); }
 	Handle		object();		// aka TOP.Object; backends should memoize this lookup
@@ -343,32 +346,23 @@ public:
 	Handle	last_object() const
 	{ return last_closed; }
 
-	// The Parser's own grammar-level errors come in here. They carry
-	// ADLERR_SYNTAX - the input doesn't match the grammar, as opposed to
-	// violating the object model - so every error path returns a code the
-	// Parser can count rather than only printing.
-	ErrNum	error(const char* why, const char* what = 0, const Source& where = Source())
+	/*
+	 * The object model has no Source of its own, so the Sink tells it where we
+	 * are whenever it learns: a Store that does not want positions implements
+	 * located_at() as a no-op. Nothing here prints - a message is reported into
+	 * the thread's error buffer, and the top-level program displays it.
+	 */
+	void	note_position(const Source& where)
 	{
-		return error(ADLERR_SYNTAX, why, what, where);
+		last_source = where;
+		store.located_at(where.line_number(), where.column());
 	}
 
-	ErrNum	error(ErrNum num, const char* why, const char* what = 0, const Source& where = Source())
-	{
-		printf("At line %d:%d, %s", where.line_number(), where.column(), why);
-		if (what)
-		{
-			printf(" looking for %s", what);
-			const char*	cp = where.peek();
-			if (*cp != '\0')
-			{
-				printf(": ");
-				where.print_ahead();
-				return num;
-			}
-		}
-		printf("\n");
-		return num;
-	}
+	// Where this layer is, for the messages it reports: line then column, the
+	// trailing pair of every message by convention, which is why no default
+	// text names them and the display prints them as a prefix.
+	int	source_line() const		{ return last_source.line_number(); }
+	int	source_column() const	{ return last_source.column(); }
 
 	void	definition_starts()			// A declaration just started
 	{
@@ -392,7 +386,7 @@ public:
 
 	void	name(Source start, Source end)		// A name exists between start and end
 	{
-		last_source = end;
+		note_position(end);
 		StrVal	n(start.fragment(end));
 
 		if (' ' != current_path.sep[0])			// "" or ".", start new name in pathname
@@ -472,7 +466,7 @@ public:
 		 * type.
 		 */
 		Handle	context = current_context();
-		Handle	target = context.is_null() ? Handle() : lookup_path(context, reference_path);
+		Handle	target = context.is_null() ? Handle() : lookup_path_for_caller(context, reference_path);
 
 		PathName&	super = supertype_path();
 		super.clear();
@@ -491,14 +485,15 @@ public:
 			return 0;
 
 		if (target.is_null())
-			return error(ADLERR_REFERENCE_NOT_FOUND, "Reference target not found", reference_path.display().asUTF8());
+			return ErrorADL_ReferenceNotFound(variable.pathname(), reference_path.display(),
+							source_line(), source_column());
 
 		// The implicit type restriction is always final; a following
 		// explicit assignment ("X -> Y ~= Z") refines it in place (see
 		// Handle::assign()), rather than adding a second Assignment.
 		ErrNum	final_err = context.assign(variable, store.reference_literal(target), true);
 		if (final_err)
-			return error(final_err, "Reference restriction violates a final restriction", object_pathname().asUTF8());
+			return final_err;		// Reported where it happened; not again here
 
 		return 0;
 	}
@@ -537,9 +532,9 @@ public:
 		if (context.is_null())
 			return 0;
 
-		Handle	target = lookup_path(context, alias_path);
+		Handle	target = lookup_path_for_caller(context, alias_path);
 		if (target.is_null())
-			return error(ADLERR_ALIAS_NOT_FOUND, "Alias target not found", alias_path.display().asUTF8());
+			return ErrorADL_AliasNotFound(object_pathname(), alias_path.display(), source_line(), source_column());
 
 		frame().handle.set_alias(target);
 		return 0;
@@ -613,7 +608,7 @@ public:
 
 		ErrNum	final_err = context.finish_assign(slot, variable, build_value(context), is_final);
 		if (final_err)
-			return error(final_err, "Assignment violates a final restriction", object_pathname().asUTF8());
+			return final_err;		// Reported where it happened; not again here
 
 		// A bad/missing value was reported above; return it here.
 		return frame().value_error;
@@ -621,7 +616,7 @@ public:
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
 	{
-		last_source = end;
+		note_position(end);
 		StrVal	string(start.fragment(end));
 		value_type() = ValueType::String;
 		value() = string;
@@ -629,7 +624,7 @@ public:
 
 	void	numeric_literal(Source start, Source end)	// Contents of a number between start and end
 	{
-		last_source = end;
+		note_position(end);
 		StrVal	number(start.fragment(end));
 		value_type() = ValueType::Number;
 		value() = number;
@@ -637,7 +632,7 @@ public:
 
 	void	matched_literal(Source start, Source end)	// Contents of a matched value between start and end
 	{
-		last_source = end;
+		note_position(end);
 		StrVal	match(start.fragment(end));
 		value_type() = ValueType::Match;
 		value() = match;
@@ -674,7 +669,7 @@ public:
 
 	void	pegexp_literal(Source start, Source end)	// Contents of a pegexp between start and end
 	{
-		last_source = end;
+		note_position(end);
 		StrVal	pegexp(start.fragment(end));
 		value_type() = ValueType::Pegexp;
 		value() = pegexp;		// excludes the delimiting '/'s, per Store::pegexp_literal's contract
@@ -832,7 +827,7 @@ public:
 		case ValueType::Pegexp:		return store.pegexp_literal(value());
 		case ValueType::Reference:
 		{
-			Handle	target = lookup_path(context, frame().reference_path);
+			Handle	target = lookup_path_for_caller(context, frame().reference_path);
 			return store.reference_literal(target);
 		}
 		case ValueType::Match:		return store.matched_literal(value());
@@ -840,10 +835,10 @@ public:
 		case ValueType::Object:		return store.reference_literal(frame().literal_handle);
 		case ValueType::SyntaxCopy:
 		{
-			Handle	target = lookup_path(context, frame().reference_path);
+			Handle	target = lookup_path_for_caller(context, frame().reference_path);
 			if (target.is_null())
 			{
-				frame().value_error = error(ADLERR_REFERENCE_NOT_FOUND, "Syntax-copy target not found", frame().reference_path.display().asUTF8());
+				frame().value_error = ErrorADL_SyntaxCopyNotFound(frame().reference_path.display(), source_line(), source_column());
 				return store.pegexp_literal("");
 			}
 			return store.pegexp_literal(target.effective_syntax());
@@ -864,9 +859,9 @@ public:
 
 	// These two error recur three times each:
 	ErrNum	reopen_not_found()
-			{ return error(ADLERR_REOPEN_NOT_FOUND, "Cannot find object to reopen", object_pathname().asUTF8()); }
+			{ return ErrorADL_ReopenNotFound(object_pathname(), source_line(), source_column()); }
 	ErrNum	supertype_not_found()
-			{ return error(ADLERR_SUPERTYPE_NOT_FOUND, "Supertype name not found", supertype_path().display().asUTF8()); }
+			{ return ErrorADL_SupertypeNotFound(supertype_path().display(), object_pathname(), source_line(), source_column()); }
 
 	/*
 	 * Making an object Sterile prevents definition of any further subtypes.
@@ -874,10 +869,10 @@ public:
 	 * `supertype` as its super(), whether named, anonymous, or an object-literal
 	 * value.
 	 */
-	ErrNum	check_sterile_supertype(Handle supertype)
+	ErrNum	check_sterile_supertype(Handle supertype, StrVal new_subtype)
 	{
 		if (!supertype.is_null() && supertype.is_sterile())
-			return error(ADLERR_STERILE_SUPERTYPE, "Cannot create a new subtype of a sterile object", supertype.pathname().asUTF8());
+			return ErrorADL_SterileSupertype(supertype.pathname(), new_subtype, source_line(), source_column());
 		return 0;
 	}
 
@@ -889,10 +884,10 @@ public:
 	 * or is only now being created for the first time (always is_complete()
 	 * == false then, so the check is harmless there).
 	 */
-	ErrNum	check_complete_parent(Handle parent)
+	ErrNum	check_complete_parent(Handle parent, StrVal new_child)
 	{
 		if (!parent.is_null() && parent.is_complete())
-			return error(ADLERR_COMPLETE_PARENT, "Cannot add new content to a complete object", parent.pathname().asUTF8());
+			return ErrorADL_CompleteParent(parent.pathname(), new_child, source_line(), source_column());
 		return 0;
 	}
 
@@ -910,10 +905,10 @@ public:
 		 */
 		Handle		context = slot.parent();
 		PathName&	super_path = supertype_path();
-		Handle		supertype = super_path.is_empty() ? store.object() : lookup_path(context, super_path);
+		Handle		supertype = super_path.is_empty() ? store.object() : lookup_path_for_caller(context, super_path);
 		if (supertype.is_null())
 			return supertype_not_found();
-		ErrNum	sterile_err = check_sterile_supertype(supertype);
+		ErrNum	sterile_err = check_sterile_supertype(supertype, "<anonymous>");
 		if (sterile_err)
 			return sterile_err;
 
@@ -989,14 +984,14 @@ public:
 			if (new_path.ascent > 0		// Can't ascend to TOP
 			 || new_path.names.length() < 1	// Cannot be anonymous
 			 || new_path.names[0] != "TOP")	// Must be called "TOP"
-				return error(ADLERR_TOP_NAME, "Top object must be called TOP");
+				return ErrorADL_TopName(new_path.display(), source_line(), source_column());
 
 			if (new_path.names.length() == 1)
 			{
 				// If a supertype of TOP is given, it must be just "Object"
 				if (supertype_present()
 				 && (super_path.ascent != 0 || super_path.names.length() != 1 || super_path.names[0] != "Object"))
-					return error(ADLERR_TOP_SUPER, "TOP must be Object");
+					return ErrorADL_TopSuper(super_path.display(), source_line(), source_column());
 
 				frame().handle = store.top();
 				ADL_TRACE("Re-opening TOP\n");
@@ -1011,7 +1006,7 @@ public:
 		}
 
 		if (parent.is_null())
-			return error(ADLERR_NO_PARENT, "Child skipped because parent is missing");
+			return ErrorADL_NoParent(new_path.display(), source_line(), source_column());
 
 		if (new_path.is_empty())
 		{
@@ -1026,14 +1021,14 @@ public:
 			 * nameable or reopenable, per README).
 			 */
 			Handle	supertype = supertype_present() && !super_path.is_empty()
-						? lookup_path(parent, super_path)
+						? lookup_path_for_caller(parent, super_path)
 						: store.object();
 			if (supertype.is_null())
 				return supertype_not_found();
-			ErrNum	sterile_err = check_sterile_supertype(supertype);
+			ErrNum	sterile_err = check_sterile_supertype(supertype, "<anonymous>");
 			if (sterile_err)
 				return sterile_err;
-			ErrNum	complete_err = check_complete_parent(parent);
+			ErrNum	complete_err = check_complete_parent(parent, "<anonymous>");
 			if (complete_err)
 				return complete_err;
 
@@ -1091,7 +1086,7 @@ public:
 				if (child.is_null())		// Not in this parent and we can't ascend
 				{
 					if (!may_ascend)
-						return error(ADLERR_PARENT_NOT_FOUND, "Parent object name not found", child_name.asUTF8());
+						return ErrorADL_ParentNotFound(child_name, source_line(), source_column());
 					parent = parent.parent();
 					truly_ascended = true;
 					may_ascend = false;
@@ -1131,7 +1126,7 @@ public:
 			if (!empty_super)
 			{
 				ADL_TRACE("Looking up supertype %s in %s\n", super_path.display().asUTF8(), context.pathname().asUTF8());
-				supertype = lookup_path(context, super_path);
+				supertype = lookup_path_for_caller(context, super_path);
 			}
 			else
 				supertype = store.object();
@@ -1139,7 +1134,8 @@ public:
 				return supertype_not_found();
 
 			if (!child.is_null() && child.super() != supertype)
-				return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", object_pathname().asUTF8());
+				return ErrorADL_SupertypeChanged(object_pathname(), child.super().pathname(),
+							supertype.pathname(), source_line(), source_column());
 		}
 		else
 		{
@@ -1163,7 +1159,7 @@ public:
 			{
 				PathName	target_path;
 				target_path.names.push(child_name);
-				child = lookup_path(context, target_path);
+				child = lookup_path_for_caller(context, target_path);
 				if (child.is_null())
 					return reopen_not_found();
 				truly_ascended = true;	// Only reached because a plain, local
@@ -1221,7 +1217,7 @@ public:
 				 */
 				PathName	eponymous_path;
 				eponymous_path.names.push(child_name);
-				supertype = lookup_path(context, eponymous_path);
+				supertype = lookup_path_for_caller(context, eponymous_path);
 				if (supertype.is_null())
 					return reopen_not_found();
 			}
@@ -1249,16 +1245,17 @@ public:
 		if (!child.is_null()
 		 && !supertype.is_null()
 		 && child.super() != supertype)
-			return error(ADLERR_SUPERTYPE_CHANGED, "Cannot change supertype", super_path.display().asUTF8());
+			return ErrorADL_SupertypeChanged(object_pathname(), child.super().pathname(),
+							supertype.pathname(), source_line(), source_column());
 
 		frame().handle = child;
 		frame().scope_parent = parent;
 		if (frame().handle.is_null())
 		{
-			ErrNum	sterile_err = check_sterile_supertype(supertype);
+			ErrNum	sterile_err = check_sterile_supertype(supertype, last_name);
 			if (sterile_err)
 				return sterile_err;
-			ErrNum	complete_err = check_complete_parent(parent);
+			ErrNum	complete_err = check_complete_parent(parent, last_name);
 			if (complete_err)
 				return complete_err;
 
@@ -1311,6 +1308,23 @@ public:
 	// Lookup the entire path, ascending to the parent where necessary
 	// Takes PathName by const reference: PathName holds a StringArray and a
 	// StrVal, both refcounted, so passing by value cost a copy per call.
+	/*
+	 * A lookup whose failure the caller reports for itself. lookup_path()
+	 * reports the name it could not find, and the caller's message says more -
+	 * which Reference, Alias or supertype it was - so the callee's report is
+	 * rolled back rather than left in the buffer to be counted twice. The
+	 * callee takes no part in that (see errbuf.h's rollback), and every caller
+	 * of this reports when the result is null.
+	 */
+	Handle	lookup_path_for_caller(Handle parent, const PathName& path)
+	{
+		ErrBuf::MsgSequence	mark = error_buffer().get()->checkpoint();
+		Handle		found = lookup_path(parent, path);
+		if (found.is_null())
+			error_buffer().get()->rollback(mark);
+		return found;
+	}
+
 	Handle	lookup_path(Handle parent, const PathName& path)
 	{
 		ADL_TRACE("lookup_path(%s, %s)\n", path.display().asUTF8(), parent.pathname().asUTF8());
@@ -1352,7 +1366,7 @@ public:
 				continue;
 			}
 
-			error(ADLERR_NAME_NOT_FOUND, "Can't find name", child_name.asUTF8());
+			ErrorADL_NameNotFound(child_name, source_line(), source_column());
 			return Handle();	// Not found
 		}
 

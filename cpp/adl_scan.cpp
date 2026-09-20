@@ -7,6 +7,7 @@
 #include	<unistd.h>
 
 #include	<adlparser.h>
+#include	<adl_display.h>		// The only place that prints what was reported
 
 char* slurp_file(const char* filename, off_t* size_p)
 {
@@ -42,6 +43,25 @@ int main(int argc, const char** argv)
 	bool			ok = adl.parse(source);
 	off_t			bytes_parsed = source.peek() - text;
 
-	printf("%s, parsed %lld of %lld bytes\n", ok ? "Success" : "Failed", bytes_parsed, file_size);
-	exit(ok ? 0 : 1);
+	/*
+	 * Where the first message was reported, read before the drain empties the
+	 * buffer: parse() answers whether the grammar ran to completion, which it
+	 * does even having reported, so only the buffer says what the input was
+	 * worth, and how far it was good.
+	 */
+	int			first_line = 0;
+	int			first_column = 0;
+	(void)adl_first_error_position(first_line, first_column);
+
+	unsigned		errors = adl_display_errors(filename);
+
+	if (errors > 0 && first_line > 0)
+		printf("Failed, parsed %lld of %lld bytes before the first error at %d:%d, %u %s\n",
+			adl_bytes_before((const UTF8*)text, first_line, first_column), (long long)file_size,
+			first_line, first_column, errors, errors == 1 ? "error" : "errors");
+	else
+		printf("%s, parsed %lld of %lld bytes\n",
+			ok && errors == 0 ? "Success" : "Failed", bytes_parsed, file_size);
+
+	exit(ok && errors == 0 ? 0 : 1);
 }
