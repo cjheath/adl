@@ -112,7 +112,7 @@ adl_bytes_before(const UTF8* text, int line, int column)
 inline bool
 adl_first_error_position(int& line, int& column)
 {
-	ErrBuf*	buffer = error_buffer().peek();		// Never makes a buffer for a thread that reported nothing
+	ErrBuf*	buffer = ErrBuffer();
 	if (!buffer || buffer->count() == 0)
 		return false;
 
@@ -129,8 +129,8 @@ adl_first_error_position(int& line, int& column)
 inline unsigned
 adl_display_errors(const char* filename)
 {
-	ErrBuf*	buffer = error_buffer().peek();		// Never makes a buffer for a thread that reported nothing
-	if (!buffer)
+	ErrBuf*	buffer = ErrBuffer();
+	if (!buffer || buffer->count() == 0)
 		return 0;
 
 	unsigned	shown = 0;

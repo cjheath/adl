@@ -1325,10 +1325,10 @@ public:
 	 */
 	Handle	lookup_path_for_caller(Handle parent, const PathName& path)
 	{
-		ErrBuf::MsgSequence	mark = error_buffer().get()->checkpoint();
+		ErrBuf::MsgSequence	mark = ErrBuffer()->checkpoint();
 		Handle		found = lookup_path(parent, path);
 		if (found.is_null())
-			error_buffer().get()->rollback(mark);
+			ErrBuffer()->rollback(mark);
 		return found;
 	}
 
