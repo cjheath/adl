@@ -1,7 +1,6 @@
 /*
  * Test stub for just the ADL Parser, with a null Sink
  */
-#include	<cstdio>
 #include	<cctype>
 #include	<sys/stat.h>
 #include	<unistd.h>
@@ -56,12 +55,16 @@ int main(int argc, const char** argv)
 	unsigned		errors = adl_display_errors(filename);
 
 	if (errors > 0 && first_line > 0)
-		printf("Failed, parsed %lld of %lld bytes before the first error at %d:%d, %u %s\n",
-			adl_bytes_before((const UTF8*)text, first_line, first_column), (long long)file_size,
-			first_line, first_column, errors, errors == 1 ? "error" : "errors");
+		adl_display_line(StrVal::format(
+			"Failed, parsed {1} of {2} bytes before the first error at {3}:{4}, {5} {6}",
+			VariantArray() << adl_bytes_before((const UTF8*)text, first_line, first_column)
+				<< file_size << first_line << first_column
+				<< errors << (errors == 1 ? "error" : "errors")));
 	else
-		printf("%s, parsed %lld of %lld bytes\n",
-			ok && errors == 0 ? "Success" : "Failed", bytes_parsed, file_size);
+		adl_display_line(StrVal::format(
+			"{1}, parsed {2} of {3} bytes",
+			VariantArray() << (ok && errors == 0 ? "Success" : "Failed")
+				<< bytes_parsed << file_size));
 
 	exit(ok && errors == 0 ? 0 : 1);
 }

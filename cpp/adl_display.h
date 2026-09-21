@@ -8,40 +8,36 @@
  *
  * This file is NOT generated, and no generated file replaces it: the two
  * generated halves are adl_err.h (the numbers) and adl_msg.h (the reporting
- * functions). This is ADL's own display, and it is deliberately plain -
- * formatting the parameters into the text is not designed yet (see strpp's
- * doc/error.md, "Not implemented yet"), so the default text is printed with
- * its {n} markers and the parameters follow it.
+ * functions). This is ADL's own display: each message is shown as its default
+ * text with its parameters substituted into it, which is what StrVal::format
+ * is for, and nothing about presentation is decided below here.
  *
  * By convention a message's last two parameters are the source line and
  * column, and 0 means the reporter did not know where it was; those are
- * printed as a prefix, and each message is retired once it has been shown.
+ * printed as a prefix rather than offered to the text, and each message is
+ * retired once it has been shown.
+ *
+ * A Strpp program has no stdio, so what is written here goes out with write(2).
+ * A platform with somewhere better to write - a UART, a log - defines
+ * ADL_WRITE(data, length) before including this, as it does for strpp's own
+ * panic dump.
  */
 #include	<char_encoding.h>
 #include	<errbuf.h>
-#include	<stdio.h>
 #include	<strval.h>
 #include	<variant.h>
 
+#if	!defined(ADL_WRITE)
+#include	<unistd.h>
+#define	ADL_WRITE(data, length)	(void)!write(1, (data), (length))
+#endif
+
+// One line of ADL's own: what a driver has to say for itself
 inline void
-adl_print_parameter(const Variant& p)
+adl_display_line(StrVal line)
 {
-	switch (p.type())
-	{
-	case Variant::Integer:	printf("%d", p.as_int()); return;
-	case Variant::Long:	printf("%ld", p.as_long()); return;
-	case Variant::LongLong:	printf("%lld", p.as_longlong()); return;
-	case Variant::String:
-		{
-			// The const overload: asUTF8() without a length may unshare and copy,
-			// and a parameter can be a slice whose body continues past its end.
-			StrValIndex	bytes = 0;
-			const char*	cp = p.as_strval().asUTF8(bytes);
-			printf("%.*s", (int)bytes, cp);
-			return;
-		}
-	default:	printf("<%s>", p.type_name()); return;
-	}
+	ADL_WRITE(line.asUTF8(), (int)line.numBytes());
+	ADL_WRITE("\n", 1);
 }
 
 /*
@@ -73,21 +69,11 @@ adl_display_message(const char* filename, const ErrBuf::Message& message)
 	int		column = 0;
 	unsigned	params = message.parameters.length();
 	bool		located = adl_message_position(message, line, column);
-
-	if (located)
-	{
-		printf("%s:%d:%d: %s", filename, line, column, message.default_text);
-		params -= 2;
-	}
-	else
-		printf("%s: %s", filename, message.default_text);
-
-	for (unsigned i = 0; i < params; i++)
-	{
-		printf(i == 0 ? ": " : ", ");
-		adl_print_parameter(message.parameters[i]);
-	}
-	printf("\n");
+	StrVal		text = StrVal::format(message.default_text,
+					message.parameters.slice(0, located ? params-2 : params));
+	adl_display_line(StrVal::format(
+		located ? "{1}:{2}:{3}: {4}" : "{1}: {4}",
+		VariantArray() << filename << line << column << text));
 }
 
 /*

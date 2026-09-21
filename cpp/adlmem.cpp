@@ -13,7 +13,6 @@
  * adlmem_utf8ptr in the Makefile builds the former, and analysis/ builds and
  * compares both.
  */
-#include	<cstdio>
 #include	<cctype>
 #include	<sys/stat.h>
 #include	<unistd.h>
@@ -148,13 +147,16 @@ bool load_file(ADLMemStoreSink& sink, const char* filename, bool last_file)
 	if (!clean || last_file)
 	{
 		if (errors > 0 && first_line > 0)
-			printf("Failed, parsed %lld of %lld %s before the first error at %d:%d, %u %s\n",
-				successful, total, unit, first_line, first_column,
-				errors, errors == 1 ? "error" : "errors");
+			adl_display_line(StrVal::format(
+				"Failed, parsed {1} of {2} {3} before the first error at {4}:{5}, {6} {7}",
+				VariantArray() << successful << total << unit
+					<< first_line << first_column << errors
+					<< (errors == 1 ? "error" : "errors")));
 		else
-			printf("%s, processed %lld of %lld %s, %u %s\n",
-				clean ? "Success" : "Failed", consumed, total, unit,
-				errors, errors == 1 ? "error" : "errors");
+			adl_display_line(StrVal::format(
+				"{1}, processed {2} of {3} {4}, {5} {6}",
+				VariantArray() << (clean ? "Success" : "Failed") << consumed << total << unit
+					<< errors << (errors == 1 ? "error" : "errors")));
 	}
 
 	return clean;
@@ -274,7 +276,7 @@ StrVal inspect(ADL::Handle h, int depth)
 
 void p(ADL::Handle h)
 {
-	printf("%s\n", inspect(h).asUTF8());
+	adl_display_line(inspect(h));
 }
 
 void p(ADL::MemStore m)
@@ -286,21 +288,12 @@ void p_str(StrVal s) { p(s); }
 
 void p(const ADLMemStoreSink::Frame& f)
 {
-	printf(	"Frame {\n"
-		"  object_path='%s';\n"
-		"  supertype_path='%s';\n"
-		"  object_started=%s;\n"
-		"  obj_array=%s;\n"
-		"  value_type=%d;\n"
-		"  value='%s';\n"
-	//	"  handle->%p;\n"
-		"}\n",
-		f.object_path.display().asUTF8(),
-		f.supertype_path.display().asUTF8(),
-		f.object_started ? "true" : "false",
-		f.obj_array ? "true" : "false",
-		f.value_type,
-		((StrVal)f.value).asUTF8()
-	//	&f.handle._object()
-	);
+	adl_display_line(
+		StrVal("Frame {\n  object_path='")+f.object_path.display()
+		+"';\n  supertype_path='"+f.supertype_path.display()
+		+"';\n  object_started="+(f.object_started ? "true" : "false")
+		+"\n  obj_array="+(f.obj_array ? "true" : "false")
+		+"\n  value_type="+StrVal::fromInt32(f.value_type)
+		+"\n  value='"+((StrVal)f.value)
+		+"';\n}");
 }

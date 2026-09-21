@@ -188,12 +188,14 @@ def assemble(v):
     adl_rel = os.path.join(CPP)
     prefix = os.path.relpath(CPP, ADL_ROOT)
 
-    # adl: the headers and the drivers
-    for f in ('adlparser.h', 'adlstore.h', 'adlmem.h', 'adlstrval.h',
-              'adlmem.cpp', 'adl_scan.cpp'):
+    # adl: the headers and the drivers. Everything the sources may include, so
+    # that a file added later (adl_err.h, adl_msg.h and adl_display.h were) is
+    # not missed: a file that does not exist at an older revision is skipped.
+    for f in sorted(x for x in os.listdir(CPP)
+                    if x.endswith('.h') or x.endswith('.cpp')):
         src = os.path.join(CPP, f)
         if not os.path.exists(src):
-            continue            # adlstrval.h only exists from tranche 2 on
+            continue
         if v.adl_rev is None:
             shutil.copy(src, os.path.join(adl, f))
         else:
@@ -261,15 +263,39 @@ def build(v, root, adl, strpp, plain, stack, bodies):
     obj = os.path.join(root, 'obj')
     os.makedirs(obj, exist_ok=True)
 
-    # char_encoding.cpp supplies UCS4ToLower/Upper and includes neither array.h
-    # nor strval.h, so it is independent of everything measured here. Linking it
-    # rather than libstrpp.a keeps a variant's headers the only source of any
-    # header-defined code.
-    support = os.path.join(obj, 'char_encoding.o')
-    p = run(['g++', '-O2'] + STD + [f'-I{strpp}',
-             '-c', os.path.join(STRPP, 'src', 'char_encoding.cpp'), '-o', support])
-    if p.returncode != 0:
-        raise SystemExit(f"char_encoding failed: {p.stderr.decode()[:500]}")
+    # The support objects: every strpp source, from the variant's own revision
+    # so that all columns are built the same way. It began as just
+    # char_encoding.cpp, which is independent of everything measured here; the
+    # library has since needed errbuf.cpp and strassert.cpp (the error buffer
+    # and the assert that reports into a thread's, both of which any program
+    # linking strpp now needs) and variant.cpp (Variant's names and its type
+    # assertion, which stopped being inline when the assertion began to
+    # report). Linking the sources rather than libstrpp.a keeps a variant's
+    # headers the only source of any header-defined code.
+    # The sources are laid out as a directory of their own, at the variant's
+    # revision, because one of them includes a sibling by name
+    # (char_encoding.cpp includes case_conversions.c) and would not find it
+    # anywhere else.
+    src_dir = os.path.join(root, 'src', 'strpp_src')
+    shutil.rmtree(src_dir, ignore_errors=True)
+    os.makedirs(src_dir)
+    if v.strpp_rev is None:
+        for f in sorted(os.listdir(os.path.join(STRPP, 'src'))):
+            shutil.copy(os.path.join(STRPP, 'src', f), os.path.join(src_dir, f))
+    else:
+        listing = run(['git', '-C', STRPP, 'ls-tree', '--name-only', '--full-tree',
+                       '-r', v.strpp_rev, 'src']).stdout.decode().split()
+        for rel in listing:
+            copy_or_extract(STRPP, v.strpp_rev, STRPP, rel, src_dir)
+
+    support = []
+    for src in sorted(f for f in os.listdir(src_dir) if f.endswith('.cpp')):
+        src_path = os.path.join(src_dir, src)
+        obj_path = os.path.join(obj, src.replace('.cpp', '.o'))
+        p = run(['g++', '-O2'] + STD + [f'-I{strpp}', '-c', src_path, '-o', obj_path])
+        if p.returncode != 0:
+            raise SystemExit(f"{src} failed: {p.stderr.decode()[:500]}")
+        support.append(obj_path)
 
     for name, tool in (('peak', 'peakprobe.cpp'), ('stack', 'stackprobe.cpp')):
         p = run(['g++', '-O2'] + STD + [f'-I{TOOLS}', '-c', os.path.join(TOOLS, tool),
@@ -280,18 +306,18 @@ def build(v, root, adl, strpp, plain, stack, bodies):
     outs = {}
     for opt in OPTS:
         tag = f'{v.name}_{opt.lstrip("-")}'
-        gxx([os.path.join(plain, 'adlmem_plain.cpp'), support], os.path.join(bin_dir, tag),
+        gxx([os.path.join(plain, 'adlmem_plain.cpp')] + support, os.path.join(bin_dir, tag),
             opt, [plain, adl, strpp])
         outs[opt] = os.path.join(bin_dir, tag)
 
     # peak: no -a in the runs, so the tree printer is not measured
-    gxx([os.path.join(plain, 'adlmem_plain.cpp'), os.path.join(obj, 'peak.o'), support],
+    gxx([os.path.join(plain, 'adlmem_plain.cpp'), os.path.join(obj, 'peak.o')] + support,
         os.path.join(bin_dir, v.name + '_peak'), BASE_OPT, [plain, adl, strpp])
 
-    gxx([os.path.join(stack, 'adlmem_stack.cpp'), os.path.join(obj, 'stack.o'), support],
+    gxx([os.path.join(stack, 'adlmem_stack.cpp'), os.path.join(obj, 'stack.o')] + support,
         os.path.join(bin_dir, v.name + '_stack'), BASE_OPT, [stack, adl, strpp, TOOLS])
 
-    gxx([os.path.join(bodies, 'adlmem_bodies.cpp'), support],
+    gxx([os.path.join(bodies, 'adlmem_bodies.cpp')] + support,
         os.path.join(bin_dir, v.name + '_bodies'), BASE_OPT, [bodies, adl, strpp, TOOLS])
 
     # The same driver built against the other Source, where this revision has
@@ -300,7 +326,7 @@ def build(v, root, adl, strpp, plain, stack, bodies):
     alt = None
     if 'ADL_SOURCE_UTF8PTR' in open(os.path.join(plain, 'adlmem_plain.cpp')).read():
         alt = os.path.join(bin_dir, v.name + '_utf8ptr')
-        gxx(['-DADL_SOURCE_UTF8PTR', os.path.join(plain, 'adlmem_plain.cpp'), support],
+        gxx(['-DADL_SOURCE_UTF8PTR', os.path.join(plain, 'adlmem_plain.cpp')] + support,
             alt, BASE_OPT, [plain, adl, strpp])
 
     # object code, for the per-TU __text figures

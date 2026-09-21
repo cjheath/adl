@@ -216,7 +216,6 @@ template<typename Source> bool ADLParser<Source>::parse(Source& source)
 	space(probe);
 	while (definition(probe))
 		;
-	// printf("PARSE ends at '%d': ", probe.peek_char()); probe.ahead(20);
 	source = probe;
 	return true;
 }
@@ -235,11 +234,9 @@ template<typename Source> bool ADLParser<Source>::definition(Source& source)
 	bool	has_path = path_name(probe);	// Accept a path_name
 	sink.object_name();
 
-	// printf("DEFINING `"); probe.print_from(name_start); printf("`\n");
 
 	if (!body(probe))
 		return false;
-	// printf("DEFINITION ends `"); probe.print_from(p); printf("`\n");
 
 	ch = probe.peek_char();
 	if (';' == ch)
@@ -422,7 +419,6 @@ template<typename Source> bool ADLParser<Source>::supertype(Source& source)
 	Source	start(probe);
 	bool	has_path_name = path_name(probe);
 	sink.supertype();
-	// printf("Found supertype path_name `"); probe.print_from(start); printf("`\n");
 	space(probe);
 
 	source = probe;

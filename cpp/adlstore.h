@@ -26,7 +26,19 @@ inline bool adl_debug_enabled()
 	static bool	enabled = getenv("ADL_DEBUG") != nullptr;
 	return enabled;
 }
+/*
+ * Tracing, which a build asks for by defining ADL_TRACE_ENABLED. It is off by
+ * default so that no build carries the printf it is written with: see strpp's
+ * PEG_TRACE, which is off in the same way and for the same reason. The trace
+ * calls below keep their printf-style text until tracing is given a way to
+ * write that is not stdio.
+ */
+#if	defined(ADL_TRACE_ENABLED)
+#include	<cstdio>
 #define	ADL_TRACE(...)	do { if (adl_debug_enabled()) printf(__VA_ARGS__); } while (0)
+#else
+#define	ADL_TRACE(...)	do { } while (0)
+#endif
 
 
 /*
@@ -415,7 +427,6 @@ public:
 	{
 		// Save the path:
 		current_path.consume(object_path());
-		// printf("Object PathName '%s'\n", object_path().display().asUTF8());
 	}
 
 	ErrNum	supertype()				// Last pathname was a supertype
@@ -424,7 +435,6 @@ public:
 
 		supertype_present() = true;
 
-		// printf("Supertype PathName '%s'\n", supertype_path().display().asUTF8());
 		return start_object();
 	}
 
@@ -500,7 +510,6 @@ public:
 
 	void	reference_done(bool ok)			// Reference completed
 	{
-		// printf("Reference finished\n");
 	}
 
 	ErrNum	alias()					// Last pathname is an alias
@@ -542,14 +551,12 @@ public:
 
 	ErrNum	block_start()				// enter the block given by the pathname and supertype
 	{
-		// printf("Enter block\n");
 		frame().saw_block = true;	// Before start_object(): see the comment on Frame::saw_block
 		return start_object();
 	}
 
 	void	block_end()				// exit the block given by the pathname and supertype
 	{
-		// printf("Exit block\n");
 	}
 
 	ErrNum	is_array()				// This definition is an array
