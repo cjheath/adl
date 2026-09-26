@@ -1,0 +1,35 @@
+// EXPECT: PASS
+// Explicit-dot ascent for a *supertype* name: one dot means the current
+// scope itself (no ascend), two means the parent, three the grandparent,
+// and so on - and once a dot is used, no further, automatic ascent may
+// happen even if that lands short. This is README "Traversing up",
+// reworked directly from its own Product/Sale Item/Alternate example so
+// that picking the wrong (shadowed) Product produces an observable parse
+// failure rather than only a silent wrong answer: only the *outer*
+// Product has a "Flag" child, so a supertype lookup for Alternate.Flag
+// - a name that must already exist, unlike a plain declaration, which
+// would just create it - only succeeds if Alternate's supertype
+// (".."-ascended) is really the outer one.
+TOP {
+	Product: {
+		Flag:;
+	}
+	Sale Item: {
+		Product:;		// A local Product, shadowing the outer one - no Flag
+		Alternate: ..Product;	// Two dots = the parent (TOP): must skip the local
+					// Product and bind to the outer one
+		UseFlag: Alternate.Flag;	// A supertype lookup, which never creates what
+					// it doesn't find: only resolves through the
+					// outer Product's Flag; the local Product has none
+	}
+
+	// Three dots = the grandparent, found two levels up from L3.
+	L1: {
+		LevelX:;
+		L2: {
+			L3: {
+				a: ...LevelX;
+			}
+		}
+	}
+}

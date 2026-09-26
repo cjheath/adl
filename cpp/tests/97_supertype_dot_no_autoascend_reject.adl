@@ -1,0 +1,14 @@
+// EXPECT: FAIL
+// A single leading dot means "search the current scope itself" - and
+// having used a dot at all, no automatic ascent may then happen even
+// though the name would be found one level up. Level0 lives in L1, not
+// in L2; a bare (dot-less) Level0 from L2 would ascend and find it, but
+// ".Level0" must not.
+TOP {
+	L1: {
+		Level0:;
+		L2: {
+			a: .Level0;
+		}
+	}
+}

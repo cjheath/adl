@@ -1,0 +1,15 @@
+// EXPECT: FAIL
+// Once the first name of a pathname has matched, every later name must be
+// found as a direct or inherited child of what was just found - never by
+// ascending back out again, even though the name is reachable that way.
+// AlsoAtOuterLevel is Outer's own child, a sibling of Mid, not a child of
+// Mid (nor inherited into it), so Outer.Mid.AlsoAtOuterLevel must fail.
+TOP {
+	Outer: {
+		Mid: {
+			Inner:;
+		}
+		AlsoAtOuterLevel:;
+	}
+	x: Outer.Mid.AlsoAtOuterLevel;
+}

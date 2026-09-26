@@ -1,0 +1,23 @@
+// EXPECT: PASS
+// The object's *own* declared path (before the ':') resolves its first
+// component the same way an implicit (dot-less) supertype name does:
+// ascend the object tree as many levels as it takes, not just one - and,
+// same rule either way, no ascent at all once any name has matched.
+// "Deep" is three levels up the tree from z (at TOP). Was previously
+// (wrongly) rejected: start_object()'s own descent loop allowed only one
+// ascend-and-retry for the whole path (adlstore.h's "may_ascend" was used
+// once, not reset per name), failing with "The name `Deep` on the way to
+// the parent was not found" after ascending only as far as y. Fixed
+// 2026-09-26.
+TOP {
+	Deep: {
+		Item:;
+	}
+	x: {
+		y: {
+			z: {
+				Deep.Item.NewChild: {}
+			}
+		}
+	}
+}

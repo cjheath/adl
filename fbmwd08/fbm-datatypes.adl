@@ -8,12 +8,15 @@ Data Types: {
 	// object's bare name/path copies that object's own effective Syntax
 	// onto this one (README "Copying a Syntax") - reusing adl.adl's
 	// built-in Integer/String/Decimal patterns directly, rather than
-	// retyping them here. Four dots ascend precisely to TOP (Integer
-	// Value -> Data Types -> Fact Based Model -> TOP), to reach the
+	// retyping them here. Named from TOP, absolutely, to reach the
 	// built-in Integer rather than the "Integer: Data Type;" declared
-	// just above, which would otherwise shadow it from here.
+	// just above, which would otherwise shadow it from here: an explicit
+	// ascent count (however many dots) would depend on how deeply this
+	// file happens to be nested by whatever comes before it, which this
+	// file has no way to see or verify - so it's rejected outright,
+	// rather than only sometimes giving the wrong answer.
 	Integer Value: Data Value {
-		Syntax = ....Integer;
+		Syntax = TOP.Integer;
 		Data Type = Integer;
 	}
 	String Value: Data Value {

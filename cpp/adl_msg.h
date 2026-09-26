@@ -150,6 +150,14 @@ ErrorADL_ReferenceFinalViolation(StrVal reference, StrVal prior, StrVal attempte
 		VariantArray() << reference << prior << attempted << line << column);
 }
 
+inline ErrNum
+ErrorADL_AscentExceedsFile(StrVal path, int levels_open, int line, int column)
+{
+	return Error(ADLERR_ASCENT_EXCEEDS_FILE,
+		"The ascent in `{1}` reaches beyond this file's own scope, which has only {2} level(s) open",
+		VariantArray() << path << levels_open << line << column);
+}
+
 // The Parser's grammar expectations:
 
 inline ErrNum

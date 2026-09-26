@@ -1,0 +1,18 @@
+// EXPECT: FAIL
+// A three-file chain, so that by the time file 3 resolves an explicit
+// ascent, the object it's ascending out of (Outer) was opened by file 2
+// and the object it's ascending *to* (TOP, holding Marker) was closed
+// out by this file - neither is a lexical frame file 3's own {} stack
+// can show it. The object tree's parent links *do* span files (the
+// blocks were really opened, just not by file 3), so this could be made
+// to resolve - but whoever wrote file 3's pathname has no way to read or
+// know that context, since it depends on files they may never see. That
+// makes the ascent count unverifiable from where it's written, which is
+// rejected rather than honoured, however it happens to come out. This
+// file just bootstraps TOP with Marker, and closes TOP as its only
+// statement, so file 2 continues directly inside TOP.
+TOP {
+	Marker: {
+		Found:;
+	}
+}

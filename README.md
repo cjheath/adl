@@ -65,7 +65,10 @@ You normally won't see TOP. This is because each
 file (including the built-in definitions) normally
 creates its own namespace, and subsequent files
 descend inside the last object from the previous
-file.
+file. This is also why an explicit ascent (see
+"Traversing up") cannot reach outside the file it
+is written in, though it can search for the objects
+by name.
 </p>
 </td>
 </tr>
@@ -575,13 +578,21 @@ When an object name is used as a reference or as a
 supertype, and is not present within the current
 context, the supertype context is searched first.
 This search is recursive. If the name is still not
-found, the same search proceeds in the parent object,
-which is implicit traversal.
+found, the same search ascends to look in the parent
+object, which is implicit traversal.
 If the object is found, a following dot may be used
-to search inside it, but after traversing down like
-this, following searches will not ever traverse to
-the object's parent, even though that name might
-be usable from that object.
+to search inside it, but implicit ascent, following
+searches will not ever ascend, even though that name
+might be usable from that object.
+</p>
+<p>
+The same rule finds the first name of a dotted path
+naming an object to re-open or extend (such as
+<strong>a.b.c</strong>, before any supertype): the
+first name is searched for by implicit traversal, up
+to TOP if need be, and every name after it must then be
+a child (direct or inherited) of the one before, never
+found by traversing up again.
 </p>
 </td>
 <td valign="top">
@@ -638,6 +649,19 @@ Each dot starts the search one level further up,
 and prevents the search from stepping any further up.
 The local object (and inherited objects) will be
 ignored, and the search will start at the parent.
+</p>
+<p>
+A dot counts a level of the source text's own
+<strong>{...}</strong> nesting - the block the
+pathname is written inside - not a level of the
+object tree. The two usually agree, but they can
+differ when one declaration descends through several
+levels at once, such as re-opening
+<strong>a.b.c</strong> in a single statement: the
+dots count from where that statement itself is
+written, not from how deep <strong>c</strong> happens
+to be in the tree. Ascent using a succession of dots
+cannot reach outside the file in which it is written.
 </p>
 </td>
 <td valign="top">

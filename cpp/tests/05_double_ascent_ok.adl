@@ -1,0 +1,22 @@
+// EXPECT: PASS
+// Explicit ascent walks up the *lexical* {} scopes the pathname was
+// written in, not the object tree: two dots is one lexical level up from
+// where "h" is declared. "h" is declared inside the block opened by
+// "b.c.d: {...}" - itself written directly inside "a"'s block - so one
+// lexical level up from there is "a"'s own block (crossing exactly the
+// one { boundary that "b.c.d: {...}" opened), where "b" is a direct
+// child. That the object tree puts three levels (b, c, d) between "a"
+// and where "h" is declared doesn't matter - only the source's own {}
+// nesting is counted. Was previously (wrongly) expected to fail: see
+// tests/05_double_ascent_reject.adl for the case that still correctly
+// does, once the tree/lexical distinction is made.
+TOP {
+	a: {
+		b: {
+			c:;
+		}
+		b.c.d: {
+			h: ..b;
+		}
+	}
+}

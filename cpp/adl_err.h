@@ -59,4 +59,8 @@
 #define	ADLERR_EXPECT_REGEXP_CLASS_CLOSE ErrNum(ADLERR_SET, 28)	// A closing bracket to end the class was expected here
 #define	ADLERR_EXPECT_REGEXP_CLASS_PART	ErrNum(ADLERR_SET, 29)	// A valid class character was expected here
 
+// Back with the object model, the Store and the Sink (see the comment there):
+
+#define	ADLERR_ASCENT_EXCEEDS_FILE	ErrNum(ADLERR_SET, 30)	// The ascent in `{1}` reaches beyond this file's own scope, which has only {2} level(s) open
+
 #endif	// ADL_ERR_H

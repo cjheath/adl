@@ -1,0 +1,22 @@
+// EXPECT: PASS
+// A subtle case, isolated from tests/05_reopen.adl's "f1: c" - which
+// comments that this should be a *rejected*, "faulty" lookup. Given the
+// stated algorithm (ascend until the first name is found in some
+// ancestor's own-or-inherited children, with no exclusion of scopes
+// already passed through on the way up), this should actually succeed:
+// ascending from d (a.b.c.d) for a bare "c" reaches b two levels up,
+// and b's own child is named "c" - which happens to be the very object
+// (a.b.c) already on the ascent path. That coincidence doesn't make the
+// find wrong; b's own child "c" is legitimately "in scope" once ascent
+// reaches b. If this is not the intended behaviour after all, 05_reopen's
+// comment was right and this file's marker should flip instead.
+TOP {
+	a: {
+		b: {
+			c:;
+		}
+	}
+	a.b.c.d: {
+		looked_up: c;
+	}
+}

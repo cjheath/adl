@@ -1,0 +1,6 @@
+// Continues inside TOP (file 1's last-closed object) with no wrapper of
+// its own. Its only statement is Outer, so Outer - not TOP - is what
+// file 3 continues inside.
+Outer: {
+	Middle:;
+}

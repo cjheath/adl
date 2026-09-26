@@ -1,22 +1,20 @@
 // EXPECT: FAIL
-// Explicit ascent. cpp/ToDo's (a)(3) records both cases as known wrong: the
-// first is expected to succeed, so this marker flips to PASS once ascend
-// counting is fixed. The second is unresolved - see the note on h1.
+// Explicit ascent walks up the *lexical* {} scopes, not the object tree
+// - see tests/05_double_ascent_ok.adl for the twin case that succeeds by
+// that rule. Three dots from "h1" (declared inside "b.c.d: {...}", itself
+// written directly inside "a"'s block, itself directly inside TOP) cross
+// two { boundaries, landing on TOP - not on "b" (a lexical level further
+// than that dot count reaches). TOP has no child named "b" (only "a"),
+// so this is correctly, and permanently, rejected: it's not that the
+// search should have gone further, or stopped sooner - three dots
+// names a specific lexical scope, TOP, and "b" genuinely isn't there.
 TOP {
 	a: {
 		b: {
 			c:;
 		}
 		b.c.d: {
-			// b is a.b, so two ascents from inside a.b.c.d reach a, where b
-			// lives. Anticipated: succeeds. Actual: "Can't find name looking
-			// for b".
-			h: ..b;
-			// Three ascents go past a. Whether "b is not at the top level"
-			// should be an error, or whether the search should stop at the
-			// last scope that could hold it, is not settled - recorded here
-			// so the current behaviour is at least pinned.
-			h1: ...b;	// Faulty ascend: b is not at the top level
+			h1: ...b;	// Three dots reach TOP; TOP has no child "b"
 		}
 	}
 }

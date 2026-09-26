@@ -726,8 +726,9 @@ def main():
                     f"variant before trusting any of these numbers")
             pk = r['peak']
             bd = r['bodies']
-            log(f"{w}: peak {pk['peak']:,} store {pk['store']:,} allocs {pk['allocs']:,} "
-                f"bodies {bd['bodies']:,} on_input {bd['on_input']:,}")
+            bd_part = (f"bodies {bd['bodies']:,} on_input {bd['on_input']:,}"
+                       if bd else "bodies n/a (this workload didn't finish parsing)")
+            log(f"{w}: peak {pk['peak']:,} store {pk['store']:,} allocs {pk['allocs']:,} {bd_part}")
 
         if alt:
             m['utf8ptr'][v.name] = {}

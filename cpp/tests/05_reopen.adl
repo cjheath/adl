@@ -13,9 +13,14 @@ TOP {
 		// Reopen b.c and add d with contents:
 		b.c.d: {		// New a.b.c.d
 			f: b.c;		// Contains an f
-			f1: c;			// Anticipated: faulty lookup (supertype should not be sought
-					//           in b). Actual: succeeds - b is searched anyway.
-					//           A wrong *success*, so an exit code cannot express it.
+			f1: c;			// Correctly succeeds: implicit ascent for a bare (dot-less)
+					//           name searches each ancestor's own children as it
+					//           climbs, and b's own child happens to be named "c" -
+					//           the same object already on the ascent path. That
+					//           coincidence doesn't make the find wrong (previously
+					//           flagged here as a "wrong success"; it isn't - see
+					//           tests/96_supertype_ascend_may_reach_own_ancestor_ok.adl
+					//           and cpp/ToDo (a)(3)).
 			g: b;		// Supertype ascends implicitly
 			i: f;		// No ascend
 		}

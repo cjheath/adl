@@ -1,0 +1,17 @@
+// EXPECT: PASS
+// No leading dot: the first name of a supertype pathname must be sought
+// by ascending as many levels as it takes - not just one - stopping only
+// once found (or at TOP). "Deep" isn't in z, y or x; it is three levels
+// up, at TOP.
+TOP {
+	Deep: {
+		Item:;
+	}
+	x: {
+		y: {
+			z: {
+				w: Deep.Item;
+			}
+		}
+	}
+}

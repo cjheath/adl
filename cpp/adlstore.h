@@ -1067,7 +1067,12 @@ public:
 			may_ascend = false;
 			int	depth = stack.length()-new_path.ascent-1;
 			if (depth < 0)
-				depth = 0;
+			{
+				// Same rule as lookup_path()'s explicit ascent: reaching
+				// outside this file's own {} nesting depends on files this
+				// one cannot see, so it is rejected rather than guessed at.
+				return ErrorADL_AscentExceedsFile(new_path.display(), (int)stack.length(), source_line(), source_column());
+			}
 			parent = stack[depth].handle;
 			truly_ascended = parent != context;
 			ADL_TRACE("Ascended to %s\n", stack[depth].display().asUTF8());
@@ -1092,9 +1097,16 @@ public:
 				ADL_TRACE("Descending name %d of %d `%s` from %s found %s\n", descent, new_path.names.length(), child_name.asUTF8(), parent.pathname().asUTF8(), child.pathname().asUTF8());
 				if (child.is_null())		// Not in this parent and we can't ascend
 				{
-					if (!may_ascend)
+					// Automatic ascent (no explicit dots) may climb as many
+					// tree levels as it takes to find the *first* name - same
+					// rule as lookup_path()'s implicit ascent - but only the
+					// first: once any name has matched, every later one must
+					// be a direct or inherited child of it, never reached by
+					// ascending back out again.
+					Handle	up = descent == 0 && new_path.ascent == 0 ? parent.parent() : Handle();
+					if (up.is_null())
 						return ErrorADL_ParentNotFound(child_name, source_line(), source_column());
-					parent = parent.parent();
+					parent = up;
 					truly_ascended = true;
 					may_ascend = false;
 					descent--;
@@ -1339,13 +1351,35 @@ public:
 		if (path.is_empty())
 			return 0;	// No ascent, no path.
 
-		int	ascent = path.ascent;		// Consumed here; `path` stays read-only
-		bool	no_implicit_ascent = ascent > 0;
-		if (ascent)
+		bool	no_implicit_ascent = path.ascent > 0;
+		if (path.ascent > 0)
 		{
-			ascent--;	// First . indicates just parent
-			while (!parent.is_null() && ascent-- > 0)
-				parent = parent.parent();
+			// Explicit ascent walks up the *lexical* {} scopes (the parser's
+			// stack of currently-open blocks) to reach the block this
+			// pathname was written in - one dot means the scope we're
+			// already in, two the block that lexically encloses it, and so
+			// on - never the object tree. Automatic ascent below (no dots)
+			// is the opposite: there's no lexical position to count from,
+			// only "wherever the name turns out to live", so it walks the
+			// object tree instead.
+			int	depth = stack.length() - path.ascent - 1;
+			if (depth < 0)
+			{
+				// Ascended past what *this file's own* {} nesting can show.
+				// The object tree's parent links do span file boundaries
+				// (the block was really opened, just not by this file), so
+				// this could be made to work by walking them - but whoever
+				// wrote this pathname cannot read or know that context: it
+				// depends on however many files come before this one and
+				// how they nest, none of which this file can see. An
+				// ascent count that only happens to reach the right place
+				// because of that unseen context is not a specification
+				// anyone can read back, so it is rejected rather than
+				// honoured.
+				ErrorADL_AscentExceedsFile(path.display(), (int)stack.length(), source_line(), source_column());
+				return Handle();
+			}
+			parent = stack[depth].handle;
 		}
 		if (parent.is_null())
 			return parent;
