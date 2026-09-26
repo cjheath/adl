@@ -74,15 +74,15 @@ bool load_file(ADLMemStoreSink& sink, const char* filename, bool last_file)
 	 * A Source views its input, it never owns it - but how long the input has
 	 * to stay alive differs, and so does the peak, which is one of the things
 	 * being measured. The byte-pointer form keeps the buffer for the whole
-	 * parse; the StrVal form copies the file into a body of its own, so `raw`
-	 * is finished with as soon as that exists.
+	 * parse; the StrVal form hands `raw` itself over to a Body of its own
+	 * (StrTakeOver: no copy), so `raw` must not be deleted here - the Body
+	 * now owns it and will free it once the last StrVal viewing it is gone.
 	 */
 #if	defined(ADL_SOURCE_UTF8PTR)
 	ADLMemSource			source(raw);			// views raw
 #else
-	StrVal				text(raw, (StrValIndex)file_size);	// owns a copy
-	ADLMemSource			source(&text);
-	delete [] raw;							// now finished with
+	StrVal				text(raw, (StrValIndex)file_size, 0, StrTakeOver);
+	ADLMemSource			source(text);
 #endif
 
 	ADLParser<ADLMemStoreSink>	adl(sink);		// a Parser to feed the Sink
