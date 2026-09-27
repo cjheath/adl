@@ -1073,20 +1073,20 @@ public:
 		/*
 		 * Handle explicit ascent (up the lexical scopes) to find a parent if requested
 		 */
-		if (new_path.ascent > 0)		// 1 means use the current parent scope (2nd top on stack)
+		if (new_path.ascent > 0)		// 1 means the scope we're already in - see lookup_path()
 		{
 			may_ascend = false;
-			int	depth = stack.length()-new_path.ascent-1;
-			if (depth < 0)
+			if (new_path.ascent > 1)	// 2+ means a real climb, which this file's own {} nesting can fail to reach
 			{
-				// Same rule as lookup_path()'s explicit ascent: reaching
-				// outside this file's own {} nesting depends on files this
-				// one cannot see, so it is rejected rather than guessed at.
-				return ErrorADL_AscentExceedsFile(new_path.display(), (int)stack.length(), source_line(), source_column());
+				int	depth = stack.length()-new_path.ascent-1;
+				if (depth < 0)	// Cannot explicitly ascend outside the file
+					return ErrorADL_AscentExceedsFile(new_path.display(), (int)stack.length(), source_line(), source_column());
+				parent = stack[depth].handle;
+				ADL_TRACE("Ascended to %s\n", stack[depth].display().asUTF8());
 			}
-			parent = stack[depth].handle;
-			truly_ascended = parent != context;
-			ADL_TRACE("Ascended to %s\n", stack[depth].display().asUTF8());
+
+			// Any explicit ascent counts as contextual on its own
+			truly_ascended = true;
 		}
 
 		// Search down from the parent for each name leading to the last one
@@ -1094,9 +1094,8 @@ public:
 		Handle	child;
 		if (new_path.names.length() == 0)
 		{
-			// Pure ascent, no name (e.g. a lone "."): reopen the
-			// ascended-to object itself - there's no name here to
-			// search it for a child of.
+			// Pure ascent, no name (e.g. a lone "."): reopen the object
+			// itself - there's no name here to search for
 			child = parent;
 		}
 		else
@@ -1108,12 +1107,8 @@ public:
 				ADL_TRACE("Descending name %d of %d `%s` from %s found %s\n", descent, new_path.names.length(), child_name.asUTF8(), parent.pathname().asUTF8(), child.pathname().asUTF8());
 				if (child.is_null())		// Not in this parent and we can't ascend
 				{
-					// Automatic ascent (no explicit dots) may climb as many
-					// tree levels as it takes to find the *first* name - same
-					// rule as lookup_path()'s implicit ascent - but only the
-					// first: once any name has matched, every later one must
-					// be a direct or inherited child of it, never reached by
-					// ascending back out again.
+					// Automatic ascent (no explicit dots) may climb as many tree
+					// levels as it takes to find the *first* name in a path.
 					Handle	up = descent == 0 && new_path.ascent == 0 ? parent.parent() : Handle();
 					if (up.is_null())
 						return ErrorADL_ParentNotFound(child_name, source_line(), source_column());
@@ -1200,11 +1195,29 @@ public:
 			if (!child.is_null())
 			{
 				/*
-				 * Reopening something is always contextual when it's
+				 * Once a scope is contextual, everything nested inside it
+				 * is too, regardless of how *this* particular reopen would
+				 * be classified on its own - the enclosing Frame's own
+				 * contextual_aspect (already fully propagated, by the same
+				 * rule, from whatever established it further out) always
+				 * wins. Without this, a reopen found via ordinary
+				 * supertype-fallback from an *already-contextual* parent
+				 * (e.g. "Button.Style" found by falling through a
+				 * Screen-extension's own supertype chain to the real
+				 * Button, then the real Style) looks entirely local from
+				 * where it stands, and silently writes through to the real
+				 * object instead of extending it - confirmed 2026-09-27,
+				 * dumping the tree from exactly this shape.
+				 */
+				Handle	enclosing_aspect = stack.length() >= 2 ? enclosing_frame().contextual_aspect : Handle();
+				bool	already_contextual = !enclosing_aspect.is_null();
+
+				/*
+				 * Otherwise, reopening something is contextual when it's
 				 * not really "yours", but is reached only by ascending
 				 * beyond `context` (`truly_ascended`), or reached only
 				 * through inheritance. If it could be local, a trailing
-				 * dot forces it to be contextual anyway
+				 * dot forces it to be contextual anyway.
 				 *
 				 * It's recorded on the Frame either way (contextual_aspect),
 				 * for current_context() below to redirect a plain *value
@@ -1213,6 +1226,7 @@ public:
 				 * is contextual the same way a reopen is.
 				 */
 				bool	ascended = truly_ascended;
+
 				/*
 				 * child == parent happens only via the is_outermost
 				 * same-name continuation special case above. There,
@@ -1222,12 +1236,14 @@ public:
 				 */
 				bool	inherited = child != parent && child.parent() != parent;
 				bool	forced = '.' == object_path().sep[0];
-				frame().contextual_aspect = (ascended || forced) ? context : Handle();
-				if (frame().saw_block && (ascended || inherited || forced))
+				frame().contextual_aspect = already_contextual ? enclosing_aspect
+							: (ascended || forced) ? context : Handle();
+				if (frame().saw_block && (already_contextual || ascended || inherited || forced))
 				{
-					ADL_TRACE("Contextually extending %s from %s (ascended %d, inherited %d, forced %d)\n",
-						child.pathname().asUTF8(), context.pathname().asUTF8(), ascended, inherited, forced);
-					child = contextual_extension_of(child, context);
+					ADL_TRACE("Contextually extending %s from %s (already %d, ascended %d, inherited %d, forced %d)\n",
+						child.pathname().asUTF8(), frame().contextual_aspect.pathname().asUTF8(),
+						already_contextual, ascended, inherited, forced);
+					child = contextual_extension_of(child, frame().contextual_aspect);
 				}
 			}
 			else if (may_ascend)
@@ -1293,12 +1309,7 @@ public:
 					parent,
 					last_name,
 					supertype
-					// No Aspect: an ordinary object's Aspect defaults to
-					// its Parent (README "Contextual Extension": "All
-					// objects actually have a Context [Aspect], which
-					// for most, it's the same as the Parent") - only a
-					// genuine contextual extension gets a real, distinct
-					// one, via contextual_extension_of() above.
+					// No Aspect: an ordinary object's Aspect defaults to its Parent
 				);
 		}
 
@@ -1335,10 +1346,11 @@ public:
 		return 0;
 	}
 
-	// Lookup the entire path, ascending to the parent where necessary
-	// Takes PathName by const reference: PathName holds a StringArray and a
-	// StrVal, both refcounted, so passing by value cost a copy per call.
 	/*
+	 * Lookup the entire path, ascending to the parent where necessary.
+	 * Takes PathName by const reference: PathName holds a StringArray and a
+	 * StrVal, both refcounted, so passing by value cost a copy per call.
+	 *
 	 * A lookup whose failure the caller reports for itself. lookup_path()
 	 * reports the name it could not find, and the caller's message says more -
 	 * which Reference, Alias or supertype it was - so the callee's report is
@@ -1363,30 +1375,15 @@ public:
 			return 0;	// No ascent, no path.
 
 		bool	no_implicit_ascent = path.ascent > 0;
-		if (path.ascent > 0)
+		if (path.ascent > 1)
 		{
-			// Explicit ascent walks up the *lexical* {} scopes (the parser's
-			// stack of currently-open blocks) to reach the block this
-			// pathname was written in - one dot means the scope we're
-			// already in, two the block that lexically encloses it, and so
-			// on - never the object tree. Automatic ascent below (no dots)
-			// is the opposite: there's no lexical position to count from,
-			// only "wherever the name turns out to live", so it walks the
-			// object tree instead.
+			// Explicit ascent walks up the *lexical* {} scopes
+			// one dot means the scope we're already in, two means
+			// the block that lexically encloses it, etc.
 			int	depth = stack.length() - path.ascent - 1;
 			if (depth < 0)
 			{
-				// Ascended past what *this file's own* {} nesting can show.
-				// The object tree's parent links do span file boundaries
-				// (the block was really opened, just not by this file), so
-				// this could be made to work by walking them - but whoever
-				// wrote this pathname cannot read or know that context: it
-				// depends on however many files come before this one and
-				// how they nest, none of which this file can see. An
-				// ascent count that only happens to reach the right place
-				// because of that unseen context is not a specification
-				// anyone can read back, so it is rejected rather than
-				// honoured.
+				// Cannot explicitly ascend outside *this file*
 				ErrorADL_AscentExceedsFile(path.display(), (int)stack.length(), source_line(), source_column());
 				return Handle();
 			}

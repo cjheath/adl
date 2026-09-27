@@ -4,10 +4,14 @@
 // always contextual (extends it, invisible outside the reopening
 // context); a plain local reopen ("{...}", no ascent/inheritance needed)
 // instead "make[s] the changes to the original object" - unless a
-// trailing dot forces it contextual anyway. This file's comments were
-// originally written before that rule was pinned down precisely (see
-// cpp/ToDo); updated here to match, once each case was actually checked
-// against the implementation.
+// trailing dot forces it contextual anyway. Writing an *explicit* leading
+// dot is its own such force, too, whether or not it causes any real
+// movement: the author's own dot is the signal, not a side effect of
+// where the search happened to land (2026-09-27; ".a.b" below used to be
+// the one case in this file demonstrating the opposite, which was wrong).
+// This file's comments were originally written before that rule was
+// pinned down precisely (see cpp/ToDo); updated here to match, once each
+// case was actually checked against the implementation.
 TOP {
 	a: {
 		b:
@@ -30,11 +34,16 @@ TOP {
 	}
 
 	.a.b {
-		f:;		// This is NOT contextual: written directly at TOP's
-				// own level, ".a.b" is pure descent from TOP (the
-				// enclosing scope this statement is already in) -
-				// the leading dot's explicit ascent lands right
-				// back on TOP itself, no real movement. f is added
-				// directly to the real a.b, visible from everywhere.
+		f:;		// This IS contextual, same as ".a" above, even though
+				// the leading dot's explicit ascent lands right back
+				// on TOP itself (this statement's own enclosing
+				// scope) with no real movement: writing the dot at
+				// all is the author's own signal to treat this as
+				// reaching outside the current object, not something
+				// that depends on whether the search happened to
+				// need to move. f lands on a real extension of the
+				// real a.b, scoped to TOP - not on a.b itself.
+				// (Corrected 2026-09-27 - this file previously
+				// documented the opposite as intentional; it wasn't.)
 	}
 }
