@@ -613,12 +613,21 @@ public:
 		if (variable.is_null() || context.is_null() || slot.is_null())
 			return 0;
 
-		ErrNum	final_err = context.finish_assign(slot, variable, build_value(context), is_final);
+		Value	v = build_value(context);
+		if (frame().value_error)
+			// The value itself never resolved (its own lookup already
+			// reported why) - don't also run finish_assign()'s validation
+			// (finality, type-checking, ...) against whatever placeholder
+			// build_value() answered instead: that has nothing to do with
+			// what was actually written, and validating it can only produce
+			// a second, misleading error on top of the real one.
+			return frame().value_error;
+
+		ErrNum	final_err = context.finish_assign(slot, variable, v, is_final);
 		if (final_err)
 			return final_err;		// Reported where it happened; not again here
 
-		// A bad/missing value was reported above; return it here.
-		return frame().value_error;
+		return 0;
 	}
 
 	void	string_literal(Source start, Source end)	// Contents of a string between start and end
@@ -835,6 +844,8 @@ public:
 		case ValueType::Reference:
 		{
 			Handle	target = lookup_path_for_caller(context, frame().reference_path);
+			if (target.is_null())
+				frame().value_error = ErrorADL_ReferenceNotFound(frame().handle.pathname(), frame().reference_path.display(), source_line(), source_column());
 			return store.reference_literal(target);
 		}
 		case ValueType::Match:		return store.matched_literal(value());

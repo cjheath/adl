@@ -1,0 +1,12 @@
+// Continues inside Outer (file 2's last-closed object). Reopens Middle
+// (no wrapper needed for Outer itself) and descends one level further
+// into a new Leaf, so that when NewObj's own declared path is resolved,
+// this file's own {} stack is only two deep: [Middle, Leaf]. Reaching
+// TOP from Leaf would need three ascends (Leaf -> Middle -> Outer -> TOP),
+// so four dots (dot count N ascends N-1 levels) - one more than this
+// file's own stack can supply. Rejected: ADLERR_ASCENT_EXCEEDS_FILE.
+Middle: {
+	Leaf: {
+		....NewObj: {}
+	}
+}

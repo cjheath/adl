@@ -1,0 +1,28 @@
+// EXPECT: PASS
+// Like tests/40_reference_narrow.adl, but the inherited final restriction's
+// own target is itself a Reference variable, not a concrete type directly -
+// this is the shape strpp/tools/mcs.adl uses (a field like "Language",
+// itself restricted by "-> Language;", inherited and re-restricted further
+// down). Narrowing must be checked against what Thing itself resolves to
+// (RootType), not against Thing as a field.
+TOP {
+	RootType:;
+	SubA: RootType;
+
+	// Thing is a Reference variable, restricted (finally) to RootType.
+	Thing -> RootType;
+
+	// Employer's inherited restriction is Thing - a Reference, not a
+	// concrete type.
+	Employment: {
+		Employer -> Thing;
+	}
+
+	// SubA is a subtype of RootType (what Thing itself is restricted to),
+	// so this narrowing must be accepted, even though SubA is not a
+	// subtype of Thing (Thing is a Reference variable, not a supertype in
+	// the object tree at all).
+	AJob: Employment {
+		Employer = SubA;
+	}
+}

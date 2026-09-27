@@ -1,0 +1,17 @@
+// EXPECT: FAIL
+// Same finding as tests/96_supertype_ascent_beyond_file_reject, but for
+// an explicit ascent on the object's *own* declared path (before the
+// colon) rather than a supertype/reference/alias target - a separate
+// code path (start_object()'s own explicit-ascent handling) that had the
+// identical gap. A three-file chain, so that by the time file 3 resolves
+// its own explicit ascent, the object it's ascending out of (Outer) was
+// opened by file 2 and the object it's ascending *to* (TOP, holding
+// Marker) was closed out by this file - neither is a lexical frame file
+// 3's own {} stack can show it. This file just bootstraps TOP with
+// Marker, and closes TOP as its only statement, so file 2 continues
+// directly inside TOP.
+TOP {
+	Marker: {
+		Found:;
+	}
+}

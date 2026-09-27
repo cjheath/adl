@@ -1,0 +1,21 @@
+// EXPECT: FAIL
+// Companion to tests/42_reference_narrow_chained.adl: the same chained
+// restriction (Employer -> Thing, Thing -> RootType), but Unrelated is not
+// a RootType or a subtype of it, so narrowing to it must still be refused -
+// chasing through the Reference chain must not loosen the check, only
+// resolve what it is actually checking against.
+TOP {
+	RootType:;
+	Unrelated:;
+
+	Thing -> RootType;
+
+	Employment: {
+		Employer -> Thing;
+	}
+
+	// Faulty: Unrelated is not RootType, nor a subtype of it.
+	BadJob: Employment {
+		Employer = Unrelated;
+	}
+}

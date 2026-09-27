@@ -695,6 +695,27 @@ Handle::check_reference_finality(Handle variable, Value value)
 		return 0;
 
 	Handle	old_target = existing.value().handle;
+
+	/*
+	 * The existing restriction may itself be a Reference variable (e.g.
+	 * "Thing -> RootType;" declared once, then some other field's own
+	 * restriction is "-> Thing;"): what a later narrowing assignment must
+	 * be a subtype of is what Thing itself is restricted to, not Thing as
+	 * a field. Chase Handle::to() (a Reference variable's own declared
+	 * target) until a concrete (non-Reference) type is reached, or a link
+	 * in the chain has no target of its own to give. "No forward
+	 * references" (README "Resolving Names") makes a cycle here
+	 * impossible to construct, but the bound costs nothing and guards
+	 * against ever hanging if that invariant is wrong somewhere.
+	 */
+	for (int hops = 0; hops < 64 && old_target.is_reference(); hops++)
+	{
+		Handle	resolved = old_target.to();
+		if (resolved.is_null())
+			break;
+		old_target = resolved;
+	}
+
 	auto	same_or_subtype = [&](Handle new_target) -> bool
 			{
 				if (old_target == new_target)
