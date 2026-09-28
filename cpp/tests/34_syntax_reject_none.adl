@@ -1,0 +1,13 @@
+// EXPECT: FAIL
+// An assignment to a variable whose type has no Syntax anywhere in its
+// supertype chain must be rejected: matched_literal() (adlparser.h) used to
+// fall back to accepting any quoted-string-or-numeric-looking token in this
+// case - the fallback that let ADL bootstrap String/Integer/etc before any
+// Syntax existed to describe them. That fallback is gone; only the
+// self-typed-field special case in ADLStoreSink::lookup_syntax() (adlstore.h,
+// see 35_syntax_self_typed_ok.adl) still lets a literal through when the
+// variable's own type has no Syntax. Message has neither, so this must fail.
+TOP {
+	Message:;
+	Trail Text: Message = 'text';		// Faulty: Message has no Syntax to conform to
+}

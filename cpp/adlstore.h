@@ -756,11 +756,29 @@ public:
 		if (var.is_null())
 			return Source();
 
-		current_syntax = var.syntax();	// Own a copy: syntax() returns a temporary StrVal,
+		/*
+		 * Heritably-typed field: X (e.g. Number) declares a child Y
+		 * (e.g.  Minimum) whose own supertype is X itself (Y: .) allows
+		 * Y to be assigned on every subtype Z of X which has a Syntax,
+		 * even though X may not, or may have a different Syntax.
+		 * E.g. Digits: Integer{Minimum = 1} matches against Integer's
+		 * Syntax, though Minimum is a child of Number which has none.
+		 */
+		StrVal	syntax;
+		if (var.parent() == var.super())
+			syntax = current_context().effective_syntax();
+		if (syntax.isEmpty())
+			syntax = var.syntax();
+		current_syntax = syntax;	// Own a copy: syntax() returns a temporary StrVal,
 						// and the Source we return below points into it.
 		if (current_syntax.isEmpty())
 			return Source();
 		return Source::over(current_syntax);
+	}
+
+	StrVal	assignment_target_pathname()		// Pathname of the variable now being assigned, for diagnostics
+	{
+		return frame().handle.pathname();	// start_object() already resolved this, via lookup_syntax() just above
 	}
 
 	// Methods below here are not a required part of the Sink:

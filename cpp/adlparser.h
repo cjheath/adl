@@ -145,6 +145,8 @@ public:
 		{ return ExpectMatch; }			// No object model here to consult; this always fails
 						// cleanly (lookup_syntax() above always returns empty), which is
 						// the right outcome with no real check to run - see adl_scan.cpp
+	StrVal	assignment_target_pathname()		// Pathname of the variable now being assigned, for diagnostics
+		{ return StrVal(); }
 };
 
 template<
@@ -198,10 +200,6 @@ protected:
 	bool	pegexp_class(Source&);		// '[' ?'^' ?'-' +pegexp_class_part ']'
 	bool	pegexp_class_part(Source&);	// !']' pegexp_class_char ?('-' !']' pegexp_class_char)
 	bool	pegexp_class_char(Source&);	// | !'-' pegexp_char | [*+?()|/]
-
-	// Bootstrap for values:
-	bool	string_literal(Source&);
-	bool	numeric_literal(Source&);
 
 	Sink&		sink;
 };
@@ -724,16 +722,19 @@ template<typename Source> bool ADLParser<Source>::matched_literal(Source& source
 	}
 
 	/*
-	 * No Syntax could be determined (e.g. while bootstrapping String/Integer/etc themselves,
-	 * before any Syntax exists to describe them). Fall back to hard-coded literal forms:
+	 * No Syntax applies to this variable at all - lookup_syntax() found
+	 * none in its own supertype chain, and (via ADLStoreSink::lookup_syntax())
+	 * none through the self-typed-field inheritance that covers ADL's own
+	 * bootstrapping (Number.Minimum/Maximum, used from Integer/Decimal/...).
+	 * There is nothing left a literal here could ever be checked against, so
+	 * it can never be accepted - report, then recover the same way an
+	 * outright Syntax mismatch does, just above.
 	 */
-	UCS4	ch = source.peek_char();
-	if ('\'' == ch)
-		return string_literal(source);
-	if ('0' <= ch && ch <= '9' || '-' == ch || '+' == ch)
-		return numeric_literal(source);
-
-	return false;
+	ErrorADL_NotVariable(sink.assignment_target_pathname(), source.ahead(64), source.line_number(), source.column());
+	Source	start(source);
+	recover_to_boundary(source);
+	sink.matched_literal(start, start);	// Record an empty value, having reported why
+	return true;				// Recovered - let the caller finish this assignment normally
 }
 
 // Skip to the next ';' or '}' (or EOF) after a bad value, honoring backslash-escaping and quote-nesting
@@ -754,50 +755,6 @@ template<typename Source> void ADLParser<Source>::recover_to_boundary(Source& so
 		else if (ch == '\'')
 			in_quote = !in_quote;
 	}
-}
-
-// Value matches the Type syntax for a string
-template<typename Source> bool ADLParser<Source>::string_literal(Source& source)
-{
-	Source	probe(source);
-	UCS4	ch = probe.peek_char();
-
-	if ('\'' != ch)
-		return false;
-	probe.advance();
-
-	Source	start(probe);
-	while ((ch = probe.peek_char()) != UCS4_NONE && '\'' != ch)
-	{
-		probe.advance();
-		if (ch == '\\')
-			probe.advance(), ch = probe.peek_char();
-	}
-	if (UCS4_NONE == ch)
-	{
-		ErrorADL_ExpectClosingQuote(probe.line_number(), probe.column());
-		return false;
-	}
-	sink.string_literal(start, probe);
-	probe.advance();
-	source = probe;
-	return true;
-}
-
-// Value matches the Type syntax for a number
-template<typename Source> bool ADLParser<Source>::numeric_literal(Source& source)
-{
-	Source	probe(source);
-	UCS4	ch;
-
-	while ((ch = probe.peek_char()) && ('0' <= ch && ch <= '9' || '-' == ch || '+' == ch || ch == '.'))
-		probe.advance();
-	bool	ok = probe.bytes_from(source) > 0;	// Anything consumed? A numeric
-							// token is ASCII, so that is its length too.
-	if (ok)
-		sink.numeric_literal(source, probe);
-	source = probe;
-	return ok;
 }
 
 // Optional white-space: *(| +[ \t\n\r] | '//' *(!'\n' .))

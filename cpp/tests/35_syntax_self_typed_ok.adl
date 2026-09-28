@@ -1,0 +1,19 @@
+// EXPECT: PASS
+// A self-typed field: X (here Number) declares a child Y (Minimum) whose
+// own supertype is X itself, written as a bare '.' - one level of explicit
+// ascent from inside X's own block lands back on X. X need not have a
+// Syntax of its own; every subtype Z of X (here Digits) may still assign to
+// its inherited Y, checked against Z's own effective Syntax. This is the
+// mechanism adl.adl's Number.Minimum/Maximum relies on so that
+// Digits: Integer{Minimum = 1} and friends can bootstrap without a Syntax
+// on Number itself - see ADLStoreSink::lookup_syntax() (adlstore.h) and
+// 34_syntax_reject_none.adl for the case this does NOT cover.
+TOP {
+	Number: {
+		Minimum: .;
+	}
+	Digits: Number {
+		Syntax = /[1-9]*\d/;
+		Minimum = 3;		// Matches Digits' own Syntax, not Number's (it has none)
+	}
+}

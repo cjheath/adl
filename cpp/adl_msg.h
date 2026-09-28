@@ -158,6 +158,14 @@ ErrorADL_AscentExceedsFile(StrVal path, int levels_open, int line, int column)
 		VariantArray() << path << levels_open << line << column);
 }
 
+inline ErrNum
+ErrorADL_NotVariable(StrVal variable, StrVal attempted, int line, int column)
+{
+	return Error(ADLERR_NOT_VARIABLE,
+		"The object {1} to which you are assigning a {2:<16...} is not a variable because it has no Syntax",
+		VariantArray() << variable << attempted << line << column);
+}
+
 // The Parser's grammar expectations:
 
 inline ErrNum

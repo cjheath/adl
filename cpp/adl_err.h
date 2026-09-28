@@ -62,5 +62,6 @@
 // Back with the object model, the Store and the Sink (see the comment there):
 
 #define	ADLERR_ASCENT_EXCEEDS_FILE	ErrNum(ADLERR_SET, 30)	// The ascent in `{1}` reaches beyond this file's own scope, which has only {2} level(s) open
+#define	ADLERR_NOT_VARIABLE		ErrNum(ADLERR_SET, 31)	// The object {1} to which you are assigning a {2:<16...} is not a variable because it has no Syntax
 
 #endif	// ADL_ERR_H
