@@ -37,7 +37,7 @@ int main(int argc, const char** argv)
 	char*			text = slurp_file(filename, &file_size);
 	ADLSinkStub<>		sink;
 	ADLParser<>		adl(sink);
-	ADLSourceUTF8Ptr	source(text);
+	ADLSourceUTF8Ptr	source(text, filename);
 
 	bool			ok = adl.parse(source);
 	off_t			bytes_parsed = source.peek() - text;
@@ -52,7 +52,7 @@ int main(int argc, const char** argv)
 	int			first_column = 0;
 	(void)adl_first_error_position(first_line, first_column);
 
-	unsigned		errors = adl_display_errors(filename);
+	unsigned		errors = adl_display_errors();
 
 	if (errors > 0 && first_line > 0)
 		adl_display_line(StrVal::format(

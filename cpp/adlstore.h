@@ -132,7 +132,7 @@ public:
 	using	Value = _Value;
 
 	// Where the Sink is: a stub has no use for it
-	void	located_at(int, int) {}
+	void	located_at(int, int, const char*) {}
 
 	// Access built-ins quickly:
 	Handle		top() { return Handle(); }
@@ -367,14 +367,15 @@ public:
 	void	note_position(const Source& where)
 	{
 		last_source = where;
-		store.located_at(where.line_number(), where.column());
+		store.located_at(where.line_number(), where.column(), where.source_name());
 	}
 
-	// Where this layer is, for the messages it reports: line then column, the
-	// trailing pair of every message by convention, which is why no default
-	// text names them and the display prints them as a prefix.
-	int	source_line() const		{ return last_source.line_number(); }
-	int	source_column() const	{ return last_source.column(); }
+	// Where this layer is, for the messages it reports: source name, line and
+	// column, the leading three parameters of every message that carries a
+	// position, by convention - see adl_err.h.
+	int		source_line() const	{ return last_source.line_number(); }
+	int		source_column() const	{ return last_source.column(); }
+	const char*	source_name() const	{ return last_source.source_name(); }
 
 	void	definition_starts()			// A declaration just started
 	{
@@ -496,7 +497,7 @@ public:
 
 		if (target.is_null())
 			return ErrorADL_ReferenceNotFound(variable.pathname(), reference_path.display(),
-							source_line(), source_column());
+							source_name(), source_line(), source_column());
 
 		// The implicit type restriction is always final; a following
 		// explicit assignment ("X -> Y ~= Z") refines it in place (see
@@ -543,7 +544,7 @@ public:
 
 		Handle	target = lookup_path_for_caller(context, alias_path);
 		if (target.is_null())
-			return ErrorADL_AliasNotFound(object_pathname(), alias_path.display(), source_line(), source_column());
+			return ErrorADL_AliasNotFound(object_pathname(), alias_path.display(), source_name(), source_line(), source_column());
 
 		frame().handle.set_alias(target);
 		return 0;
@@ -863,7 +864,7 @@ public:
 		{
 			Handle	target = lookup_path_for_caller(context, frame().reference_path);
 			if (target.is_null())
-				frame().value_error = ErrorADL_ReferenceNotFound(frame().handle.pathname(), frame().reference_path.display(), source_line(), source_column());
+				frame().value_error = ErrorADL_ReferenceNotFound(frame().handle.pathname(), frame().reference_path.display(), source_name(), source_line(), source_column());
 			return store.reference_literal(target);
 		}
 		case ValueType::Match:		return store.matched_literal(value());
@@ -874,7 +875,7 @@ public:
 			Handle	target = lookup_path_for_caller(context, frame().reference_path);
 			if (target.is_null())
 			{
-				frame().value_error = ErrorADL_SyntaxCopyNotFound(frame().reference_path.display(), source_line(), source_column());
+				frame().value_error = ErrorADL_SyntaxCopyNotFound(frame().reference_path.display(), source_name(), source_line(), source_column());
 				return store.pegexp_literal("");
 			}
 			return store.pegexp_literal(target.effective_syntax());
@@ -895,9 +896,9 @@ public:
 
 	// These two error recur three times each:
 	ErrNum	reopen_not_found()
-			{ return ErrorADL_ReopenNotFound(object_pathname(), source_line(), source_column()); }
+			{ return ErrorADL_ReopenNotFound(object_pathname(), source_name(), source_line(), source_column()); }
 	ErrNum	supertype_not_found()
-			{ return ErrorADL_SupertypeNotFound(supertype_path().display(), object_pathname(), source_line(), source_column()); }
+			{ return ErrorADL_SupertypeNotFound(supertype_path().display(), object_pathname(), source_name(), source_line(), source_column()); }
 
 	/*
 	 * Making an object Sterile prevents definition of any further subtypes.
@@ -908,7 +909,7 @@ public:
 	ErrNum	check_sterile_supertype(Handle supertype, StrVal new_subtype)
 	{
 		if (!supertype.is_null() && supertype.is_sterile())
-			return ErrorADL_SterileSupertype(supertype.pathname(), new_subtype, source_line(), source_column());
+			return ErrorADL_SterileSupertype(supertype.pathname(), new_subtype, source_name(), source_line(), source_column());
 		return 0;
 	}
 
@@ -923,7 +924,7 @@ public:
 	ErrNum	check_complete_parent(Handle parent, StrVal new_child)
 	{
 		if (!parent.is_null() && parent.is_complete())
-			return ErrorADL_CompleteParent(parent.pathname(), new_child, source_line(), source_column());
+			return ErrorADL_CompleteParent(parent.pathname(), new_child, source_name(), source_line(), source_column());
 		return 0;
 	}
 
@@ -1020,14 +1021,14 @@ public:
 			if (new_path.ascent > 0		// Can't ascend to TOP
 			 || new_path.names.length() < 1	// Cannot be anonymous
 			 || new_path.names[0] != "TOP")	// Must be called "TOP"
-				return ErrorADL_TopName(new_path.display(), source_line(), source_column());
+				return ErrorADL_TopName(new_path.display(), source_name(), source_line(), source_column());
 
 			if (new_path.names.length() == 1)
 			{
 				// If a supertype of TOP is given, it must be just "Object"
 				if (supertype_present()
 				 && (super_path.ascent != 0 || super_path.names.length() != 1 || super_path.names[0] != "Object"))
-					return ErrorADL_TopSuper(super_path.display(), source_line(), source_column());
+					return ErrorADL_TopSuper(super_path.display(), source_name(), source_line(), source_column());
 
 				frame().handle = store.top();
 				ADL_TRACE("Re-opening TOP\n");
@@ -1042,7 +1043,7 @@ public:
 		}
 
 		if (parent.is_null())
-			return ErrorADL_NoParent(new_path.display(), source_line(), source_column());
+			return ErrorADL_NoParent(new_path.display(), source_name(), source_line(), source_column());
 
 		if (new_path.is_empty())
 		{
@@ -1098,7 +1099,7 @@ public:
 			{
 				int	depth = stack.length()-new_path.ascent-1;
 				if (depth < 0)	// Cannot explicitly ascend outside the file
-					return ErrorADL_AscentExceedsFile(new_path.display(), (int)stack.length(), source_line(), source_column());
+					return ErrorADL_AscentExceedsFile(new_path.display(), (int)stack.length(), source_name(), source_line(), source_column());
 				parent = stack[depth].handle;
 				ADL_TRACE("Ascended to %s\n", stack[depth].display().asUTF8());
 			}
@@ -1129,7 +1130,7 @@ public:
 					// levels as it takes to find the *first* name in a path.
 					Handle	up = descent == 0 && new_path.ascent == 0 ? parent.parent() : Handle();
 					if (up.is_null())
-						return ErrorADL_ParentNotFound(child_name, source_line(), source_column());
+						return ErrorADL_ParentNotFound(child_name, source_name(), source_line(), source_column());
 					parent = up;
 					truly_ascended = true;
 					may_ascend = false;
@@ -1178,7 +1179,7 @@ public:
 
 			if (!child.is_null() && child.super() != supertype)
 				return ErrorADL_SupertypeChanged(object_pathname(), child.super().pathname(),
-							supertype.pathname(), source_line(), source_column());
+							supertype.pathname(), source_name(), source_line(), source_column());
 		}
 		else
 		{
@@ -1310,7 +1311,7 @@ public:
 		 && !supertype.is_null()
 		 && child.super() != supertype)
 			return ErrorADL_SupertypeChanged(object_pathname(), child.super().pathname(),
-							supertype.pathname(), source_line(), source_column());
+							supertype.pathname(), source_name(), source_line(), source_column());
 
 		frame().handle = child;
 		frame().scope_parent = parent;
@@ -1402,7 +1403,7 @@ public:
 			if (depth < 0)
 			{
 				// Cannot explicitly ascend outside *this file*
-				ErrorADL_AscentExceedsFile(path.display(), (int)stack.length(), source_line(), source_column());
+				ErrorADL_AscentExceedsFile(path.display(), (int)stack.length(), source_name(), source_line(), source_column());
 				return Handle();
 			}
 			parent = stack[depth].handle;
@@ -1433,7 +1434,7 @@ public:
 				continue;
 			}
 
-			ErrorADL_NameNotFound(child_name, source_line(), source_column());
+			ErrorADL_NameNotFound(child_name, source_name(), source_line(), source_column());
 			return Handle();	// Not found
 		}
 

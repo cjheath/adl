@@ -20,14 +20,17 @@ class	ADLSourceUTF8Ptr
 	int		peeked_bytes;
 	int		_line_number;
 	int		_column;
+	const char*	_source_name;	// Where this text came from, for a display to name -
+					// a filename today, but agnostic to what a future
+					// Source might read from (a socket, say)
 
 public:
 	ADLSourceUTF8Ptr()
-		: data(""), peeked_bytes(0), _line_number(1), _column(1) {}
-	ADLSourceUTF8Ptr(const UTF8* _data)
-		: data(_data), peeked_bytes(0), _line_number(1), _column(1) {}
+		: data(""), peeked_bytes(0), _line_number(1), _column(1), _source_name("") {}
+	ADLSourceUTF8Ptr(const UTF8* _data, const char* source_name = "")
+		: data(_data), peeked_bytes(0), _line_number(1), _column(1), _source_name(source_name) {}
 	ADLSourceUTF8Ptr(const ADLSourceUTF8Ptr& c)
-		: data(c.data), peeked_bytes(0), _line_number(c._line_number), _column(c._column) {}
+		: data(c.data), peeked_bytes(0), _line_number(c._line_number), _column(c._column), _source_name(c._source_name) {}
 	UCS4	peek_char()
 		{
 			const UTF8*	tp = data;
@@ -54,6 +57,8 @@ public:
 		{ return _line_number; }
 	int	column() const
 		{ return _column; }
+	const char*	source_name() const
+		{ return _source_name; }
 	const char*	peek() const
 		{ return data; }
 	StrVal	fragment(const ADLSourceUTF8Ptr& end) const	// From here to `end`
@@ -139,12 +144,44 @@ public:
 	void	array_value_element() {}		// One element's literal was just reported above
 	void	array_value_end() {}			// ']' seen; the reported elements are now the whole value
 
+	/*
+	 * With no object model to consult, this stub can never know a
+	 * variable's real Syntax - but adl_scan.cpp uses it to smoke-test
+	 * grammar shape, not semantics, and matched_literal() (below) no
+	 * longer has an untyped fallback of its own, so offering nothing here
+	 * would now reject every literal assignment outright. This permissive
+	 * Syntax - a quoted string, a hex/decimal/signed number, or a dotted
+	 * path name - stands in for that. It is not exact: hex is tried
+	 * before the general number (so "0x1F" isn't cut short at "0"), and
+	 * the general number handles plain integers too (so there's no
+	 * separate, shorter integer alternative to wrongly win a prefix match
+	 * ahead of it) - alternation here is possessive, first match wins, so
+	 * a shorter alternative ahead of a longer one that would have covered
+	 * the whole value is a real bug, not just untidy. A final catch-all
+	 * alternative accepts anything starting with `/` and running to the
+	 * next newline, semicolon or closing brace - that's not a real parse
+	 * of a `/regexp/` literal (which this stub can never attempt, since
+	 * expected_value_kind() below can't tell a Regular-Expression
+	 * variable from any other), just enough to consume it as one opaque
+	 * value so parsing can carry on; it must stop at `;`/`}` too, not just
+	 * the newline, or it swallows the statement's own terminator, which
+	 * broke every definition after it (confirmed by hand: consuming the
+	 * `;` corrupted the *next* definition, not this one). One real shape
+	 * still falls outside all of this, on purpose: a multiword name (the
+	 * embedded space risks swallowing into whatever follows, unlike the
+	 * other gaps) - still reports a real "no match" error rather than
+	 * being special-cased, as does an object-literal Reference value (a
+	 * flat pegexp can't parse a nested `{ }` block at all).
+	 */
+	StrVal	fallback_syntax = R"PEGEXP(|('*(|\[befntr'\]|\[0-7][0-7][0-7]|\0|\x[0-9A-F][0-9A-F]|\u[0-9A-F][0-9A-F][0-9A-F][0-9A-F]|[^\'])')|(0[xX]+[0-9A-Fa-f])|(?[-+](|0|[1-9]*\d)?(\.*\d))|(*\.[_\a]*[_\w.])|(\/*[^\n;}]))PEGEXP";
+
 	Source	lookup_syntax(Source type)		// Return Source of a Pegexp string to use in matching
-		{ return Source(); }
+		{ return Source::over(fallback_syntax); }
 	ValueExpectation	expected_value_kind(Source type)	// What kind of value does the variable being assigned expect?
-		{ return ExpectMatch; }			// No object model here to consult; this always fails
-						// cleanly (lookup_syntax() above always returns empty), which is
-						// the right outcome with no real check to run - see adl_scan.cpp
+		{ return ExpectMatch; }			// No object model here to consult, so no way to tell a
+						// Reference/Regular Expression/Array variable from any
+						// other - every value is tried against lookup_syntax()'s
+						// fallback above, whatever the variable actually is
 	StrVal	assignment_target_pathname()		// Pathname of the variable now being assigned, for diagnostics
 		{ return StrVal(); }
 };
@@ -367,7 +404,7 @@ template<typename Source> bool ADLParser<Source>::reference(Source& source)
 	Type	type(probe);
 	if (!path_name(probe))
 	{
-		ErrorADL_ExpectTypename(probe.line_number(), probe.column());
+		ErrorADL_ExpectTypename(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	sink.reference_type(ch == '=');
@@ -443,7 +480,7 @@ template<typename Source> bool ADLParser<Source>::block(Source& source)
 	// Must end with }
 	if ('}' != probe.peek_char())
 	{
-		ErrorADL_ExpectClosingBrace(probe.line_number(), probe.column());
+		ErrorADL_ExpectClosingBrace(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	probe.advance();
@@ -467,7 +504,7 @@ template<typename Source> bool ADLParser<Source>::post_body(Source& source, Type
 
 		if (']' != probe.peek_char())
 		{
-			ErrorADL_ExpectClosingBracket(probe.line_number(), probe.column());
+			ErrorADL_ExpectClosingBracket(probe.source_name(), probe.line_number(), probe.column());
 			return false;	// '[' with no ']'
 		}
 		probe.advance();
@@ -504,7 +541,7 @@ template<typename Source> bool ADLParser<Source>::final_assignment(Source& sourc
 	bool	has_value = value(probe, type);
 	if (!has_value)
 	{
-		ErrorADL_ExpectValue(probe.line_number(), probe.column());
+		ErrorADL_ExpectValue(probe.source_name(), probe.line_number(), probe.column());
 		return false;	// Assignment must have a value
 	}
 
@@ -524,7 +561,7 @@ template<typename Source> bool ADLParser<Source>::tentative_assignment(Source& s
 
 	if ('=' != probe.peek_char())
 	{
-		ErrorADL_ExpectTildeAssign(probe.line_number(), probe.column());
+		ErrorADL_ExpectTildeAssign(probe.source_name(), probe.line_number(), probe.column());
 		return false;	// '~' with no '='
 	}
 	probe.advance();
@@ -703,7 +740,7 @@ template<typename Source> bool ADLParser<Source>::matched_literal(Source& source
 			 * skipping to the next statement/block boundary so a single bad
 			 * value doesn't take the rest of the file down with it.
 			 */
-			ErrorADL_ExpectMatchingLiteral(StrVal(type.peek()), source.line_number(), source.column());
+			ErrorADL_ExpectMatchingLiteral(StrVal(type.peek()), source.source_name(), source.line_number(), source.column());
 			Source	start(source);
 			recover_to_boundary(source);
 			sink.matched_literal(start, start);	// Record an empty value, having reported why
@@ -730,7 +767,7 @@ template<typename Source> bool ADLParser<Source>::matched_literal(Source& source
 	 * it can never be accepted - report, then recover the same way an
 	 * outright Syntax mismatch does, just above.
 	 */
-	ErrorADL_NotVariable(sink.assignment_target_pathname(), source.ahead(64), source.line_number(), source.column());
+	ErrorADL_NotVariable(sink.assignment_target_pathname(), source.ahead(64), source.source_name(), source.line_number(), source.column());
 	Source	start(source);
 	recover_to_boundary(source);
 	sink.matched_literal(start, start);	// Record an empty value, having reported why
@@ -840,7 +877,7 @@ template<typename Source> bool ADLParser<Source>::pegexp_literal(Source& source)
 
 	if ('/' != probe.peek_char())
 	{
-		ErrorADL_ExpectClosingSlash(probe.line_number(), probe.column());
+		ErrorADL_ExpectClosingSlash(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	sink.pegexp_literal(start, probe);
@@ -865,7 +902,7 @@ template<typename Source> bool ADLParser<Source>::pegexp_sequence(Source& source
 				ok = true;
 			if (!ok)
 			{
-				ErrorADL_ExpectRegexpAtom(probe.line_number(), probe.column());
+				ErrorADL_ExpectRegexpAtom(probe.source_name(), probe.line_number(), probe.column());
 				return false;
 			}
 		}
@@ -916,13 +953,13 @@ template<typename Source> bool ADLParser<Source>::pegexp_group(Source& source)
 
 	if (!pegexp_sequence(probe))
 	{
-		ErrorADL_ExpectRegexpSequence(probe.line_number(), probe.column());
+		ErrorADL_ExpectRegexpSequence(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	
 	if (')' != probe.peek_char())
 	{
-		ErrorADL_ExpectClosingParen(probe.line_number(), probe.column());
+		ErrorADL_ExpectClosingParen(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	probe.advance();
@@ -1062,14 +1099,14 @@ template<typename Source> bool ADLParser<Source>::pegexp_class(Source& source)
 		probe.advance(), ch = probe.peek_char();
 	if (!pegexp_class_part(probe))
 	{
-		ErrorADL_ExpectRegexpClassBody(probe.line_number(), probe.column());
+		ErrorADL_ExpectRegexpClassBody(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	while (pegexp_class_part(probe))
 		;
 	if (']' != probe.peek_char())
 	{
-		ErrorADL_ExpectRegexpClassClose(probe.line_number(), probe.column());
+		ErrorADL_ExpectRegexpClassClose(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	probe.advance();
@@ -1087,7 +1124,7 @@ template<typename Source> bool ADLParser<Source>::pegexp_class_part(Source& sour
 		return false;
 	if (!pegexp_class_char(probe))
 	{
-		ErrorADL_ExpectRegexpClassPart(probe.line_number(), probe.column());
+		ErrorADL_ExpectRegexpClassPart(probe.source_name(), probe.line_number(), probe.column());
 		return false;
 	}
 	ch = probe.peek_char();

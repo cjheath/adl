@@ -9,7 +9,7 @@
  * Each function answers the ErrNum it has just reported, so reporting an error
  * and returning it are one act, and the ordinary use is a return:
  *
- *	return ErrorADL_ExpectClosingBrace(probe.line_number(), probe.column());
+ *	return ErrorADL_ExpectClosingBrace(probe.source_name(), probe.line_number(), probe.column());
  *
  * Nothing is formatted here, and nothing is decided about language, style or
  * severity: the buffer holds the number, the default text and the parameters
@@ -20,8 +20,14 @@
  * being gathered. Variant's constructors from StrVal, int, long, long long and
  * const char* are not explicit, so most parameters need no Variant(...) cast.
  *
- * The source position is the last two parameters, line then column, which the
- * display prints as a prefix.
+ * Every message that carries a position takes its source name, line and
+ * column last, matching every call site (which already ends `source_name(),
+ * line, column` or the equivalent), and its own default text opens with them
+ * itself: "{1}:{2}:{3}: ...". The VariantArray push order puts them first,
+ * ahead of the content parameters, to match - only that push order, and the
+ * text's own numbering, differ from the parameter list a function takes.
+ * adl_display.h renders each message in a single pass: nothing outside this
+ * file assembles a position prefix any more.
  */
 #include	<adl_err.h>
 #include	<errbuf.h>
@@ -31,253 +37,253 @@
 // The object model, the Store and the Sink:
 
 inline ErrNum
-ErrorADL_TopName(StrVal name, int line, int column)
+ErrorADL_TopName(StrVal name, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_TOP_NAME,
-		"The outermost object must be named TOP, not `{1}`",
-		VariantArray() << name << line << column);
+		"{1}:{2}:{3}: the outermost object must be named TOP, not `{4}`",
+		VariantArray() << source_name << line << column << name);
 }
 
 inline ErrNum
-ErrorADL_TopSuper(StrVal supertype, int line, int column)
+ErrorADL_TopSuper(StrVal supertype, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_TOP_SUPER,
-		"TOP's supertype, if given, must be Object, not `{1}`",
-		VariantArray() << supertype << line << column);
+		"{1}:{2}:{3}: TOP's supertype, if given, must be Object, not `{4}`",
+		VariantArray() << source_name << line << column << supertype);
 }
 
 inline ErrNum
-ErrorADL_NoParent(StrVal child, int line, int column)
+ErrorADL_NoParent(StrVal child, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_NO_PARENT,
-		"The child `{1}` was skipped because its parent is missing",
-		VariantArray() << child << line << column);
+		"{1}:{2}:{3}: the child `{4}` was skipped because its parent is missing",
+		VariantArray() << source_name << line << column << child);
 }
 
 inline ErrNum
-ErrorADL_ParentNotFound(StrVal name, int line, int column)
+ErrorADL_ParentNotFound(StrVal name, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_PARENT_NOT_FOUND,
-		"The name `{1}` on the way to the parent was not found",
-		VariantArray() << name << line << column);
+		"{1}:{2}:{3}: the name `{4}` on the way to the parent was not found",
+		VariantArray() << source_name << line << column << name);
 }
 
 inline ErrNum
-ErrorADL_SupertypeNotFound(StrVal supertype, StrVal object, int line, int column)
+ErrorADL_SupertypeNotFound(StrVal supertype, StrVal object, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_SUPERTYPE_NOT_FOUND,
-		"The supertype `{1}` of `{2}` was not found",
-		VariantArray() << supertype << object << line << column);
+		"{1}:{2}:{3}: the supertype `{4}` of `{5}` was not found",
+		VariantArray() << source_name << line << column << supertype << object);
 }
 
 inline ErrNum
-ErrorADL_SupertypeChanged(StrVal object, StrVal existing, StrVal attempted, int line, int column)
+ErrorADL_SupertypeChanged(StrVal object, StrVal existing, StrVal attempted, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_SUPERTYPE_CHANGED,
-		"The object `{1}` already has the supertype `{2}`, which this declaration tried to change to `{3}`",
-		VariantArray() << object << existing << attempted << line << column);
+		"{1}:{2}:{3}: the object `{4}` already has the supertype `{5}`, which this declaration tried to change to `{6}`",
+		VariantArray() << source_name << line << column << object << existing << attempted);
 }
 
 inline ErrNum
-ErrorADL_ReopenNotFound(StrVal object, int line, int column)
+ErrorADL_ReopenNotFound(StrVal object, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_REOPEN_NOT_FOUND,
-		"There is no supertype and no object `{1}` to reopen",
-		VariantArray() << object << line << column);
+		"{1}:{2}:{3}: there is no supertype and no object `{4}` to reopen",
+		VariantArray() << source_name << line << column << object);
 }
 
 inline ErrNum
-ErrorADL_NameNotFound(StrVal name, int line, int column)
+ErrorADL_NameNotFound(StrVal name, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_NAME_NOT_FOUND,
-		"The name `{1}` was not found",
-		VariantArray() << name << line << column);
+		"{1}:{2}:{3}: the name `{4}` was not found",
+		VariantArray() << source_name << line << column << name);
 }
 
 inline ErrNum
-ErrorADL_ReferenceNotFound(StrVal reference, StrVal target, int line, int column)
+ErrorADL_ReferenceNotFound(StrVal reference, StrVal target, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_REFERENCE_NOT_FOUND,
-		"The target `{2}` of the Reference `{1}` was not found",
-		VariantArray() << reference << target << line << column);
+		"{1}:{2}:{3}: the target `{5}` of the Reference `{4}` was not found",
+		VariantArray() << source_name << line << column << reference << target);
 }
 
 inline ErrNum
-ErrorADL_FinalViolation(StrVal object, StrVal attribute, StrVal prior, StrVal attempted, int line, int column)
+ErrorADL_FinalViolation(StrVal object, StrVal attribute, StrVal prior, StrVal attempted, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_FINAL_VIOLATION,
-		"The `{2}` of `{1}` was already {3}, so it cannot be set to {4}",
-		VariantArray() << object << attribute << prior << attempted << line << column);
+		"{1}:{2}:{3}: the `{5}` of `{4}` was already {6}, so it cannot be set to {7}",
+		VariantArray() << source_name << line << column << object << attribute << prior << attempted);
 }
 
 inline ErrNum
-ErrorADL_AliasNotFound(StrVal alias, StrVal target, int line, int column)
+ErrorADL_AliasNotFound(StrVal alias, StrVal target, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_ALIAS_NOT_FOUND,
-		"The target `{2}` of the Alias `{1}` was not found",
-		VariantArray() << alias << target << line << column);
+		"{1}:{2}:{3}: the target `{5}` of the Alias `{4}` was not found",
+		VariantArray() << source_name << line << column << alias << target);
 }
 
 inline ErrNum
-ErrorADL_SterileSupertype(StrVal object, StrVal subtype, int line, int column)
+ErrorADL_SterileSupertype(StrVal object, StrVal subtype, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_STERILE_SUPERTYPE,
-		"Is Sterile forbids a new subtype of `{1}`, so `{2}` cannot be created",
-		VariantArray() << object << subtype << line << column);
+		"{1}:{2}:{3}: Is Sterile forbids a new subtype of `{4}`, so `{5}` cannot be created",
+		VariantArray() << source_name << line << column << object << subtype);
 }
 
 inline ErrNum
-ErrorADL_CompleteParent(StrVal object, StrVal child, int line, int column)
+ErrorADL_CompleteParent(StrVal object, StrVal child, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_COMPLETE_PARENT,
-		"Is Complete forbids new content in `{1}`, so `{2}` cannot be added",
-		VariantArray() << object << child << line << column);
+		"{1}:{2}:{3}: Is Complete forbids new content in `{4}`, so `{5}` cannot be added",
+		VariantArray() << source_name << line << column << object << child);
 }
 
 inline ErrNum
-ErrorADL_SyntaxCopyNotFound(StrVal object, int line, int column)
+ErrorADL_SyntaxCopyNotFound(StrVal object, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_SYNTAX_COPY_NOT_FOUND,
-		"The object `{1}`, whose Syntax was to be copied, was not found",
-		VariantArray() << object << line << column);
+		"{1}:{2}:{3}: the object `{4}`, whose Syntax was to be copied, was not found",
+		VariantArray() << source_name << line << column << object);
 }
 
 inline ErrNum
-ErrorADL_ReferenceFinalViolation(StrVal reference, StrVal prior, StrVal attempted, int line, int column)
+ErrorADL_ReferenceFinalViolation(StrVal reference, StrVal prior, StrVal attempted, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_REFERENCE_FINAL_VIOLATION,
-		"The Reference `{1}` is final, so it may only be `{2}` or a subtype of it, not `{3}`",
-		VariantArray() << reference << prior << attempted << line << column);
+		"{1}:{2}:{3}: the Reference `{4}` is final, so it may only be `{5}` or a subtype of it, not `{6}`",
+		VariantArray() << source_name << line << column << reference << prior << attempted);
 }
 
 inline ErrNum
-ErrorADL_AscentExceedsFile(StrVal path, int levels_open, int line, int column)
+ErrorADL_AscentExceedsFile(StrVal path, int levels_open, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_ASCENT_EXCEEDS_FILE,
-		"The ascent in `{1}` reaches beyond this file's own scope, which has only {2} level(s) open",
-		VariantArray() << path << levels_open << line << column);
+		"{1}:{2}:{3}: the ascent in `{4}` reaches beyond this file's own scope, which has only {5} level(s) open",
+		VariantArray() << source_name << line << column << path << levels_open);
 }
 
 inline ErrNum
-ErrorADL_NotVariable(StrVal variable, StrVal attempted, int line, int column)
+ErrorADL_NotVariable(StrVal variable, StrVal attempted, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_NOT_VARIABLE,
-		"The object {1} to which you are assigning a {2:<16...} is not a variable because it has no Syntax",
-		VariantArray() << variable << attempted << line << column);
+		"{1}:{2}:{3}: the object {4} to which you are assigning a {5:<16...} is not a variable because it has no Syntax",
+		VariantArray() << source_name << line << column << variable << attempted);
 }
 
 // The Parser's grammar expectations:
 
 inline ErrNum
-ErrorADL_ExpectTypename(int line, int column)
+ErrorADL_ExpectTypename(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_TYPENAME,
-		"A typename was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a typename was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectClosingBrace(int line, int column)
+ErrorADL_ExpectClosingBrace(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_CLOSING_BRACE,
-		"A closing brace was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a closing brace was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectClosingBracket(int line, int column)
+ErrorADL_ExpectClosingBracket(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_CLOSING_BRACKET,
-		"A closing square bracket was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a closing square bracket was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectValue(int line, int column)
+ErrorADL_ExpectValue(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_VALUE,
-		"A value was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a value was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectTildeAssign(int line, int column)
+ErrorADL_ExpectTildeAssign(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_TILDE_ASSIGN,
-		"An = sign was expected after the ~",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: an = sign was expected after the ~",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectMatchingLiteral(StrVal syntax, int line, int column)
+ErrorADL_ExpectMatchingLiteral(StrVal syntax, const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_MATCHING_LITERAL,
-		"A value matching the declared Syntax was expected here: /{1}/",
-		VariantArray() << syntax << line << column);
+		"{1}:{2}:{3}: a value matching the declared Syntax was expected: /{4}/",
+		VariantArray() << source_name << line << column << syntax);
 }
 
 inline ErrNum
-ErrorADL_ExpectClosingQuote(int line, int column)
+ErrorADL_ExpectClosingQuote(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_CLOSING_QUOTE,
-		"A closing quote was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a closing quote was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectClosingSlash(int line, int column)
+ErrorADL_ExpectClosingSlash(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_CLOSING_SLASH,
-		"A closing slash was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a closing slash was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectRegexpAtom(int line, int column)
+ErrorADL_ExpectRegexpAtom(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_REGEXP_ATOM,
-		"A regular-expression atom was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a regular-expression atom was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectRegexpSequence(int line, int column)
+ErrorADL_ExpectRegexpSequence(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_REGEXP_SEQUENCE,
-		"A regular-expression sequence was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a regular-expression sequence was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectClosingParen(int line, int column)
+ErrorADL_ExpectClosingParen(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_CLOSING_PAREN,
-		"A closing parenthesis was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a closing parenthesis was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectRegexpClassBody(int line, int column)
+ErrorADL_ExpectRegexpClassBody(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_REGEXP_CLASS_BODY,
-		"A character valid in a class was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a character valid in a class was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectRegexpClassClose(int line, int column)
+ErrorADL_ExpectRegexpClassClose(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_REGEXP_CLASS_CLOSE,
-		"A closing bracket to end the class was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a closing bracket to end the class was expected",
+		VariantArray() << source_name << line << column);
 }
 
 inline ErrNum
-ErrorADL_ExpectRegexpClassPart(int line, int column)
+ErrorADL_ExpectRegexpClassPart(const char* source_name, int line, int column)
 {
 	return Error(ADLERR_EXPECT_REGEXP_CLASS_PART,
-		"A valid class character was expected here",
-		VariantArray() << line << column);
+		"{1}:{2}:{3}: a valid class character was expected",
+		VariantArray() << source_name << line << column);
 }
 
 #endif	// ADL_MSG_H

@@ -296,7 +296,7 @@ public:
 	using	Handle = ADL::Handle;
 	using	Value = ADL::Value;
 
-	MemStore() : _top(0), _line(0), _column(0) {}
+	MemStore() : _top(0), _line(0), _column(0), _source_name("") {}
 
 	/*
 	 * Where the Sink last saw something in the input. This layer has no
@@ -304,9 +304,11 @@ public:
 	 * note_position) and the messages raised here carry that position - 0,
 	 * 0 meaning the Sink never had one to tell.
 	 */
-	void	located_at(int line, int column)	{ _line = line; _column = column; }
+	void	located_at(int line, int column, const char* source_name)
+			{ _line = line; _column = column; _source_name = source_name; }
 	int	line() const				{ return _line; }
 	int	column() const				{ return _column; }
+	const char*	source_name() const		{ return _source_name; }
 	Handle		top()
 			{ if (_top.is_null()) bootstrap(); return _top; }
 	Handle		object()
@@ -364,6 +366,7 @@ protected:
 	void		bootstrap();
 	int		_line;			// Where the Sink last was: line, column
 	int		_column;
+	const char*	_source_name;		// ...and what it was reading from
 	Handle		_top;
 	Handle		_object;
 	Handle		_syntax_variable;
@@ -606,7 +609,7 @@ Handle::finish_assign(Handle slot, Handle variable, Value value, bool is_final)
 		if (is_complete() && assigned(variable).is_null())
 			return ErrorADL_CompleteParent(
 				pathname(), variable.name(),
-				store()->line(), store()->column()
+				store()->source_name(), store()->line(), store()->column()
 			);
 
 		ErrNum	err = check_final_violation(variable, value);
@@ -643,7 +646,7 @@ Handle::final_violation(StrVal label, StrVal prior, StrVal attempted)
 {
 	return ErrorADL_FinalViolation(
 		pathname(), label, prior, attempted,
-		store()->line(), store()->column()
+		store()->source_name(), store()->line(), store()->column()
 	);
 }
 
@@ -741,7 +744,7 @@ Handle::check_reference_finality(Handle variable, Value value)
 		return ErrorADL_ReferenceFinalViolation(
 			pathname() + "." + variable.name(),
 			old_target.pathname(), rejected.pathname(),
-			store()->line(), store()->column()
+			store()->source_name(), store()->line(), store()->column()
 		);
 	return 0;
 }

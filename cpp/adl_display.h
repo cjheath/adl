@@ -12,10 +12,15 @@
  * text with its parameters substituted into it, which is what StrVal::format
  * is for, and nothing about presentation is decided below here.
  *
- * By convention a message's last two parameters are the source line and
- * column, and 0 means the reporter did not know where it was; those are
- * printed as a prefix rather than offered to the text, and each message is
- * retired once it has been shown.
+ * By convention a message that carries a position takes its source name,
+ * line and column as its first three parameters (0 for line means the
+ * reporter did not know where it was), and its own default text names them
+ * itself, at its own start: "{1}:{2}:{3}: ...". Nothing here builds that
+ * prefix separately - every message is rendered in a single pass, its own
+ * text against its own parameters, which is what makes this consistent with
+ * an MCS catalog translation (which only ever reorders parameters within
+ * the one text it translates). Each message is retired once it has been
+ * shown.
  *
  * A Strpp program has no stdio, so what is written here goes out with write(2).
  * A platform with somewhere better to write - a UART, a log - defines
@@ -41,19 +46,21 @@ adl_display_line(StrVal line)
 }
 
 /*
- * The position a message carries, if it carries one: the trailing pair of
- * parameters, both integers, with a line of 0 meaning "not known" - which is
- * what a reporter that has no Source passes.
+ * The position a message carries, if it carries one: parameters 2 and 3 (1
+ * is the source name), both integers, with a line of 0 meaning "not known" -
+ * which is what a reporter that has no Source passes. Used only to answer
+ * *where*, as plain numbers - adl_display_message() below needs none of
+ * this, since the text itself already names the position when it has one.
  */
 inline bool
 adl_message_position(const ErrBuf::Message& message, int& line, int& column)
 {
 	unsigned	n = message.parameters.length();
-	if (n < 2)
+	if (n < 3)
 		return false;
 
-	const Variant&	line_param = message.parameters[n-2];
-	const Variant&	column_param = message.parameters[n-1];
+	const Variant&	line_param = message.parameters[1];
+	const Variant&	column_param = message.parameters[2];
 	if (line_param.type() != Variant::Integer || column_param.type() != Variant::Integer)
 		return false;
 
@@ -63,17 +70,9 @@ adl_message_position(const ErrBuf::Message& message, int& line, int& column)
 }
 
 inline void
-adl_display_message(const char* filename, const ErrBuf::Message& message)
+adl_display_message(const ErrBuf::Message& message)
 {
-	int		line = 0;
-	int		column = 0;
-	unsigned	params = message.parameters.length();
-	bool		located = adl_message_position(message, line, column);
-	StrVal		text = StrVal::format(message.default_text,
-					message.parameters.slice(0, located ? params-2 : params));
-	adl_display_line(StrVal::format(
-		located ? "{1}:{2}:{3}: {4}" : "{1}: {4}",
-		VariantArray() << filename << line << column << text));
+	adl_display_line(StrVal::format(message.default_text, message.parameters));
 }
 
 /*
@@ -127,7 +126,7 @@ adl_first_error_position(int& line, int& column)
  * error report is judged by.
  */
 inline unsigned
-adl_display_errors(const char* filename)
+adl_display_errors()
 {
 	ErrBuf*	buffer = ErrBuffer();
 	if (!buffer || buffer->count() == 0)
@@ -140,7 +139,7 @@ adl_display_errors(const char* filename)
 			// Its own scope: a Message's parameters are a slice of the buffer's
 			// parameter array, and delivered() asserts that none is outstanding.
 			ErrBuf::Message	message = buffer->message(0);
-			adl_display_message(filename, message);
+			adl_display_message(message);
 		}
 		buffer->delivered();
 		shown++;

@@ -79,10 +79,10 @@ bool load_file(ADLMemStoreSink& sink, const char* filename, bool last_file)
 	 * now owns it and will free it once the last StrVal viewing it is gone.
 	 */
 #if	defined(ADL_SOURCE_UTF8PTR)
-	ADLMemSource			source(raw);			// views raw
+	ADLMemSource			source(raw, filename);		// views raw
 #else
 	StrVal				text(raw, (StrValIndex)file_size, 0, ArrayTakeOver);
-	ADLMemSource			source(text);
+	ADLMemSource			source(text, filename);
 #endif
 
 	ADLParser<ADLMemStoreSink>	adl(sink);		// a Parser to feed the Sink
@@ -130,7 +130,7 @@ bool load_file(ADLMemStoreSink& sink, const char* filename, bool last_file)
 	 * is the only record of what was reported, so the display and the count
 	 * cannot disagree.
 	 */
-	unsigned	errors = adl_display_errors(filename);
+	unsigned	errors = adl_display_errors();
 
 	/*
 	 * We succeed when: the grammar ran to completion, the whole input

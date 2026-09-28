@@ -30,25 +30,28 @@ class	ADLSourceStrVal
 	bool		peeked;		// Whether peek_char() has been called since the last advance()
 	int		_line_number;
 	int		_column;
+	const char*	_source_name;	// Where this text came from, for a display to name -
+					// a filename today, but agnostic to what a future
+					// Source might read from (a socket, say)
 
 public:
 	ADLSourceStrVal()		// An empty Source, viewing nothing
 		: base(), peeked_char(UCS4_NONE), peeked(false)
-		, _line_number(1), _column(1) {}
+		, _line_number(1), _column(1), _source_name("") {}
 					// View `t` from its beginning. Taken by value, so that a
 					// temporary StrVal is fine to view - the copy is what we keep.
 					// asUTF8() unshares `t` in place if it's a mid-slice, onto a
 					// body of its own that ends exactly where `t` does; only then
 					// is `t` assigned to `base`, so the two are never out of step.
-	explicit ADLSourceStrVal(StrVal t)
+	explicit ADLSourceStrVal(StrVal t, const char* source_name = "")
 		: peeked_char(UCS4_NONE), peeked(false)
-		, _line_number(1), _column(1)
+		, _line_number(1), _column(1), _source_name(source_name)
 		{ t.asUTF8(); base = t; }
 					// A Source seeing the whole of `s`, which it pins a copy of.
 	static ADLSourceStrVal	over(StrVal s) { return ADLSourceStrVal(s); }
 	ADLSourceStrVal(const ADLSourceStrVal& c)
 		: base(c.base), peeked_char(UCS4_NONE), peeked(false)
-		, _line_number(c._line_number), _column(c._column) {}
+		, _line_number(c._line_number), _column(c._column), _source_name(c._source_name) {}
 
 	UCS4	peek_char()
 		{	// base[0] is the character here: base always starts at "here", and
@@ -77,6 +80,7 @@ public:
 		{ return start.base.numBytes() - base.numBytes(); }	// How far we have come, for progress
 	int	line_number() const { return _line_number; }
 	int	column() const { return _column; }
+	const char*	source_name() const { return _source_name; }
 	const char*	peek() const			// Raw and non-copying, for the pegexp path
 		{ StrValIndex bytes; return base.asUTF8(bytes); }
 	StrVal	fragment(const ADLSourceStrVal& end) const	// From here to `end`
